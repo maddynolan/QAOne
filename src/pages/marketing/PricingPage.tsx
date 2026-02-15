@@ -1,15 +1,17 @@
 /**
- * Pricing Page - ArisTrace Testing Platform
- * 6 Packs: Automation, Performance, API, Visual, Accessibility, Salesforce
+ * Pricing Page — Flowstral Testing Platform
+ * Two-tier model: Free (Community) + Enterprise (Contact Sales)
+ * Goal: land $100-150K annual enterprise deals by replacing 5-8 tools
  */
 
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { 
-  Check, X, ArrowRight, Rocket, Building2, Users, Zap,
-  ChevronRight, HelpCircle, Mail, MessageSquare, Sparkles,
+import {
+  Check, X, ArrowRight, Rocket, Building2, Zap,
+  ChevronDown, HelpCircle, Mail, MessageSquare, Sparkles,
   TestTube, Gauge, Code, Eye, Accessibility, Cloud,
-  Smartphone, Compass, BrainCircuit
+  Smartphone, Compass, Shield, Server,
+  CalendarCheck, DollarSign, Layers, Lock, Globe, BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -71,186 +73,265 @@ const testingPacks = [
   { name: 'Salesforce', icon: Cloud, color: 'cyan', desc: '20+ native SF tools' },
 ];
 
-const plans = [
+// Tools replaced by Flowstral
+const replacedTools = [
+  { name: 'Selenium / Cypress', category: 'Browser Automation', cost: '$15K-40K/yr' },
+  { name: 'Postman / SoapUI', category: 'API Testing', cost: '$10K-25K/yr' },
+  { name: 'JMeter / k6', category: 'Performance Testing', cost: '$15K-50K/yr' },
+  { name: 'Applitools / Percy', category: 'Visual Testing', cost: '$12K-30K/yr' },
+  { name: 'Axe / WAVE Pro', category: 'Accessibility', cost: '$8K-20K/yr' },
+  { name: 'BrowserStack / LambdaTest', category: 'Cross-Browser / Mobile', cost: '$20K-60K/yr' },
+  { name: 'Provar / Copado', category: 'Salesforce Testing', cost: '$25K-80K/yr' },
+  { name: 'TestRail / Zephyr', category: 'Test Management', cost: '$10K-30K/yr' },
+];
+
+// FAQ data
+const faqs = [
   {
-    name: 'Starter',
-    description: 'Perfect for small teams starting their QA journey',
-    price: 199,
-    period: '/month',
-    priceNote: 'billed annually',
-    icon: Zap,
-    color: 'emerald',
-    highlight: false,
-    features: [
-      // Users & Limits
-      { category: 'Platform', name: 'Up to 5 users', included: true },
-      { category: 'Platform', name: '5,000 test runs/month', included: true },
-      { category: 'Platform', name: '2 parallel executions', included: true },
-      // Automation Pack
-      { category: 'Automation', name: 'Smart Recorder', included: true },
-      { category: 'Automation', name: 'Visual Test Builder', included: true },
-      { category: 'Automation', name: 'Test Management', included: true },
-      { category: 'Automation', name: 'Self-Healing Locators', included: true },
-      // API Pack
-      { category: 'API', name: 'REST & GraphQL Testing', included: true },
-      { category: 'API', name: 'Basic Assertions', included: true },
-      { category: 'API', name: 'gRPC & SOAP Testing', included: false },
-      { category: 'API', name: 'API Chaining & Variables', included: false },
-      // Visual Pack
-      { category: 'Visual', name: 'Visual Testing (500/mo)', included: true },
-      { category: 'Visual', name: 'Screenshot Comparison', included: true },
-      // Accessibility Pack
-      { category: 'Accessibility', name: 'WCAG 2.1 AA Testing', included: true },
-      { category: 'Accessibility', name: 'Basic Reports', included: true },
-      { category: 'Accessibility', name: 'Full WCAG AAA', included: false },
-      // Performance Pack
-      { category: 'Performance', name: 'Load Testing', included: false },
-      { category: 'Performance', name: 'Virtual Users', included: false },
-      // Salesforce Pack
-      { category: 'Salesforce', name: 'Salesforce Tools (20+)', included: false },
-      { category: 'Salesforce', name: 'SOQL/Apex Testing', included: false },
-      // Support
-      { category: 'Support', name: 'Email Support (48h)', included: true },
-      { category: 'Support', name: 'Basic Integrations', included: true },
-      { category: 'Support', name: 'Priority Support', included: false },
-    ],
-    packs: {
-      automation: 'full',
-      flowpilot: 'basic',
-      mobile: 'basic',
-      api: 'basic',
-      visual: 'basic',
-      accessibility: 'basic',
-      performance: 'none',
-      salesforce: 'none',
-    },
-    cta: 'Start Free Trial',
+    q: 'What happens when I exceed the Free tier limits?',
+    a: 'You will receive a notification when approaching your monthly limits. Tests already in progress will complete, but new runs will be paused until the next billing cycle or until you upgrade to Enterprise.',
   },
   {
-    name: 'Professional',
-    description: 'For growing teams with advanced testing needs',
-    price: 399,
-    period: '/month',
-    priceNote: 'billed annually',
-    icon: Users,
-    color: 'blue',
-    highlight: true,
-    features: [
-      // Users & Limits
-      { category: 'Platform', name: 'Up to 25 users', included: true },
-      { category: 'Platform', name: '25,000 test runs/month', included: true },
-      { category: 'Platform', name: '10 parallel executions', included: true },
-      // Automation Pack
-      { category: 'Automation', name: 'Everything in Starter', included: true },
-      { category: 'Automation', name: 'Advanced Recorder Features', included: true },
-      { category: 'Automation', name: 'Cross-Browser Testing', included: true },
-      { category: 'Automation', name: 'Auto-Correlation', included: true },
-      // API Pack
-      { category: 'API', name: 'All Protocol Support', included: true },
-      { category: 'API', name: 'API Chaining & Variables', included: true },
-      { category: 'API', name: 'Contract Testing', included: true },
-      { category: 'API', name: 'Mock Servers', included: true },
-      // Visual Pack
-      { category: 'Visual', name: 'Visual Testing (5,000/mo)', included: true },
-      { category: 'Visual', name: 'AI-Powered Diff Detection', included: true },
-      // Accessibility Pack
-      { category: 'Accessibility', name: 'Full WCAG 2.1 AAA', included: true },
-      { category: 'Accessibility', name: 'Detailed Compliance Reports', included: true },
-      { category: 'Accessibility', name: 'Remediation Suggestions', included: true },
-      // Performance Pack
-      { category: 'Performance', name: 'Load Testing', included: true },
-      { category: 'Performance', name: 'Up to 2,500 Virtual Users', included: true },
-      { category: 'Performance', name: 'Real-Time Metrics', included: true },
-      { category: 'Performance', name: 'Performance Baselines', included: true },
-      // Salesforce Pack
-      { category: 'Salesforce', name: 'Salesforce Tools (20+)', included: true },
-      { category: 'Salesforce', name: 'SOQL & Apex Testing', included: true },
-      { category: 'Salesforce', name: 'Data Factory', included: true },
-      { category: 'Salesforce', name: 'Org Comparison', included: true },
-      // Support
-      { category: 'Support', name: 'Priority Support (24h SLA)', included: true },
-      { category: 'Support', name: 'Full CI/CD Integrations', included: true },
-      { category: 'Support', name: 'Slack & Teams Integration', included: true },
-    ],
-    packs: {
-      automation: 'full',
-      flowpilot: 'full',
-      mobile: 'full',
-      api: 'full',
-      visual: 'full',
-      accessibility: 'full',
-      performance: 'full',
-      salesforce: 'full',
-    },
-    cta: 'Start Free Trial',
+    q: 'Can I try Enterprise features before committing?',
+    a: 'Absolutely. We offer a 14-day full-access Enterprise trial for qualified teams. Contact our sales team to get started with a personalized demo and trial environment.',
   },
   {
-    name: 'Enterprise',
-    description: 'For large organizations with custom requirements',
-    price: null,
-    period: '',
-    priceNote: 'Custom pricing',
-    icon: Building2,
-    color: 'violet',
-    highlight: false,
-    features: [
-      // Users & Limits
-      { category: 'Platform', name: 'Unlimited users', included: true },
-      { category: 'Platform', name: 'Unlimited test runs', included: true },
-      { category: 'Platform', name: 'Custom parallel executions', included: true },
-      // Everything in Pro
-      { category: 'All Packs', name: 'Everything in Professional', included: true },
-      // Performance Pack Enhanced
-      { category: 'Performance', name: 'Up to 10,000+ Virtual Users', included: true },
-      { category: 'Performance', name: 'Dedicated Load Generators', included: true },
-      // Enterprise Features
-      { category: 'Enterprise', name: 'On-Premise / Air-Gapped', included: true },
-      { category: 'Enterprise', name: 'SSO / SAML / SCIM', included: true },
-      { category: 'Enterprise', name: 'Custom Integrations', included: true },
-      { category: 'Enterprise', name: 'Private Cloud Option', included: true },
-      { category: 'Enterprise', name: 'Custom SLA (99.9%)', included: true },
-      // Support
-      { category: 'Support', name: 'Dedicated Success Manager', included: true },
-      { category: 'Support', name: '24/7 Phone & Chat Support', included: true },
-      { category: 'Support', name: 'Training & Onboarding', included: true },
-      { category: 'Support', name: 'Quarterly Business Reviews', included: true },
-    ],
-    packs: {
-      automation: 'full',
-      flowpilot: 'enterprise',
-      mobile: 'full',
-      api: 'full',
-      visual: 'full',
-      accessibility: 'full',
-      performance: 'enterprise',
-      salesforce: 'full',
-    },
-    cta: 'Contact Sales',
+    q: 'How is Enterprise pricing determined?',
+    a: 'Enterprise pricing is based on team size, testing volume, deployment model (cloud or on-prem), and which specialized packs you need. Most customers land between $100K-150K annually, which still represents significant savings compared to 5-8 separate tools.',
+  },
+  {
+    q: 'Can I deploy Flowstral on-premises or in my private cloud?',
+    a: 'Yes. Enterprise includes on-premise, air-gapped, and private cloud deployment options. We support Docker, Kubernetes with Helm charts, and can work with your infrastructure team on custom deployments.',
+  },
+  {
+    q: 'Do you offer volume discounts for large teams?',
+    a: 'Yes. Enterprise contracts include volume-based pricing. The more teams and projects you onboard, the lower your per-user cost. Multi-year agreements also receive additional discounts.',
+  },
+  {
+    q: 'What kind of support does the Free tier include?',
+    a: 'Free tier users get access to our Discord community, GitHub issues, and comprehensive documentation. Enterprise customers receive a dedicated Customer Success Manager, 24/7 priority support, and quarterly business reviews.',
+  },
+  {
+    q: 'How does the self-healing work across tiers?',
+    a: 'Free tier includes basic self-healing with Knowledge and Deterministic layers, which handle most common selector breakages. Enterprise unlocks the full 4-layer healing chain including Vision AI and OCR, which can heal even complex dynamic UIs.',
+  },
+  {
+    q: 'Is there a contract or commitment for the Free tier?',
+    a: 'No. The Free tier is free forever with no contract, no credit card required, and no time limit. Use it as long as it meets your needs.',
   },
 ];
 
-// Pack availability indicator
-function PackIndicator({ status }: { status: 'none' | 'basic' | 'full' | 'enterprise' }) {
-  if (status === 'none') {
-    return <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-400">—</span>;
+// Feature comparison table data
+const comparisonSections = [
+  {
+    title: 'Platform Limits',
+    icon: Layers,
+    iconBg: 'bg-slate-100',
+    iconColor: 'text-slate-700',
+    rows: [
+      { feature: 'Team Members', free: 'Up to 3', enterprise: 'Unlimited' },
+      { feature: 'Test Runs / Month', free: '1,000', enterprise: 'Unlimited' },
+      { feature: 'Parallel Executions', free: '1', enterprise: 'Unlimited' },
+      { feature: 'Desktop App', free: true, enterprise: true },
+      { feature: 'Chrome Extension', free: true, enterprise: true },
+    ],
+  },
+  {
+    title: 'Automation Pack',
+    icon: TestTube,
+    iconBg: 'bg-blue-50',
+    iconColor: 'text-blue-700',
+    rows: [
+      { feature: 'Smart Recorder', free: true, enterprise: true },
+      { feature: 'Visual Test Builder (60+ step types)', free: true, enterprise: true },
+      { feature: 'Test Cases, Suites & Runs', free: true, enterprise: true },
+      { feature: 'Test Plans & Releases', free: false, enterprise: true },
+      { feature: 'Self-Healing (Knowledge + Deterministic)', free: true, enterprise: true },
+      { feature: 'Self-Healing (Vision AI + OCR)', free: false, enterprise: true },
+      { feature: 'Cross-Browser Testing', free: false, enterprise: true },
+      { feature: 'CI/CD Export (GitHub, GitLab, Jenkins, Azure)', free: false, enterprise: true },
+    ],
+  },
+  {
+    title: 'Flowpilot Pack',
+    icon: Compass,
+    iconBg: 'bg-fuchsia-50',
+    iconColor: 'text-fuchsia-700',
+    isNew: true,
+    rows: [
+      { feature: 'AI Test Generation from Requirements', free: false, enterprise: true },
+      { feature: 'Goal-Based Agentic Testing', free: false, enterprise: true },
+      { feature: 'Autonomous Explorer', free: false, enterprise: true },
+      { feature: 'Flowmap Visualization', free: false, enterprise: true },
+      { feature: 'JIRA / Gherkin Import', free: false, enterprise: true },
+    ],
+  },
+  {
+    title: 'API Testing Pack',
+    icon: Code,
+    iconBg: 'bg-emerald-50',
+    iconColor: 'text-emerald-700',
+    rows: [
+      { feature: 'REST API Testing', free: true, enterprise: true },
+      { feature: 'GraphQL API Testing', free: true, enterprise: true },
+      { feature: 'Basic Assertions (11 types)', free: true, enterprise: true },
+      { feature: 'gRPC Testing', free: false, enterprise: true },
+      { feature: 'SOAP / WSDL Testing', free: false, enterprise: true },
+      { feature: 'Kafka / MQTT / AMQP', free: false, enterprise: true },
+      { feature: 'WebSocket Testing', free: false, enterprise: true },
+      { feature: 'Request Chaining & Variables', free: false, enterprise: true },
+      { feature: 'Mock Servers & Service Virtualization', free: false, enterprise: true },
+      { feature: 'Contract Testing', free: false, enterprise: true },
+    ],
+  },
+  {
+    title: 'Visual Testing Pack',
+    icon: Eye,
+    iconBg: 'bg-purple-50',
+    iconColor: 'text-purple-700',
+    rows: [
+      { feature: 'Visual Comparisons', free: '100/mo', enterprise: 'Unlimited' },
+      { feature: 'Pixel Perfect Mode', free: true, enterprise: true },
+      { feature: 'Anti-Aliased Mode', free: true, enterprise: true },
+      { feature: 'Layout Mode', free: true, enterprise: true },
+      { feature: 'Structural (SSIM) Mode', free: false, enterprise: true },
+      { feature: 'Perceptual Hash Mode', free: false, enterprise: true },
+      { feature: 'AI Semantic Mode (Claude Vision)', free: false, enterprise: true },
+      { feature: 'Baseline Management', free: true, enterprise: true },
+    ],
+  },
+  {
+    title: 'Accessibility Pack',
+    icon: Accessibility,
+    iconBg: 'bg-pink-50',
+    iconColor: 'text-pink-700',
+    rows: [
+      { feature: 'WCAG 2.1 AA Scanning (axe-core)', free: true, enterprise: true },
+      { feature: 'WCAG 2.1 AAA Scanning', free: false, enterprise: true },
+      { feature: 'Basic Reports', free: true, enterprise: true },
+      { feature: 'Audit-Ready Compliance Reports', free: false, enterprise: true },
+      { feature: 'AI Remediation Suggestions', free: false, enterprise: true },
+      { feature: 'Batch / Multi-URL Scans', free: false, enterprise: true },
+    ],
+  },
+  {
+    title: 'Performance Pack',
+    icon: Gauge,
+    iconBg: 'bg-orange-50',
+    iconColor: 'text-orange-700',
+    rows: [
+      { feature: 'Load Testing', free: false, enterprise: true },
+      { feature: 'Virtual Users (10,000+)', free: false, enterprise: true },
+      { feature: '8 Load Patterns', free: false, enterprise: true },
+      { feature: 'Real-Time Metrics & Dashboards', free: false, enterprise: true },
+      { feature: 'Protocol Recording (HAR)', free: false, enterprise: true },
+      { feature: 'Script Generation (k6, JMeter)', free: false, enterprise: true },
+      { feature: 'SRM & Lighthouse Integration', free: false, enterprise: true },
+    ],
+  },
+  {
+    title: 'Mobile Testing Pack',
+    icon: Smartphone,
+    iconBg: 'bg-sky-50',
+    iconColor: 'text-sky-700',
+    isNew: true,
+    rows: [
+      { feature: 'Native App Testing (Maestro)', free: false, enterprise: true },
+      { feature: '50+ Device Profiles', free: false, enterprise: true },
+      { feature: 'Network Throttling', free: false, enterprise: true },
+      { feature: 'Touch Gestures', free: false, enterprise: true },
+      { feature: 'Device Cloud Integration', free: false, enterprise: true },
+      { feature: 'Element Inspector', free: false, enterprise: true },
+    ],
+  },
+  {
+    title: 'Salesforce Pack',
+    icon: Cloud,
+    iconBg: 'bg-cyan-50',
+    iconColor: 'text-cyan-700',
+    rows: [
+      { feature: 'Native SF Tools (20+)', free: false, enterprise: true },
+      { feature: 'SOQL Query Builder', free: false, enterprise: true },
+      { feature: 'Apex Test Execution', free: false, enterprise: true },
+      { feature: 'Data Factory', free: false, enterprise: true },
+      { feature: 'Org Comparison', free: false, enterprise: true },
+      { feature: 'Permission Testing', free: false, enterprise: true },
+    ],
+  },
+  {
+    title: 'Platform & Support',
+    icon: Shield,
+    iconBg: 'bg-slate-100',
+    iconColor: 'text-slate-700',
+    rows: [
+      { feature: 'Community Support (Discord / GitHub)', free: true, enterprise: true },
+      { feature: 'Dedicated Customer Success Manager', free: false, enterprise: true },
+      { feature: '24/7 Priority Support', free: false, enterprise: true },
+      { feature: 'SSO / SAML / SCIM', free: false, enterprise: true },
+      { feature: 'RBAC & Multi-Tenancy', free: false, enterprise: true },
+      { feature: 'On-Premise / Air-Gapped Deployment', free: false, enterprise: true },
+      { feature: 'Custom SLA (99.9%)', free: false, enterprise: true },
+      { feature: 'Training & Onboarding', free: false, enterprise: true },
+      { feature: 'Quarterly Business Reviews', free: false, enterprise: true },
+    ],
+  },
+];
+
+// Render a cell value in the comparison table
+function ComparisonCell({ value, isEnterprise }: { value: boolean | string; isEnterprise?: boolean }) {
+  if (typeof value === 'string') {
+    return (
+      <span className={cn(
+        "text-sm font-medium",
+        isEnterprise ? "text-violet-600 font-semibold" : "text-slate-600"
+      )}>
+        {value}
+      </span>
+    );
   }
-  if (status === 'basic') {
-    return <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">Basic</span>;
+  if (value) {
+    return <Check className="w-5 h-5 text-emerald-500 mx-auto" />;
   }
-  if (status === 'enterprise') {
-    return <span className="text-xs px-2 py-0.5 rounded bg-violet-100 text-violet-700 font-medium">10K+ VUs</span>;
-  }
-  return <Check className="w-4 h-4 text-emerald-500" />;
+  return <X className="w-5 h-5 text-slate-300 mx-auto" />;
+}
+
+// FAQ Accordion Item
+function FAQItem({ question, answer }: { question: string; answer: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="border border-slate-200 rounded-xl overflow-hidden transition-all">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between p-5 text-left hover:bg-slate-50 transition-colors"
+      >
+        <span className="text-base font-semibold text-slate-800 pr-4">{question}</span>
+        <ChevronDown className={cn(
+          "w-5 h-5 text-slate-400 flex-shrink-0 transition-transform duration-200",
+          open && "rotate-180"
+        )} />
+      </button>
+      {open && (
+        <div className="px-5 pb-5">
+          <p className="text-sm text-slate-600 leading-relaxed">{answer}</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function PricingPage() {
   const navigate = useNavigate();
-  const [annual, setAnnual] = useState(true);
 
-  const getPrice = (basePrice: number | null) => {
-    if (!basePrice) return null;
-    return annual ? basePrice : Math.round(basePrice * 1.25);
-  };
+  // Compute total tool replacement savings
+  const totalSavingsLow = replacedTools.reduce((sum, t) => {
+    const match = t.cost.match(/\$(\d+)K/);
+    return sum + (match ? parseInt(match[1]) : 0);
+  }, 0);
+  const totalSavingsHigh = replacedTools.reduce((sum, t) => {
+    const match = t.cost.match(/-(\d+)K/);
+    return sum + (match ? parseInt(match[1]) : 0);
+  }, 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50">
@@ -264,16 +345,19 @@ export default function PricingPage() {
             All-in-One Testing Platform
           </Badge>
           <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
-            One Platform, Eight Testing Packs
+            Start Free. Scale to Enterprise.
           </h1>
-          <p className="text-xl text-slate-600 mb-6 max-w-2xl mx-auto">
-            Everything you need for comprehensive QA. Start free, scale as you grow.
+          <p className="text-xl text-slate-600 mb-4 max-w-2xl mx-auto">
+            Replace 5-8 testing tools with one platform. No credit card required.
+          </p>
+          <p className="text-base text-slate-500 mb-8 max-w-xl mx-auto">
+            Get started with a generous free tier, then unlock the full power of Flowstral when your team is ready.
           </p>
 
           {/* 8 Packs Showcase */}
           <div className="flex flex-wrap justify-center gap-3 mb-10">
             {testingPacks.map((pack) => (
-              <div 
+              <div
                 key={pack.name}
                 className={cn(
                   "relative flex items-center gap-2 px-4 py-2 rounded-full border transition-all hover:scale-105",
@@ -287,7 +371,7 @@ export default function PricingPage() {
                   pack.color === 'sky' && "bg-sky-50 border-sky-200 text-sky-700",
                 )}
               >
-                {(pack as any).isNew && (
+                {pack.isNew && (
                   <Badge className="absolute -top-2 -right-2 bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white border-0 text-[8px] font-bold px-1.5 py-0 animate-pulse">
                     NEW
                   </Badge>
@@ -297,369 +381,349 @@ export default function PricingPage() {
               </div>
             ))}
           </div>
-
-          {/* Billing Toggle */}
-          <div className="flex items-center justify-center gap-4 mb-8">
-            <span className={cn("text-sm font-medium transition-colors", !annual ? "text-slate-900" : "text-slate-400")}>Monthly</span>
-            <button
-              onClick={() => setAnnual(!annual)}
-              className={cn(
-                "relative w-14 h-7 rounded-full transition-colors shadow-inner",
-                annual ? "bg-blue-600" : "bg-slate-300"
-              )}
-            >
-              <div className={cn(
-                "absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform",
-                annual ? "translate-x-8" : "translate-x-1"
-              )} />
-            </button>
-            <span className={cn("text-sm font-medium transition-colors", annual ? "text-slate-900" : "text-slate-400")}>
-              Annual <Badge className="ml-1 bg-emerald-100 text-emerald-700 border-0 text-xs font-bold">Save 20%</Badge>
-            </span>
-          </div>
         </div>
       </section>
 
       {/* Pricing Cards */}
-      <section className="pb-16 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-3 gap-6">
-            {plans.map((plan, idx) => (
-              <div 
-                key={idx}
-                className={cn(
-                  "relative p-8 rounded-3xl border-2 transition-all duration-300",
-                  plan.highlight 
-                    ? "bg-gradient-to-b from-blue-50 via-white to-violet-50 border-blue-400 shadow-xl shadow-blue-500/10 scale-[1.02] lg:scale-105" 
-                    : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-lg"
-                )}
+      <section className="pb-20 px-6">
+        <div className="max-w-5xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-8 items-stretch">
+
+            {/* Free Tier */}
+            <div className="relative p-8 rounded-3xl border-2 border-slate-200 bg-white hover:border-slate-300 hover:shadow-lg transition-all duration-300 flex flex-col">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-100 to-emerald-200 flex items-center justify-center mb-6 shadow-sm">
+                <Zap className="w-7 h-7 text-emerald-600" />
+              </div>
+
+              <h3 className="text-2xl font-bold text-slate-900 mb-1">Free</h3>
+              <p className="text-sm text-slate-500 mb-6">Everything you need to start automating QA</p>
+
+              <div className="mb-6">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-5xl font-bold text-slate-900">$0</span>
+                  <span className="text-slate-500 font-medium">/forever</span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">No credit card required</p>
+              </div>
+
+              <Button
+                className="w-full h-12 rounded-xl font-semibold mb-8 bg-white border-2 border-emerald-500 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-600 transition-all"
+                onClick={() => navigate('/signup')}
               >
-                {plan.highlight && (
-                  <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-blue-600 to-violet-600 text-white border-0 px-4 py-1 shadow-lg">
-                    <Sparkles className="w-3 h-3 mr-1" />
-                    Most Popular
-                  </Badge>
-                )}
+                Get Started Free <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
 
-                <div className={cn(
-                  "w-14 h-14 rounded-2xl flex items-center justify-center mb-6 shadow-sm",
-                  plan.color === 'emerald' ? "bg-gradient-to-br from-emerald-100 to-emerald-200" :
-                  plan.color === 'blue' ? "bg-gradient-to-br from-blue-100 to-blue-200" : "bg-gradient-to-br from-violet-100 to-violet-200"
-                )}>
-                  <plan.icon className={cn(
-                    "w-7 h-7",
-                    plan.color === 'emerald' ? "text-emerald-600" :
-                    plan.color === 'blue' ? "text-blue-600" : "text-violet-600"
-                  )} />
-                </div>
-
-                <h3 className="text-2xl font-bold text-slate-900 mb-1">{plan.name}</h3>
-                <p className="text-sm text-slate-500 mb-6 min-h-[40px]">{plan.description}</p>
-
-                <div className="mb-6">
-                  {plan.price ? (
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-5xl font-bold text-slate-900">
-                        ${getPrice(plan.price)}
-                      </span>
-                      <span className="text-slate-500 font-medium">{plan.period}</span>
-                    </div>
-                  ) : (
-                    <span className="text-3xl font-bold text-slate-900">Contact Us</span>
-                  )}
-                  {plan.priceNote && (
-                    <p className="text-xs text-slate-400 mt-1">{plan.price ? plan.priceNote : 'Custom pricing for your needs'}</p>
-                  )}
-                </div>
-
-                <Button 
-                  className={cn(
-                    "w-full h-12 rounded-xl font-semibold mb-8 transition-all",
-                    plan.highlight 
-                      ? "bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white shadow-lg shadow-blue-500/25" 
-                      : "bg-white border-2 border-blue-500 text-blue-600 hover:bg-blue-50 hover:border-blue-600"
-                  )}
-                  onClick={() => plan.price ? navigate('/auth') : window.location.href = 'mailto:sales@flowstral.com'}
-                >
-                  {plan.cta} <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-
-                {/* Pack Availability Summary */}
-                <div className="mb-6 p-4 rounded-xl bg-slate-50 border border-slate-100">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Included Packs</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {testingPacks.map((pack) => (
-                      <div key={pack.name} className="flex items-center justify-between text-sm">
-                        <span className="text-slate-600">{pack.name}</span>
-                        <PackIndicator status={plan.packs[pack.name.toLowerCase() as keyof typeof plan.packs]} />
-                      </div>
-                    ))}
+              <div className="space-y-3 flex-1">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">What's included</p>
+                {[
+                  'Up to 3 users',
+                  '1,000 test runs / month',
+                  '1 parallel execution',
+                  'Smart Recorder (full)',
+                  'Visual Test Builder (all 60+ step types)',
+                  'Test Cases, Suites & Runs',
+                  'Self-Healing Locators (basic)',
+                  'REST & GraphQL API Testing',
+                  'Visual Testing (100 comparisons/mo, 3 modes)',
+                  'WCAG 2.1 AA Accessibility Scanning',
+                  'Basic Reports',
+                  'Desktop App (full)',
+                  'Chrome Extension (full)',
+                  'Community Support (Discord / GitHub)',
+                ].map((feature, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                    <span className="text-sm text-slate-700">{feature}</span>
                   </div>
-                </div>
+                ))}
+              </div>
+            </div>
 
-                {/* Key Features */}
-                <div className="space-y-3">
-                  {plan.features.slice(0, 12).map((feature, fidx) => (
-                    <div key={fidx} className="flex items-center gap-3">
-                      {feature.included ? (
-                        <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-                      ) : (
-                        <X className="w-5 h-5 text-slate-300 flex-shrink-0" />
-                      )}
-                      <span className={cn(
-                        "text-sm",
-                        feature.included ? "text-slate-700" : "text-slate-400"
-                      )}>{feature.name}</span>
-                    </div>
-                  ))}
-                  {plan.features.length > 12 && (
-                    <p className="text-xs text-slate-400 pt-2">+ {plan.features.length - 12} more features</p>
+            {/* Enterprise Tier */}
+            <div className="relative p-8 rounded-3xl border-2 border-violet-400 bg-gradient-to-b from-violet-50 via-white to-blue-50 shadow-xl shadow-violet-500/10 transition-all duration-300 flex flex-col lg:scale-[1.02]">
+              <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-blue-600 to-violet-600 text-white border-0 px-4 py-1 shadow-lg">
+                <Sparkles className="w-3 h-3 mr-1" />
+                Recommended
+              </Badge>
+
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-100 to-violet-200 flex items-center justify-center mb-6 shadow-sm">
+                <Building2 className="w-7 h-7 text-violet-600" />
+              </div>
+
+              <h3 className="text-2xl font-bold text-slate-900 mb-1">Enterprise</h3>
+              <p className="text-sm text-slate-500 mb-6">Full platform power for teams that ship quality at scale</p>
+
+              <div className="mb-6">
+                <span className="text-3xl font-bold text-slate-900">Contact Sales</span>
+                <p className="text-xs text-slate-400 mt-1">Custom annual pricing for your organization</p>
+              </div>
+
+              <div className="flex gap-3 mb-8">
+                <Button
+                  className="flex-1 h-12 rounded-xl font-semibold bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white shadow-lg shadow-blue-500/25 transition-all"
+                  onClick={() => window.location.href = 'mailto:sales@flowstral.com?subject=Enterprise%20Inquiry'}
+                >
+                  Talk to Sales <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-12 rounded-xl font-semibold border-violet-300 text-violet-600 hover:bg-violet-50"
+                  onClick={() => window.location.href = 'mailto:sales@flowstral.com?subject=Schedule%20Demo'}
+                >
+                  <CalendarCheck className="w-4 h-4 mr-1.5" /> Demo
+                </Button>
+              </div>
+
+              <div className="space-y-3 flex-1">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Everything in Free, plus</p>
+                {[
+                  'Unlimited users',
+                  'Unlimited test runs',
+                  'Unlimited parallel executions',
+                  'Full AI Self-Healing (4-layer: Vision AI + OCR)',
+                  'AI Test Generation (JIRA, text, Gherkin)',
+                  'Flowpilot (goal-based agentic testing)',
+                  'Full API Testing (8 protocols + chaining + mocks)',
+                  'Performance & Load Testing (10,000+ VUs)',
+                  'Visual Testing (unlimited, 6 modes + AI semantic)',
+                  'Full WCAG 2.1 AAA + compliance reports',
+                  'Mobile Testing (50+ devices, Maestro, device cloud)',
+                  'Salesforce Pack (20+ tools, SOQL, Apex, Data Factory)',
+                  'On-Premise / Air-Gapped deployment',
+                  'SSO / SAML / SCIM',
+                  'RBAC & Multi-Tenancy',
+                  'Custom CI/CD Integrations',
+                  'Dedicated Success Manager',
+                  '24/7 Priority Support + Custom SLA (99.9%)',
+                  'Training, Onboarding & QBRs',
+                ].map((feature, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <Check className="w-5 h-5 text-violet-500 flex-shrink-0" />
+                    <span className="text-sm text-slate-700">{feature}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      {/* Why Enterprise — Tool Consolidation ROI */}
+      <section className="py-20 px-6 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <Badge className="mb-4 bg-white/10 text-white border-white/20 px-4 py-1.5">
+              <DollarSign className="w-3.5 h-3.5 mr-1.5 inline" />
+              ROI Calculator
+            </Badge>
+            <h2 className="text-3xl lg:text-4xl font-bold text-white mb-4">
+              Replace 5-8 Tools. Save ${totalSavingsLow}K-${totalSavingsHigh}K/Year.
+            </h2>
+            <p className="text-lg text-slate-300 max-w-2xl mx-auto">
+              Most enterprise QA teams spend over $200K annually on fragmented testing tools. Flowstral consolidates everything into one platform, one vendor, one contract.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+            {replacedTools.map((tool, i) => (
+              <div key={i} className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-5 hover:bg-white/10 transition-colors">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">{tool.category}</p>
+                <p className="text-white font-semibold mb-2">{tool.name}</p>
+                <p className="text-emerald-400 font-bold text-lg">{tool.cost}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="bg-gradient-to-br from-blue-500/20 to-violet-500/20 backdrop-blur border border-white/10 rounded-2xl p-8 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-blue-500/20 flex items-center justify-center mx-auto mb-4">
+                <Layers className="w-7 h-7 text-blue-400" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">One Platform</h3>
+              <p className="text-sm text-slate-300">Replace 8 separate tools with a single, unified testing platform. No more context-switching between vendors.</p>
+            </div>
+            <div className="bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 backdrop-blur border border-white/10 rounded-2xl p-8 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
+                <DollarSign className="w-7 h-7 text-emerald-400" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">One Contract</h3>
+              <p className="text-sm text-slate-300">Eliminate procurement complexity. One vendor, one renewal, one point of contact for all your testing needs.</p>
+            </div>
+            <div className="bg-gradient-to-br from-violet-500/20 to-pink-500/20 backdrop-blur border border-white/10 rounded-2xl p-8 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-violet-500/20 flex items-center justify-center mx-auto mb-4">
+                <BarChart3 className="w-7 h-7 text-violet-400" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">One Dashboard</h3>
+              <p className="text-sm text-slate-300">Unified analytics across all testing types. See quality metrics, trends, and coverage in a single view.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Enterprise Trust Signals */}
+      <section className="py-20 px-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl font-bold text-slate-900 mb-4">Enterprise-Grade Security & Compliance</h2>
+            <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+              Built for organizations with the strictest security and compliance requirements.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              {
+                icon: Shield,
+                title: 'SOC 2 Type II',
+                desc: 'Annual audits ensure your data is protected with industry-standard controls.',
+                gradient: 'from-blue-100 to-blue-200',
+                iconColor: 'text-blue-600',
+              },
+              {
+                icon: Lock,
+                title: 'SSO & SCIM',
+                desc: 'SAML 2.0 single sign-on with automated user provisioning and deprovisioning.',
+                gradient: 'from-violet-100 to-violet-200',
+                iconColor: 'text-violet-600',
+              },
+              {
+                icon: Server,
+                title: 'On-Premise Deploy',
+                desc: 'Air-gapped, private cloud, or hybrid deployments with Docker and Kubernetes.',
+                gradient: 'from-emerald-100 to-emerald-200',
+                iconColor: 'text-emerald-600',
+              },
+              {
+                icon: Globe,
+                title: 'Multi-Region',
+                desc: 'Data residency options across US, EU, and APAC regions for compliance.',
+                gradient: 'from-orange-100 to-orange-200',
+                iconColor: 'text-orange-600',
+              },
+            ].map((badge, i) => (
+              <div key={i} className="bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-lg hover:border-slate-300 transition-all">
+                <div className={cn("w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center mb-4", badge.gradient)}>
+                  <badge.icon className={cn("w-6 h-6", badge.iconColor)} />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-2">{badge.title}</h3>
+                <p className="text-sm text-slate-600">{badge.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Trust logos placeholder */}
+          <div className="mt-14 text-center">
+            <p className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-6">Trusted by engineering teams at</p>
+            <div className="flex flex-wrap justify-center gap-10 opacity-40">
+              {['Fortune 500', 'Global 2000', 'Enterprise', 'Scale-Up', 'Fintech', 'Healthcare'].map((label, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-slate-200" />
+                  <span className="text-sm font-medium text-slate-500">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Feature Comparison Table */}
+      <section className="py-20 px-6 bg-slate-50">
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-3xl font-bold text-slate-900 text-center mb-4">Complete Feature Comparison</h2>
+          <p className="text-slate-600 text-center mb-12 max-w-2xl mx-auto">
+            Detailed breakdown of what is included in each tier, organized by testing pack.
+          </p>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            {/* Header */}
+            <div className="grid grid-cols-3 gap-4 p-6 bg-slate-50 border-b border-slate-200">
+              <div className="font-semibold text-slate-700">Feature</div>
+              <div className="text-center font-semibold text-emerald-600">Free</div>
+              <div className="text-center font-semibold text-violet-600">Enterprise</div>
+            </div>
+
+            {comparisonSections.map((section, sIdx) => (
+              <div key={sIdx} className="border-b border-slate-100 last:border-b-0">
+                {/* Section header */}
+                <div className={cn("px-6 py-3 font-semibold text-sm uppercase tracking-wider flex items-center gap-2", section.iconBg, section.iconColor)}>
+                  <section.icon className="w-4 h-4" />
+                  {section.title}
+                  {section.isNew && (
+                    <Badge className="bg-fuchsia-500 text-white border-0 text-[10px] ml-1">NEW</Badge>
                   )}
                 </div>
+
+                {section.rows.map((row, rIdx) => (
+                  <div key={rIdx} className="grid grid-cols-3 gap-4 px-6 py-4 border-b border-slate-50 last:border-b-0 hover:bg-slate-50/50">
+                    <div className="text-sm text-slate-700">{row.feature}</div>
+                    <div className="text-center">
+                      <ComparisonCell value={row.free} />
+                    </div>
+                    <div className="text-center">
+                      <ComparisonCell value={row.enterprise} isEnterprise />
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Feature Comparison Table */}
-      <section className="py-16 px-6 bg-slate-50">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-slate-900 text-center mb-4">Compare All Features</h2>
-          <p className="text-slate-600 text-center mb-12 max-w-2xl mx-auto">
-            Detailed breakdown of what's included in each plan
+      {/* FAQ Section */}
+      <section className="py-20 px-6">
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-3xl font-bold text-slate-900 text-center mb-4">Frequently Asked Questions</h2>
+          <p className="text-slate-600 text-center mb-12">
+            Everything you need to know about Flowstral pricing and plans.
           </p>
-          
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            {/* Header */}
-            <div className="grid grid-cols-4 gap-4 p-6 bg-slate-50 border-b border-slate-200">
-              <div className="font-semibold text-slate-700">Feature</div>
-              <div className="text-center font-semibold text-slate-700">Starter</div>
-              <div className="text-center font-semibold text-blue-600">Professional</div>
-              <div className="text-center font-semibold text-violet-600">Enterprise</div>
-            </div>
-            
-            {/* Platform Limits */}
-            <div className="border-b border-slate-100">
-              <div className="px-6 py-3 bg-slate-50 font-semibold text-sm text-slate-600 uppercase tracking-wider">
-                Platform Limits
-              </div>
-              {[
-                { feature: 'Team Members', starter: 'Up to 5', pro: 'Up to 25', enterprise: 'Unlimited' },
-                { feature: 'Test Runs / Month', starter: '5,000', pro: '25,000', enterprise: 'Unlimited' },
-                { feature: 'Parallel Executions', starter: '2', pro: '10', enterprise: 'Custom' },
-              ].map((row, i) => (
-                <div key={i} className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-slate-50 hover:bg-slate-50/50">
-                  <div className="text-slate-700">{row.feature}</div>
-                  <div className="text-center text-slate-600">{row.starter}</div>
-                  <div className="text-center text-slate-900 font-medium">{row.pro}</div>
-                  <div className="text-center text-slate-900 font-medium">{row.enterprise}</div>
-                </div>
-              ))}
-            </div>
 
-            {/* Automation Pack */}
-            <div className="border-b border-slate-100">
-              <div className="px-6 py-3 bg-blue-50 font-semibold text-sm text-blue-700 uppercase tracking-wider flex items-center gap-2">
-                <TestTube className="w-4 h-4" /> Automation Pack
-              </div>
-              {[
-                { feature: 'Smart Recorder', starter: true, pro: true, enterprise: true },
-                { feature: 'Visual Test Builder', starter: true, pro: true, enterprise: true },
-                { feature: 'Self-Healing Locators', starter: true, pro: true, enterprise: true },
-                { feature: 'Cross-Browser Testing', starter: false, pro: true, enterprise: true },
-              ].map((row, i) => (
-                <div key={i} className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-slate-50 hover:bg-slate-50/50">
-                  <div className="text-slate-700">{row.feature}</div>
-                  <div className="text-center">{row.starter ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />}</div>
-                  <div className="text-center">{row.pro ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />}</div>
-                  <div className="text-center">{row.enterprise ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />}</div>
-                </div>
-              ))}
-            </div>
+          <div className="space-y-3">
+            {faqs.map((faq, i) => (
+              <FAQItem key={i} question={faq.q} answer={faq.a} />
+            ))}
+          </div>
 
-            {/* Flowpilot Pack - NEW */}
-            <div className="border-b border-slate-100">
-              <div className="px-6 py-3 bg-fuchsia-50 font-semibold text-sm text-fuchsia-700 uppercase tracking-wider flex items-center gap-2">
-                <Compass className="w-4 h-4" /> Flowpilot Pack
-                <Badge className="bg-fuchsia-500 text-white border-0 text-[10px] ml-1">NEW</Badge>
-              </div>
-              {[
-                { feature: 'Flowmap Explorer', starter: 'Basic', pro: true, enterprise: true },
-                { feature: 'Autonomous Explorer', starter: '—', pro: true, enterprise: true },
-                { feature: 'Self-Healing AI', starter: true, pro: true, enterprise: true },
-                { feature: 'Test Generator', starter: '5/mo', pro: '50/mo', enterprise: 'Unlimited' },
-                { feature: 'Goal-Based Testing', starter: '—', pro: true, enterprise: true },
-              ].map((row, i) => (
-                <div key={i} className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-slate-50 hover:bg-slate-50/50">
-                  <div className="text-slate-700">{row.feature}</div>
-                  <div className="text-center">{typeof row.starter === 'string' ? <span className={row.starter === '—' ? "text-slate-400" : "text-slate-600"}>{row.starter}</span> : (row.starter ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                  <div className="text-center">{typeof row.pro === 'string' ? <span className="text-slate-900 font-medium">{row.pro}</span> : (row.pro ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                  <div className="text-center">{typeof row.enterprise === 'string' ? <span className="text-violet-600 font-semibold">{row.enterprise}</span> : (row.enterprise ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Mobile Testing Pack - NEW */}
-            <div className="border-b border-slate-100">
-              <div className="px-6 py-3 bg-sky-50 font-semibold text-sm text-sky-700 uppercase tracking-wider flex items-center gap-2">
-                <Smartphone className="w-4 h-4" /> Mobile Testing Pack
-                <Badge className="bg-sky-500 text-white border-0 text-[10px] ml-1">NEW</Badge>
-              </div>
-              {[
-                { feature: 'Device Profiles', starter: '10 devices', pro: '50+ devices', enterprise: 'All devices' },
-                { feature: 'Network Throttling', starter: true, pro: true, enterprise: true },
-                { feature: 'Touch Gestures', starter: true, pro: true, enterprise: true },
-                { feature: 'Native App Testing (Maestro)', starter: '—', pro: true, enterprise: true },
-                { feature: 'Device Cloud Integration', starter: '—', pro: '—', enterprise: true },
-              ].map((row, i) => (
-                <div key={i} className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-slate-50 hover:bg-slate-50/50">
-                  <div className="text-slate-700">{row.feature}</div>
-                  <div className="text-center">{typeof row.starter === 'string' ? <span className={row.starter === '—' ? "text-slate-400" : "text-slate-600"}>{row.starter}</span> : (row.starter ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                  <div className="text-center">{typeof row.pro === 'string' ? <span className={row.pro === '—' ? "text-slate-400" : "text-slate-900 font-medium"}>{row.pro}</span> : (row.pro ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                  <div className="text-center">{typeof row.enterprise === 'string' ? <span className="text-violet-600 font-semibold">{row.enterprise}</span> : (row.enterprise ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Performance Pack */}
-            <div className="border-b border-slate-100">
-              <div className="px-6 py-3 bg-orange-50 font-semibold text-sm text-orange-700 uppercase tracking-wider flex items-center gap-2">
-                <Gauge className="w-4 h-4" /> Performance Pack
-              </div>
-              {[
-                { feature: 'Load Testing', starter: '—', pro: true, enterprise: true },
-                { feature: 'Virtual Users', starter: '—', pro: '2,500 VUs', enterprise: '10,000+ VUs' },
-                { feature: 'Real-Time Metrics', starter: '—', pro: true, enterprise: true },
-              ].map((row, i) => (
-                <div key={i} className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-slate-50 hover:bg-slate-50/50">
-                  <div className="text-slate-700">{row.feature}</div>
-                  <div className="text-center text-slate-400">{typeof row.starter === 'string' ? row.starter : (row.starter ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                  <div className="text-center">{typeof row.pro === 'string' ? <span className="text-slate-900 font-medium">{row.pro}</span> : (row.pro ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                  <div className="text-center">{typeof row.enterprise === 'string' ? <span className="text-violet-600 font-semibold">{row.enterprise}</span> : (row.enterprise ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* API Pack */}
-            <div className="border-b border-slate-100">
-              <div className="px-6 py-3 bg-emerald-50 font-semibold text-sm text-emerald-700 uppercase tracking-wider flex items-center gap-2">
-                <Code className="w-4 h-4" /> API Testing Pack
-              </div>
-              {[
-                { feature: 'REST & GraphQL', starter: true, pro: true, enterprise: true },
-                { feature: 'gRPC & SOAP', starter: false, pro: true, enterprise: true },
-                { feature: 'API Chaining', starter: false, pro: true, enterprise: true },
-                { feature: 'Contract Testing', starter: false, pro: true, enterprise: true },
-                { feature: 'Mock Servers', starter: false, pro: true, enterprise: true },
-              ].map((row, i) => (
-                <div key={i} className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-slate-50 hover:bg-slate-50/50">
-                  <div className="text-slate-700">{row.feature}</div>
-                  <div className="text-center">{row.starter ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />}</div>
-                  <div className="text-center">{row.pro ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />}</div>
-                  <div className="text-center">{row.enterprise ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Visual Pack */}
-            <div className="border-b border-slate-100">
-              <div className="px-6 py-3 bg-purple-50 font-semibold text-sm text-purple-700 uppercase tracking-wider flex items-center gap-2">
-                <Eye className="w-4 h-4" /> Visual Testing Pack
-              </div>
-              {[
-                { feature: 'Visual Comparisons', starter: '500/mo', pro: '5,000/mo', enterprise: 'Unlimited' },
-                { feature: 'AI Diff Detection', starter: false, pro: true, enterprise: true },
-                { feature: 'Baseline Management', starter: true, pro: true, enterprise: true },
-              ].map((row, i) => (
-                <div key={i} className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-slate-50 hover:bg-slate-50/50">
-                  <div className="text-slate-700">{row.feature}</div>
-                  <div className="text-center">{typeof row.starter === 'string' ? <span className="text-slate-600">{row.starter}</span> : (row.starter ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                  <div className="text-center">{typeof row.pro === 'string' ? <span className="text-slate-900 font-medium">{row.pro}</span> : (row.pro ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                  <div className="text-center">{typeof row.enterprise === 'string' ? <span className="text-violet-600 font-semibold">{row.enterprise}</span> : (row.enterprise ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Accessibility Pack */}
-            <div className="border-b border-slate-100">
-              <div className="px-6 py-3 bg-pink-50 font-semibold text-sm text-pink-700 uppercase tracking-wider flex items-center gap-2">
-                <Accessibility className="w-4 h-4" /> Accessibility Pack
-              </div>
-              {[
-                { feature: 'WCAG 2.1 AA Testing', starter: true, pro: true, enterprise: true },
-                { feature: 'WCAG 2.1 AAA Testing', starter: false, pro: true, enterprise: true },
-                { feature: 'Compliance Reports', starter: 'Basic', pro: 'Detailed', enterprise: 'Audit-Ready' },
-                { feature: 'Remediation Suggestions', starter: false, pro: true, enterprise: true },
-              ].map((row, i) => (
-                <div key={i} className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-slate-50 hover:bg-slate-50/50">
-                  <div className="text-slate-700">{row.feature}</div>
-                  <div className="text-center">{typeof row.starter === 'string' ? <span className="text-slate-600">{row.starter}</span> : (row.starter ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                  <div className="text-center">{typeof row.pro === 'string' ? <span className="text-slate-900 font-medium">{row.pro}</span> : (row.pro ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                  <div className="text-center">{typeof row.enterprise === 'string' ? <span className="text-violet-600 font-semibold">{row.enterprise}</span> : (row.enterprise ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Salesforce Pack */}
-            <div className="border-b border-slate-100">
-              <div className="px-6 py-3 bg-cyan-50 font-semibold text-sm text-cyan-700 uppercase tracking-wider flex items-center gap-2">
-                <Cloud className="w-4 h-4" /> Salesforce Pack
-              </div>
-              {[
-                { feature: 'Native SF Tools (20+)', starter: '—', pro: true, enterprise: true },
-                { feature: 'SOQL Query Builder', starter: '—', pro: true, enterprise: true },
-                { feature: 'Apex Test Execution', starter: '—', pro: true, enterprise: true },
-                { feature: 'Data Factory', starter: '—', pro: true, enterprise: true },
-                { feature: 'Org Comparison', starter: '—', pro: true, enterprise: true },
-                { feature: 'Permission Testing', starter: '—', pro: true, enterprise: true },
-              ].map((row, i) => (
-                <div key={i} className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-slate-50 hover:bg-slate-50/50">
-                  <div className="text-slate-700">{row.feature}</div>
-                  <div className="text-center text-slate-400">{typeof row.starter === 'string' ? row.starter : (row.starter ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                  <div className="text-center">{row.pro ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />}</div>
-                  <div className="text-center">{row.enterprise ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Support & Integrations */}
-            <div>
-              <div className="px-6 py-3 bg-slate-100 font-semibold text-sm text-slate-700 uppercase tracking-wider">
-                Support & Integrations
-              </div>
-              {[
-                { feature: 'Support SLA', starter: '48 hours', pro: '24 hours', enterprise: 'Dedicated' },
-                { feature: 'CI/CD Integrations', starter: 'Basic', pro: 'Full', enterprise: 'Custom' },
-                { feature: 'SSO / SAML', starter: false, pro: false, enterprise: true },
-                { feature: 'On-Premise Option', starter: false, pro: false, enterprise: true },
-                { feature: 'Dedicated Success Manager', starter: false, pro: false, enterprise: true },
-              ].map((row, i) => (
-                <div key={i} className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-slate-50 hover:bg-slate-50/50">
-                  <div className="text-slate-700">{row.feature}</div>
-                  <div className="text-center">{typeof row.starter === 'string' ? <span className="text-slate-600">{row.starter}</span> : (row.starter ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                  <div className="text-center">{typeof row.pro === 'string' ? <span className="text-slate-900 font-medium">{row.pro}</span> : (row.pro ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                  <div className="text-center">{typeof row.enterprise === 'string' ? <span className="text-violet-600 font-semibold">{row.enterprise}</span> : (row.enterprise ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
-                </div>
-              ))}
+          <div className="mt-12 text-center">
+            <p className="text-slate-500 mb-4">Still have questions?</p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button variant="outline" className="h-12 px-6 rounded-xl" onClick={() => navigate('/contact')}>
+                <MessageSquare className="w-5 h-5 mr-2" /> Chat with Us
+              </Button>
+              <Button
+                className="h-12 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700"
+                onClick={() => window.location.href = 'mailto:sales@flowstral.com'}
+              >
+                <Mail className="w-5 h-5 mr-2" /> Contact Sales
+              </Button>
             </div>
           </div>
         </div>
       </section>
 
-      {/* FAQ Preview */}
-      <section className="py-20 px-6">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-2xl font-bold text-slate-900 mb-8">Questions? We're Here to Help</h2>
+      {/* Final CTA */}
+      <section className="py-20 px-6 bg-gradient-to-r from-blue-600 via-violet-600 to-blue-600">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl lg:text-4xl font-bold text-white mb-4">
+            Ready to Unify Your Testing?
+          </h2>
+          <p className="text-lg text-blue-100 mb-8 max-w-2xl mx-auto">
+            Join teams that have replaced 5-8 fragmented tools with Flowstral. Start free today or talk to sales about an enterprise deployment.
+          </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button variant="outline" className="h-12 px-6 rounded-xl" onClick={() => navigate('/faq')}>
-              <HelpCircle className="w-5 h-5 mr-2" /> View FAQ
+            <Button
+              className="h-14 px-8 rounded-xl text-lg font-semibold bg-white text-blue-600 hover:bg-blue-50 shadow-lg transition-all"
+              onClick={() => navigate('/signup')}
+            >
+              <Rocket className="w-5 h-5 mr-2" /> Get Started Free
             </Button>
-            <Button variant="outline" className="h-12 px-6 rounded-xl" onClick={() => navigate('/contact')}>
-              <MessageSquare className="w-5 h-5 mr-2" /> Chat with Us
-            </Button>
-            <Button variant="outline" className="h-12 px-6 rounded-xl" onClick={() => window.location.href = 'mailto:sales@flowstral.com'}>
-              <Mail className="w-5 h-5 mr-2" /> Contact Sales
+            <Button
+              variant="outline"
+              className="h-14 px-8 rounded-xl text-lg font-semibold border-2 border-white/50 text-white hover:bg-white/10 transition-all"
+              onClick={() => window.location.href = 'mailto:sales@flowstral.com?subject=Enterprise%20Inquiry'}
+            >
+              <Building2 className="w-5 h-5 mr-2" /> Talk to Sales
             </Button>
           </div>
         </div>
@@ -667,7 +731,7 @@ export default function PricingPage() {
 
       {/* Footer */}
       <footer className="py-8 px-6 bg-slate-900 text-center">
-        <p className="text-slate-400 text-sm">© 2026 Flowstral. All rights reserved.</p>
+        <p className="text-slate-400 text-sm">&copy; 2026 Flowstral. All rights reserved.</p>
       </footer>
     </div>
   );
