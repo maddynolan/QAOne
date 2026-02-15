@@ -5,7 +5,7 @@
  * - Smart Recording with element recognition
  * - Visual Test Builder with 53 generators
  * - Test Management (6 modules)
- * - Performance Testing (record→load, SRM, Lighthouse, scenario mix; better than k6 for integrated observability)
+ * - Performance Testing (record→load, SRM, Lighthouse, scenario mix; all built-in)
  * - API Testing (multi-protocol, security scanning)
  * - Visual Testing (6 modes)
  * - Accessibility (WCAG 2.1)
@@ -88,7 +88,7 @@ function HeroSection() {
         <div className="flex justify-center mb-8">
           <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/80 backdrop-blur-sm border border-slate-200/80 shadow-sm">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-sm font-medium text-slate-700">Complete QA Platform</span>
+            <span className="text-sm font-medium text-slate-700">Enterprise QA Platform — Free to Start</span>
           </div>
         </div>
 
@@ -119,17 +119,17 @@ function HeroSection() {
                 </span>
               </h1>
               <p className="text-lg sm:text-xl text-slate-600 max-w-xl mx-auto lg:mx-0 leading-relaxed">
-                System, Regression, API, Accessibility, and Load testing — <span className="font-semibold text-violet-600">finally unified</span>.
+                Browser, API, Performance, Visual, Accessibility, Mobile & Salesforce testing — <span className="font-semibold text-violet-600">all unified in one platform</span>.
               </p>
             </div>
 
             {/* Stats Row */}
             <div className="flex flex-wrap justify-center lg:justify-start gap-x-8 gap-y-4">
               {[
-                { value: '5', label: 'Testing Types' },
+                { value: '8', label: 'Testing Types' },
                 { value: '10k+', label: 'Virtual Users' },
-                { value: '0', label: 'Lines of Code' },
-                { value: '10+', label: 'Salesforce Tools' },
+                { value: '0', label: 'Code Required' },
+                { value: '60+', label: 'Step Types' },
               ].map((stat, idx) => (
                 <div key={idx} className="text-center lg:text-left">
                   <div className="text-2xl font-bold text-slate-800">{stat.value}</div>
@@ -891,7 +891,7 @@ function FeaturesSection() {
             Everything You Need in <span className="text-blue-600">One Platform</span>
           </h2>
           <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            No plugins, no add-ons, no hidden costs. All capabilities included.
+            Free to start. Enterprise-ready when you scale. No hidden costs.
           </p>
         </div>
 
@@ -968,10 +968,10 @@ function PerformanceAPISection() {
           <div className="space-y-6">
             <Badge className="bg-emerald-100 text-emerald-700 border-0">Performance Testing</Badge>
             <h3 className="text-3xl font-bold text-slate-900">
-              Integrated load + SRM + Lighthouse — <span className="text-emerald-600">better than k6</span>
+              Integrated Load + SRM + Lighthouse — <span className="text-emerald-600">All Built-In</span>
             </h3>
             <p className="text-slate-600 leading-relaxed">
-              Record once, load test at scale. Server Resource Monitoring (SRM) and Lighthouse in one place—no scripting.
+              Record once, load test at scale. Server Resource Monitoring (SRM) and Lighthouse built in—no scripting needed.
               Scenario mix, ramp-up, distributed runs. Real-time metrics and threshold-based validation.
             </p>
 
@@ -1519,6 +1519,58 @@ function MobileTestingSection() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// SOCIAL PROOF SECTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+function SocialProofSection() {
+  const replacedTools = ['Selenium Grid', 'Postman', 'JMeter', 'Applitools', 'axe DevTools', 'Sauce Labs'];
+
+  return (
+    <section className="py-20 bg-slate-50 border-y border-slate-200/60">
+      <div className="max-w-7xl mx-auto px-6">
+        {/* Trusted By */}
+        <div className="text-center mb-12">
+          <p className="text-sm font-semibold text-slate-400 uppercase tracking-widest mb-8">
+            Trusted by QA teams at innovative companies
+          </p>
+          <div className="flex flex-wrap justify-center gap-8 items-center">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="w-32 h-12 rounded-lg bg-slate-200/60 flex items-center justify-center text-sm text-slate-400 font-medium"
+              >
+                Logo
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Replace Your Stack */}
+        <div className="text-center mt-16">
+          <h3 className="text-xl font-bold text-slate-900 mb-6">
+            Replace your entire testing stack
+          </h3>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {replacedTools.map((tool, idx) => (
+              <span
+                key={idx}
+                className="px-3 py-1.5 rounded-full bg-red-50 text-red-400 text-sm line-through decoration-red-300"
+              >
+                {tool}
+              </span>
+            ))}
+            <ArrowRight className="w-5 h-5 text-slate-400 mx-2" />
+            <span className="px-4 py-1.5 rounded-full bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 text-white text-sm font-bold shadow-md">
+              Flowstral
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // CTA SECTION
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1534,10 +1586,10 @@ function CTASection() {
       
       <div className="relative max-w-4xl mx-auto px-6 text-center">
         <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-6">
-          Ready to Maximize Your Test Coverage?
+          Replace 5-8 Testing Tools with One Platform
         </h2>
         <p className="text-xl text-white/80 mb-10">
-          Start building tests without code. Free 14-day trial, no credit card required.
+          Start free with unlimited test building. Upgrade to Enterprise for the full AI-powered suite.
         </p>
         
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-10">
@@ -1547,7 +1599,7 @@ function CTASection() {
             className="h-14 px-10 bg-white text-violet-600 hover:bg-white/90 font-semibold rounded-xl shadow-lg transition-all hover:scale-105"
           >
             <Rocket className="w-5 h-5 mr-2" />
-            Start Free Trial
+            Get Started Free
           </Button>
           <Button 
             size="lg"
@@ -1560,7 +1612,7 @@ function CTASection() {
         </div>
 
         <div className="flex flex-wrap justify-center gap-8 text-white/70 text-sm">
-          {['14-day free trial', 'No credit card', 'Cancel anytime'].map((item, idx) => (
+          {['Free forever plan', 'No credit card', 'Upgrade anytime', 'On-prem available'].map((item, idx) => (
             <span key={idx} className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4" /> {item}
             </span>
@@ -1804,7 +1856,7 @@ function Footer() {
       {/* Bottom */}
       <div className="border-t border-slate-800">
         <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="text-sm text-slate-500">© 2025 Flowstral Inc. All rights reserved.</div>
+          <div className="text-sm text-slate-500">© 2026 Flowstral Inc. All rights reserved.</div>
           <div className="flex gap-6 text-sm text-slate-500">
             <Link to="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
             <Link to="/terms" className="hover:text-white transition-colors">Terms of Service</Link>
@@ -1851,6 +1903,7 @@ function LandingPageContent() {
         <HeroSection />
         <FlowstralSection />
         <FlowpilotSection />
+        <SocialProofSection />
         {showMobile && <MobileTestingSection />}
         <FeaturesSection />
         {showPerfOrApi && <PerformanceAPISection />}
