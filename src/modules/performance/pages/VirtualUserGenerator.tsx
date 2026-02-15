@@ -44,238 +44,11 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
+import type { VirtualUser, TestStep, FlowstralSession, LoadTestConfig, LoadTestMetrics, FailedRequest } from '../types/virtual-user-types';
+import { LOAD_PATTERNS, USER_PERSONAS, QUICK_START_SCENARIOS, INITIAL_METRICS } from '../constants/virtual-user-constants';
+import { formatTime, formatBytes, convertFlowstralToSteps, getVerdict } from '../lib/virtual-user-utils';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
-// Load Test Patterns
-const LOAD_PATTERNS = {
-  constant: {
-    name: "Constant Load",
-    icon: "➡️",
-    description: "Maintain steady number of virtual users",
-    color: "bg-blue-500"
-  },
-  ramp_up: {
-    name: "Ramp Up",
-    icon: "📈",
-    description: "Gradually increase users over time",
-    color: "bg-green-500"
-  },
-  ramp_down: {
-    name: "Ramp Down",
-    icon: "📉",
-    description: "Gradually decrease users over time",
-    color: "bg-orange-500"
-  },
-  spike: {
-    name: "Spike Test",
-    icon: "⚡",
-    description: "Sudden burst of users to test resilience",
-    color: "bg-red-500"
-  },
-  stress: {
-    name: "Stress Test",
-    icon: "🔥",
-    description: "Push system beyond normal capacity",
-    color: "bg-purple-500"
-  },
-  soak: {
-    name: "Soak/Endurance",
-    icon: "🕐",
-    description: "Extended duration test for memory leaks",
-    color: "bg-cyan-500"
-  },
-  breakpoint: {
-    name: "Breakpoint",
-    icon: "💥",
-    description: "Find system breaking point",
-    color: "bg-pink-500"
-  },
-  wave: {
-    name: "Wave Pattern",
-    icon: "🌊",
-    description: "Cyclic load increases and decreases",
-    color: "bg-indigo-500"
-  }
-};
-
-// User Personas
-const USER_PERSONAS = {
-  casual: {
-    name: "Casual Browser",
-    thinkTime: { min: 3000, max: 8000 },
-    clickDelay: { min: 500, max: 2000 },
-    description: "Slow, exploratory user behavior"
-  },
-  normal: {
-    name: "Normal User",
-    thinkTime: { min: 1000, max: 3000 },
-    clickDelay: { min: 200, max: 800 },
-    description: "Average user interaction speed"
-  },
-  power: {
-    name: "Power User",
-    thinkTime: { min: 500, max: 1500 },
-    clickDelay: { min: 100, max: 400 },
-    description: "Fast, experienced user"
-  },
-  automated: {
-    name: "Bot/Automated",
-    thinkTime: { min: 100, max: 500 },
-    clickDelay: { min: 50, max: 200 },
-    description: "Machine-speed interactions"
-  }
-};
-
-// Quick Start API Scenarios - ONE CLICK to run (no Browser Flow here)
-const QUICK_START_SCENARIOS = [
-  {
-    id: "api_load",
-    name: "API Load Test",
-    icon: "🚀",
-    description: "50 users hitting your API for 60 seconds",
-    virtualUsers: 50,
-    duration: 60,
-    rampUp: 10,
-    pattern: "ramp_up",
-    endpoints: [
-      { method: "GET", path: "/api/products", weight: 40 },
-      { method: "GET", path: "/api/products/1", weight: 20 },
-      { method: "GET", path: "/api/categories", weight: 20 },
-      { method: "GET", path: "/health", weight: 20 },
-    ]
-  },
-  {
-    id: "spike_test",
-    name: "Spike Test",
-    icon: "⚡",
-    description: "200 users sudden spike - test resilience",
-    virtualUsers: 200,
-    duration: 120,
-    rampUp: 5,
-    pattern: "spike",
-    endpoints: [
-      { method: "GET", path: "/api/products", weight: 50 },
-      { method: "GET", path: "/api/products/1", weight: 30 },
-      { method: "GET", path: "/api/categories", weight: 20 },
-    ]
-  },
-  {
-    id: "stress_test",
-    name: "Stress Test",
-    icon: "🔥",
-    description: "500 users - find breaking point",
-    virtualUsers: 500,
-    duration: 180,
-    rampUp: 60,
-    pattern: "stress",
-    endpoints: [
-      { method: "GET", path: "/api/products", weight: 40 },
-      { method: "GET", path: "/api/products?limit=100", weight: 30 },
-      { method: "GET", path: "/api/search?q=product", weight: 30 },
-    ]
-  },
-  {
-    id: "endurance_test",
-    name: "Endurance Test",
-    icon: "⏱️",
-    description: "30 users for 10 min - find memory leaks",
-    virtualUsers: 30,
-    duration: 600,
-    rampUp: 30,
-    pattern: "soak",
-    endpoints: [
-      { method: "GET", path: "/api/products", weight: 50 },
-      { method: "GET", path: "/api/categories", weight: 30 },
-      { method: "GET", path: "/health", weight: 20 },
-    ]
-  },
-  {
-    id: "quick_smoke",
-    name: "Quick Smoke Test",
-    icon: "💨",
-    description: "5 users, 30 seconds - quick health check",
-    virtualUsers: 5,
-    duration: 30,
-    rampUp: 5,
-    pattern: "constant",
-    endpoints: [
-      { method: "GET", path: "/health", weight: 50 },
-      { method: "GET", path: "/api/products", weight: 50 },
-    ]
-  }
-];
-
-interface VirtualUser {
-  id: string;
-  name: string;
-  persona: string;
-  status: 'idle' | 'running' | 'completed' | 'error';
-  currentStep: number;
-  totalSteps: number;
-  metrics: {
-    requestsCompleted: number;
-    errorsCount: number;
-    avgResponseTime: number;
-  };
-}
-
-interface TestStep {
-  id: string;
-  type: 'navigate' | 'click' | 'type' | 'wait' | 'assert' | 'api';
-  action?: string;
-  name?: string;
-  target?: string;
-  value?: string;
-  waitTime?: number;
-  // API/Protocol testing fields
-  url?: string;
-  method?: string;
-  headers?: Record<string, string>;
-  body?: string;
-  enabled?: boolean;
-}
-
-interface FlowstralSession {
-  session_id: string;
-  name?: string;
-  nodes?: any[];
-  actions?: any[]; // Recorder extension uses 'actions' instead of 'nodes'
-  initial_url?: string;
-  created_at?: string;
-  is_active?: boolean;
-  artifacts?: any;
-}
-
-interface LoadTestConfig {
-  name: string;
-  targetUrl: string;
-  virtualUsers: number;
-  duration: number; // in seconds
-  rampUpTime: number; // in seconds
-  pattern: string;
-  persona: string;
-  steps: TestStep[];
-  thinkTime: boolean;
-  iterations: number;
-}
-
-interface LoadTestMetrics {
-  totalRequests: number;
-  successfulRequests: number;
-  failedRequests: number;
-  avgResponseTime: number;
-  minResponseTime: number;
-  maxResponseTime: number;
-  p50ResponseTime: number;
-  p90ResponseTime: number;
-  p95ResponseTime: number;
-  p99ResponseTime: number;
-  requestsPerSecond: number;
-  activeUsers: number;
-  errorsPerSecond: number;
-  bytesReceived: number;
-  bytesSent: number;
-}
 
 export default function VirtualUserGenerator() {
   const { toast } = useToast();
@@ -324,23 +97,7 @@ export default function VirtualUserGenerator() {
   const elapsedTimeRef = useRef(0);
   
   // Metrics
-  const [metrics, setMetrics] = useState<LoadTestMetrics>({
-    totalRequests: 0,
-    successfulRequests: 0,
-    failedRequests: 0,
-    avgResponseTime: 0,
-    minResponseTime: Infinity,
-    maxResponseTime: 0,
-    p50ResponseTime: 0,
-    p90ResponseTime: 0,
-    p95ResponseTime: 0,
-    p99ResponseTime: 0,
-    requestsPerSecond: 0,
-    activeUsers: 0,
-    errorsPerSecond: 0,
-    bytesReceived: 0,
-    bytesSent: 0
-  });
+  const [metrics, setMetrics] = useState<LoadTestMetrics>({ ...INITIAL_METRICS });
   
   // Historical metrics for charts
   const [metricsHistory, setMetricsHistory] = useState<LoadTestMetrics[]>([]);
@@ -348,15 +105,6 @@ export default function VirtualUserGenerator() {
   const testInterval = useRef<NodeJS.Timeout | null>(null);
   
   // Failed requests tracking
-  interface FailedRequest {
-    userId: string;
-    userName: string;
-    stepIndex: number;
-    stepName: string;
-    timestamp: string;
-    responseTime: number;
-    error?: string;
-  }
   const [failedRequests, setFailedRequests] = useState<FailedRequest[]>([]);
   
   // Saved test configs
@@ -491,74 +239,7 @@ export default function VirtualUserGenerator() {
     }
   };
 
-  // Convert Flowstral/Recorder session to test steps
-  // Handles both formats: nodes (flowstral) and actions (recorder)
-  const convertFlowstralToSteps = (session: FlowstralSession): TestStep[] => {
-    const steps: TestStep[] = [];
-    
-    // Add initial navigation
-    if (session.initial_url) {
-      steps.push({
-        id: `step_nav_${Date.now()}`,
-        type: 'navigate',
-        action: 'Navigate to URL',
-        target: session.initial_url
-      });
-    }
-    
-    // Get actions array - support both formats
-    const actions = (session as any).actions || session.nodes || [];
-    
-    // Convert actions/nodes to steps
-    actions.forEach((item: any, index: number) => {
-      // Handle direct action format (from recorder extension)
-      const actionType = item.type || item.data?.actionType || item.data?.type || 'click';
-      const selector = item.selector?.playwright || item.selector?.selector || 
-                       item.selector || item.data?.selector || item.data?.target;
-      const description = item.description || item.data?.label || `Action ${index + 1}`;
-      const value = item.value || item.data?.value || item.data?.text || '';
-      
-      // Skip navigate actions (already handled by initial_url)
-      if (actionType === 'navigate' && index === 0) {
-        return;
-      }
-      
-      let step: TestStep = {
-        id: `step_${index}_${Date.now()}`,
-        type: 'click',
-        action: description,
-        target: selector
-      };
-      
-      if (actionType === 'click' || actionType === 'tap') {
-        step.type = 'click';
-      } else if (actionType === 'type' || actionType === 'input' || actionType === 'fill') {
-        step.type = 'type';
-        step.value = value;
-      } else if (actionType === 'navigate' || actionType === 'goto') {
-        step.type = 'navigate';
-        step.target = item.url || item.data?.url || selector;
-      } else if (actionType === 'wait') {
-        step.type = 'wait';
-        step.waitTime = item.duration || item.data?.duration || 1000;
-      } else if (actionType === 'assert' || actionType === 'verify') {
-        step.type = 'assert';
-        step.value = item.expected || item.data?.expected || value;
-      } else if (actionType === 'select') {
-        step.type = 'click'; // Treat select as click for load testing
-        step.value = value;
-      } else if (actionType === 'check' || actionType === 'uncheck') {
-        step.type = 'click';
-      }
-      
-      // Only add if we have a valid target
-      if (step.target || step.type === 'wait' || step.type === 'navigate') {
-        steps.push(step);
-      }
-    });
-    
-    return steps;
-  };
+  // convertFlowstralToSteps is imported from lib/virtual-user-utils
 
   // Import Flowstral session
   const importFlowstralSession = (session: FlowstralSession) => {
@@ -862,23 +543,7 @@ export default function VirtualUserGenerator() {
     setFailedRequests([]);
     
     // Reset metrics
-    setMetrics({
-      totalRequests: 0,
-      successfulRequests: 0,
-      failedRequests: 0,
-      avgResponseTime: 0,
-      minResponseTime: 0,
-      maxResponseTime: 0,
-      p50ResponseTime: 0,
-      p90ResponseTime: 0,
-      p95ResponseTime: 0,
-      p99ResponseTime: 0,
-      requestsPerSecond: 0,
-      activeUsers: 0,
-      errorsPerSecond: 0,
-      bytesReceived: 0,
-      bytesSent: 0
-    });
+    setMetrics({ ...INITIAL_METRICS });
 
     console.log(`[LoadTest] Starting BACKEND-based test: ${testConfig.virtualUsers} VUs, ${testConfig.duration}s duration`);
 
@@ -1225,92 +890,7 @@ export default function VirtualUserGenerator() {
     URL.revokeObjectURL(url);
   };
 
-  // ========== PASS/FAIL Verdict Calculation ==========
-  const getVerdict = () => {
-    // Default thresholds (same as backend)
-    const thresholds = [
-      { metric: 'p95', name: 'P95 Response Time', operator: '<', value: 800, critical: false },
-      { metric: 'p99', name: 'P99 Response Time', operator: '<', value: 2000, critical: false },
-      { metric: 'errorRate', name: 'Error Rate', operator: '<', value: 0.01, critical: true },
-      { metric: 'rps', name: 'Throughput', operator: '>', value: 10, critical: false }
-    ];
-    
-    const getMetricValue = (metric: string): number => {
-      switch (metric) {
-        case 'p95': return metrics.p95ResponseTime;
-        case 'p99': return metrics.p99ResponseTime;
-        case 'errorRate': return metrics.totalRequests > 0 ? metrics.failedRequests / metrics.totalRequests : 0;
-        case 'rps': return metrics.requestsPerSecond;
-        default: return 0;
-      }
-    };
-    
-    const evaluate = (actual: number, operator: string, expected: number): boolean => {
-      switch (operator) {
-        case '<': return actual < expected;
-        case '<=': return actual <= expected;
-        case '>': return actual > expected;
-        case '>=': return actual >= expected;
-        case '==': return Math.abs(actual - expected) < 0.001;
-        default: return false;
-      }
-    };
-    
-    const results = thresholds.map(t => {
-      const actual = getMetricValue(t.metric);
-      const passed = evaluate(actual, t.operator, t.value);
-      return { ...t, actual, passed };
-    });
-    
-    const passedCount = results.filter(r => r.passed).length;
-    const criticalFailures = results.filter(r => !r.passed && r.critical);
-    
-    let verdict = 'PENDING';
-    let reason = '';
-    
-    if (metrics.totalRequests === 0) {
-      verdict = 'PENDING';
-      reason = 'No test data yet';
-    } else if (criticalFailures.length > 0) {
-      verdict = 'FAIL';
-      reason = `Critical: ${criticalFailures.map(f => f.name).join(', ')} failed`;
-    } else if (passedCount === thresholds.length) {
-      verdict = 'PASS';
-      reason = `All ${thresholds.length} thresholds passed`;
-    } else {
-      verdict = 'FAIL';
-      reason = `${thresholds.length - passedCount} of ${thresholds.length} thresholds failed`;
-    }
-    
-    return {
-      verdict,
-      reason,
-      passed: passedCount,
-      total: thresholds.length,
-      details: results.map(r => ({
-        name: r.name,
-        actual: r.actual,
-        expected: r.value,
-        operator: r.operator,
-        passed: r.passed,
-        critical: r.critical
-      }))
-    };
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-  };
+  // getVerdict, formatTime, formatBytes are imported from lib/virtual-user-utils
 
   return (
     <div className="h-full overflow-y-auto bg-background">
@@ -2340,9 +1920,9 @@ export default function VirtualUserGenerator() {
           {/* ========== PASS/FAIL VERDICT BANNER ========== */}
           {metrics.totalRequests > 0 && (
             <Card className={`border-2 ${
-              getVerdict().verdict === 'PASS' 
+              getVerdict(metrics).verdict === 'PASS' 
                 ? 'border-green-500 bg-green-500/10' 
-                : getVerdict().verdict === 'FAIL' 
+                : getVerdict(metrics).verdict === 'FAIL' 
                   ? 'border-red-500 bg-red-500/10'
                   : 'border-yellow-500 bg-yellow-500/10'
             }`}>
@@ -2350,40 +1930,40 @@ export default function VirtualUserGenerator() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className={`text-6xl font-black ${
-                      getVerdict().verdict === 'PASS' 
+                      getVerdict(metrics).verdict === 'PASS' 
                         ? 'text-green-500' 
-                        : getVerdict().verdict === 'FAIL' 
+                        : getVerdict(metrics).verdict === 'FAIL' 
                           ? 'text-red-500'
                           : 'text-yellow-500'
                     }`}>
-                      {getVerdict().verdict === 'PASS' ? '✅' : getVerdict().verdict === 'FAIL' ? '❌' : '⏳'}
+                      {getVerdict(metrics).verdict === 'PASS' ? '✅' : getVerdict(metrics).verdict === 'FAIL' ? '❌' : '⏳'}
                     </div>
                     <div>
                       <div className={`text-4xl font-black ${
-                        getVerdict().verdict === 'PASS' 
+                        getVerdict(metrics).verdict === 'PASS' 
                           ? 'text-green-500' 
-                          : getVerdict().verdict === 'FAIL' 
+                          : getVerdict(metrics).verdict === 'FAIL' 
                             ? 'text-red-500'
                             : 'text-yellow-500'
                       }`}>
-                        {getVerdict().verdict}
+                        {getVerdict(metrics).verdict}
                       </div>
                       <div className="text-sm text-muted-foreground mt-1">
-                        {getVerdict().reason}
+                        {getVerdict(metrics).reason}
                       </div>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm text-muted-foreground">Thresholds</div>
                     <div className="text-2xl font-bold">
-                      {getVerdict().passed}/{getVerdict().total}
+                      {getVerdict(metrics).passed}/{getVerdict(metrics).total}
                     </div>
                   </div>
                 </div>
                 
                 {/* Threshold Results */}
                 <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-2">
-                  {getVerdict().details.map((result, i) => (
+                  {getVerdict(metrics).details.map((result, i) => (
                     <div key={i} className={`p-2 rounded text-xs ${
                       result.passed ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
                     }`}>

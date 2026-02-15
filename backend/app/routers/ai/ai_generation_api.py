@@ -14,8 +14,6 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel
-
 # Services
 from app.services.llm.ollama_service import get_ollama_service
 from app.services.storage.ai_storage import store_ai_generation
@@ -30,100 +28,27 @@ from app.schemas import (
     ReqToTestsRequest, ReqToTestsResponse, ReqToTestsOutput
 )
 from app.services.llm.prompt.prompt_builders import build_req_to_testplan_prompt, build_req_to_tests_prompt
+from .ai_generation_models import (
+    GenerateTestsRequest,
+    TestStep,
+    TestCase,
+    AuditInfo,
+    GenerateTestsResponse,
+    TriageRequest,
+    TriageResponse,
+    RunIngestRequest,
+    RunIngestResponse,
+    TestExecutionRequest,
+    TestExecutionResponse,
+)
+from .ai_generation_utils import _query_usage_sync
 
 logger = logging.getLogger(__name__)
 
 # Get ollama service instance
 ollama_service = get_ollama_service()
 
-# Pydantic Models
-class GenerateTestsRequest(BaseModel):
-    org_id: str
-    project_id: str
-    requirements: str
-    context: Optional[Dict[str, Any]] = None
-
-class TestStep(BaseModel):
-    action: str
-    data: Optional[Dict[str, Any]] = {}
-    expected: str
-    locator_hints: Optional[List[str]] = []
-
-class TestCase(BaseModel):
-    case_id: str
-    title: str
-    description: str
-    priority: str
-    tags: List[str]
-    steps: List[TestStep]
-
-class AuditInfo(BaseModel):
-    model: str
-    prompt_tokens: int
-    completion_tokens: int
-    cost_usd: float
-    latency_ms: int
-
-class GenerateTestsResponse(BaseModel):
-    cases: List[TestCase]
-    audit: AuditInfo
-
-class TriageRequest(BaseModel):
-    org_id: str
-    project_id: str
-    run_id: str
-    logs: str
-    artifacts: Optional[List[Dict[str, Any]]] = []
-
-class TriageResponse(BaseModel):
-    summary: str
-    root_cause: str
-    category: Optional[str] = None
-    suggested_fixes: List[str] = []
-    selector_suggestions: List[str] = []
-    likelihood_flaky: float = 0.0
-    related_cases: List[str] = []
-
-class RunIngestRequest(BaseModel):
-    org_id: str
-    project_id: str
-    runner_version: str
-    started_at: str
-    completed_at: str
-    status: str
-    environment: Optional[str] = "local"
-    branch: Optional[str] = None
-    commit: Optional[str] = None
-    steps: List[Dict[str, Any]]
-
-class RunIngestResponse(BaseModel):
-    run_id: str
-
-class TestExecutionRequest(BaseModel):
-    org_id: str
-    project_id: str
-    test_cases: List[Dict[str, Any]]
-
-class TestExecutionResponse(BaseModel):
-    run_id: str
-    results: List[Dict[str, Any]]
-    summary: Dict[str, Any]
-
-
 router = APIRouter(prefix="/ai", tags=["ai-generation"])
-
-
-def _query_usage_sync(pool, query, params):
-    """Synchronous database query"""
-    conn = pool.getconn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(query, params)
-            columns = [desc[0] for desc in cur.description]
-            results = [dict(zip(columns, row)) for row in cur.fetchall()]
-            return results
-    finally:
-        pool.putconn(conn)
 
 
 # ============================================================================

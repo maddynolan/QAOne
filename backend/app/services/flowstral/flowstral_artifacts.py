@@ -35,6 +35,16 @@ from app.services.automation.test_execution_service import get_test_execution_se
 from app.services.flowstral.salesforce_playwright_generator import SalesforcePlaywrightGenerator
 from app.services.flowstral.simple_salesforce_generator import SimpleSalesforceGenerator
 from app.services.flowstral.robust_salesforce_generator import RobustSalesforceGenerator
+from .flowstral_artifacts_utils import (
+    extract_first_real_url_from_graph,
+    extract_clean_page_name,
+    validate_playwright_code_structure,
+    calculate_title_similarity,
+    deduplicate_test_cases,
+    generate_performance_recommendations,
+    extract_reproduction_steps,
+    get_action_graph_snippet,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -354,74 +364,6 @@ test('Flowstral Recorded Test', async ({{ page }}) => {{
             logger.warning(f"Artifact generation completed with {len(errors)} errors: {errors}")
         
         return result
-    
-    def _extract_first_real_url_from_graph(self, action_graph: ActionGraph) -> Optional[str]:
-        """Extract first real URL from action graph, filtering out internal browser URLs."""
-        import re
-        if not action_graph or not action_graph.nodes:
-            return None
-        
-        # Internal browser URL patterns
-        internal_patterns = ['chrome://', 'about:', 'edge://', 'newtab', 'blank']
-        
-        for node in action_graph.nodes:
-            url = node.url or (node.url_pattern if hasattr(node, 'url_pattern') else None)
-            if url and isinstance(url, str) and len(url) > 5:
-                url_lower = url.lower()
-                # Skip internal URLs
-                if any(pattern in url_lower for pattern in internal_patterns):
-                    continue
-                # Skip localhost/dev ports if Flowstral/QA platform
-                if 'flowstral' in url_lower or 'qa' in url_lower or 'platform' in url_lower:
-                    continue
-                # Check for localhost with dev ports
-                if 'localhost' in url_lower or '127.0.0.1' in url_lower:
-                    if re.search(r':(8080|8081|3000|5173|4200)', url_lower):
-                        continue
-                # Valid URL found
-                if url.startswith("http://") or url.startswith("https://"):
-                    return url
-        
-        return None
-    
-    def _extract_clean_page_name(self, url_or_pattern: str) -> str:
-        """
-        Extract a clean, readable page name from URL or pattern.
-        Filters out Flowstral internal patterns, GUIDs, and meaningless parts.
-        """
-        import re
-        
-        if not url_or_pattern or url_or_pattern == "Page":
-            return "Page"
-        
-        # Remove Flowstral patterns
-        text = url_or_pattern
-        text = re.sub(r'Page load:\s*', '', text, flags=re.I)
-        text = re.sub(r'^https?://', '', text)
-        text = re.sub(r'^www\.', '', text)
-        
-        # Extract meaningful parts from URL
-        # Example: "www.walmart.com/shop/deals/flash-deals" -> "Flash Deals"
-        parts = text.split('/')
-        if len(parts) > 1:
-            # Get the last meaningful part
-            last_part = parts[-1].split('?')[0]  # Remove query params
-            last_part = last_part.replace('-', ' ').replace('_', ' ')
-            # Capitalize words
-            last_part = ' '.join(word.capitalize() for word in last_part.split() if word)
-            if last_part and len(last_part) > 2:
-                return last_part
-        
-        # Fallback: use domain name or first meaningful part
-        domain_match = re.search(r'([a-zA-Z0-9-]+\.(com|net|org|io|edu))', text)
-        if domain_match:
-            domain = domain_match.group(1)
-            # Extract site name (e.g., "walmart" from "walmart.com")
-            site_name = domain.split('.')[0].capitalize()
-            return f"{site_name} Home"
-        
-        # Final fallback
-        return text[:50] if len(text) > 50 else text
     
     def generate_action_graph_model(self, action_graph: ActionGraph) -> Dict[str, Any]:
         """Artifact 1: Action Graph Model"""
@@ -801,7 +743,7 @@ test('Flowstral Recorded Test', async ({{ page }}) => {{
                     llm_code = result.get("code", "")
                     metrics = result.get("metrics", {})
                     
-                    if llm_code and self._validate_playwright_code_structure(llm_code):
+                    if llm_code and validate_playwright_code_structure(llm_code):
                         # CRITICAL: Sanitize code before storing (filter internal URLs, fix syntax)
                         from app.services.automation.test_execution_service import get_test_execution_service
                         import re
@@ -812,7 +754,7 @@ test('Flowstral Recorded Test', async ({{ page }}) => {{
                         if not re.search(r'await\s+page\.goto\(', llm_code):
                             # No goto found after sanitization - add placeholder
                             logger.warning("No page.goto() found after sanitization, adding placeholder")
-                            real_url = self._extract_first_real_url_from_graph(action_graph)
+                            real_url = extract_first_real_url_from_graph(action_graph)
                             if real_url:
                                 # Insert goto at the start of test
                                 llm_code = re.sub(
@@ -903,21 +845,6 @@ test('Flowstral Recorded Test', async ({{ page }}) => {{
             "export_format": "script_code.js",
             "selector_strategy": "ARIA → CSS → Text fallback → XPath"
         }
-    
-    def _validate_playwright_code_structure(self, code: str) -> bool:
-        """Validate that Playwright code has proper structure."""
-        import re
-        required_patterns = [
-            r"import.*@playwright/test",
-            r"(test|describe)\s*\(",
-            r"async\s*\(\s*\{\s*page\s*\}\s*\)"
-        ]
-        
-        for pattern in required_patterns:
-            if not re.search(pattern, code, re.IGNORECASE):
-                return False
-        
-        return True
     
     async def generate_structured_test_cases(
         self,
@@ -1889,7 +1816,7 @@ Return ONLY valid JSON array, no explanations."""
             #         if page_key not in a11y_pages_seen:
             #             a11y_pages_seen.add(page_key)
             #             # Extract clean page name
-            #             page_name = self._extract_clean_page_name(node.url_pattern or node.url or "Page")
+            #             page_name = extract_clean_page_name(node.url_pattern or node.url or "Page")
             #             additional_cases.append({
             #                 "title": f"Accessibility Check: {page_name}",
             #                 "description": "Verify WCAG compliance for user interactions",
@@ -1934,7 +1861,7 @@ Return ONLY valid JSON array, no explanations."""
             #         if page_key not in perf_pages_seen:
             #             perf_pages_seen.add(page_key)
             #             # Extract clean page name
-            #             page_name = self._extract_clean_page_name(node.url_pattern or node.url or "Page")
+            #             page_name = extract_clean_page_name(node.url_pattern or node.url or "Page")
             #             additional_cases.append({
             #                 "title": f"Performance Check: {page_name}",
             #                 "description": "Verify performance metrics meet SLA",
@@ -2761,60 +2688,6 @@ Return ONLY valid JSON array, no explanations."""
                 "error": f"'NoneType' object is not subscriptable - {str(e)}"
             }
     
-    def _deduplicate_test_cases(self, test_cases: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Remove duplicate test cases based on title similarity"""
-        if not test_cases:
-            return []
-        
-        deduplicated = []
-        seen_titles = set()
-        
-        for test_case in test_cases:
-            title = test_case.get("title", "").lower().strip()
-            
-            # Skip if title is empty
-            if not title:
-                continue
-            
-            # Check for exact duplicate
-            if title in seen_titles:
-                logger.debug(f"Skipping duplicate test case: {test_case.get('title')}")
-                continue
-            
-            # Check for similar titles (fuzzy matching)
-            is_duplicate = False
-            for seen_title in seen_titles:
-                # If titles are very similar (80%+ overlap), consider it a duplicate
-                similarity = self._calculate_title_similarity(title, seen_title)
-                if similarity > 0.8:
-                    logger.debug(f"Skipping similar test case: {test_case.get('title')} (similarity: {similarity:.2f} with '{seen_title}')")
-                    is_duplicate = True
-                    break
-            
-            if not is_duplicate:
-                deduplicated.append(test_case)
-                seen_titles.add(title)
-        
-        return deduplicated
-    
-    def _calculate_title_similarity(self, title1: str, title2: str) -> float:
-        """Calculate similarity between two titles (0.0 to 1.0)"""
-        # Simple word-based similarity
-        words1 = set(title1.split())
-        words2 = set(title2.split())
-        
-        if not words1 or not words2:
-            return 0.0
-        
-        # Calculate Jaccard similarity
-        intersection = len(words1 & words2)
-        union = len(words1 | words2)
-        
-        if union == 0:
-            return 0.0
-        
-        return intersection / union
-    
     async def generate_accessibility_report(self, wcag_snapshots: List[Dict[str, Any]], wcag_issues: Optional[List[Dict[str, Any]]] = None, use_a11y_persona: bool = False) -> Dict[str, Any]:
         """Artifact 4: Accessibility Report (WCAG) with OpenAI enhancement"""
         all_violations = []
@@ -3179,7 +3052,7 @@ Return ONLY valid JSON array, no explanations."""
             except Exception as e:
                 logger.warning(f"LLM Performance report generation failed: {e}, using base report")
                 # Fallback to basic recommendations
-            recommendations = self._generate_performance_recommendations(all_bottlenecks, api_latency_matrix)
+            recommendations = generate_performance_recommendations(all_bottlenecks, api_latency_matrix)
             enhanced_report = {
                 "summary": {
                     "overall_status": "warning" if all_bottlenecks else "good",
@@ -3259,36 +3132,6 @@ Return ONLY valid JSON array, no explanations."""
         
         return result
     
-    def _generate_performance_recommendations(
-        self,
-        bottlenecks: List[Dict[str, Any]],
-        api_matrix: Dict[str, Any]
-    ) -> List[str]:
-        """Generate performance optimization recommendations"""
-        recommendations = []
-        
-        # Page-level recommendations
-        page_bottlenecks = [b for b in bottlenecks if b.get("type") == "page_level"]
-        if page_bottlenecks:
-            recommendations.append("Optimize page load performance: reduce render-blocking resources, optimize images")
-        
-        # Component recommendations
-        component_bottlenecks = [b for b in bottlenecks if b.get("type") == "component"]
-        if component_bottlenecks:
-            recommendations.append("Optimize component rendering: use code splitting, lazy loading, memoization")
-        
-        # API recommendations
-        network_bottlenecks = [b for b in bottlenecks if b.get("type") == "network"]
-        if network_bottlenecks:
-            recommendations.append("Optimize API endpoints: add caching, reduce payload size, use compression")
-        
-        # Slow endpoints
-        slow_endpoints = [e for e in api_matrix.values() if e.get("avg_latency", 0) > 1000]
-        if slow_endpoints:
-            recommendations.append(f"Optimize {len(slow_endpoints)} slow API endpoints: consider caching or query optimization")
-        
-        return recommendations
-    
     async def generate_auto_defects(
         self,
         action_graph: ActionGraph,
@@ -3315,8 +3158,8 @@ Return ONLY valid JSON array, no explanations."""
                 "description": f"Flowstral detected {total_wcag_violations} WCAG violations, including {critical_wcag} critical issues",
                 "severity": "high" if critical_wcag > 0 else "medium",
                 "category": "accessibility",
-                "reproduction_steps": self._extract_reproduction_steps(action_graph),
-                "action_graph_snippet": self._get_action_graph_snippet(action_graph),
+                "reproduction_steps": extract_reproduction_steps(action_graph),
+                "action_graph_snippet": get_action_graph_snippet(action_graph),
                 "wcag_violations": [v for s in wcag_snapshots for v in s.get("violations", [])]
             }
             defects.append(wcag_defect)
@@ -3332,8 +3175,8 @@ Return ONLY valid JSON array, no explanations."""
                 "description": f"Flowstral detected {len(high_severity_bottlenecks)} high-severity performance bottlenecks",
                 "severity": "high",
                 "category": "performance",
-                "reproduction_steps": self._extract_reproduction_steps(action_graph),
-                "action_graph_snippet": self._get_action_graph_snippet(action_graph),
+                "reproduction_steps": extract_reproduction_steps(action_graph),
+                "action_graph_snippet": get_action_graph_snippet(action_graph),
                 "bottlenecks": high_severity_bottlenecks
             }
             defects.append(perf_defect)
@@ -3390,20 +3233,4 @@ Return ONLY valid JSON array, no explanations."""
             "export_format": "defects.json"
         }
     
-    def _extract_reproduction_steps(self, action_graph: ActionGraph) -> List[str]:
-        """Extract reproduction steps from action graph"""
-        steps = []
-        for i, node in enumerate(action_graph.nodes, 1):
-            if node.event_type != "session_start" and node.event_type != "session_end":
-                steps.append(f"{i}. {node.action_description}")
-        return steps
-    
-    def _get_action_graph_snippet(self, action_graph: ActionGraph) -> Dict[str, Any]:
-        """Get a snippet of the action graph for defect context"""
-        return {
-            "total_nodes": len(action_graph.nodes),
-            "total_edges": len(action_graph.edges),
-            "event_types": list(set(node.event_type for node in action_graph.nodes)),
-            "urls": list(set(node.url for node in action_graph.nodes if node.url))
-        }
 

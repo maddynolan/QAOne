@@ -59,171 +59,25 @@ import WebSocketClient from "@/modules/api-testing/components/WebSocketClient";
 import { useApiTestingStore } from "@/modules/api-testing/store/apiTestingStore";
 
 import { API_BASE_URL } from "@/lib/api-config";
-
-// Ensure test suite has folders array (collection hierarchy — zero-code)
-function ensureTestSuiteFolders(suite: any): any {
-  if (!suite) return suite;
-  return { ...suite, folders: Array.isArray(suite.folders) ? suite.folders : [] };
-}
-
-// Protocol Templates for quick-start (using real public APIs)
-const PROTOCOL_TEMPLATES = {
-  rest_openapi: {
-    name: "REST API (JSONPlaceholder)",
-    icon: "🌐",
-    protocol: "REST",
-    format: "openapi",
-    description: "JSONPlaceholder - Free REST API for testing (public, no auth required)",
-    baseUrl: "https://jsonplaceholder.typicode.com",
-    spec: {
-      openapi: "3.1.0",
-      info: { title: "JSONPlaceholder API", version: "1.0.0", description: "Free fake REST API for testing and prototyping" },
-      servers: [{ url: "https://jsonplaceholder.typicode.com" }],
-      paths: {
-        "/posts": {
-          get: { summary: "List all posts", operationId: "listPosts", responses: { "200": { description: "Array of posts", content: { "application/json": { schema: { type: "array", items: { type: "object", properties: { id: { type: "integer" }, userId: { type: "integer" }, title: { type: "string" }, body: { type: "string" } } } } } } } } },
-          post: { 
-            summary: "Create a post", operationId: "createPost",
-            requestBody: { content: { "application/json": { schema: { type: "object", properties: { title: { type: "string" }, body: { type: "string" }, userId: { type: "integer" } }, required: ["title", "body", "userId"] } } } },
-            responses: { "201": { description: "Post created" } }
-          }
-        },
-        "/posts/{id}": {
-          get: { summary: "Get post by ID", operationId: "getPost", parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], responses: { "200": { description: "Post object" } } },
-          put: { summary: "Update post", operationId: "updatePost", parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], requestBody: { content: { "application/json": { schema: { type: "object", properties: { title: { type: "string" }, body: { type: "string" }, userId: { type: "integer" } } } } } }, responses: { "200": { description: "Post updated" } } },
-          delete: { summary: "Delete post", operationId: "deletePost", parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], responses: { "200": { description: "Post deleted" } } }
-        },
-        "/posts/{id}/comments": {
-          get: { summary: "Get comments for a post", operationId: "getPostComments", parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], responses: { "200": { description: "Array of comments" } } }
-        },
-        "/users": {
-          get: { summary: "List all users", operationId: "listUsers", responses: { "200": { description: "Array of users" } } }
-        },
-        "/users/{id}": {
-          get: { summary: "Get user by ID", operationId: "getUser", parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], responses: { "200": { description: "User object" } } }
-        },
-        "/comments": {
-          get: { summary: "List comments (with filter)", operationId: "listComments", parameters: [{ name: "postId", in: "query", schema: { type: "integer" } }], responses: { "200": { description: "Array of comments" } } }
-        }
-      }
-    }
-  },
-  graphql: {
-    name: "GraphQL API (Countries)",
-    icon: "⬢",
-    protocol: "GraphQL",
-    format: "graphql",
-    description: "Countries GraphQL API - Query countries, continents, languages (public, no auth)",
-    baseUrl: "https://countries.trevorblades.com/graphql",
-    spec: `
-type Query {
-  countries(filter: CountryFilterInput): [Country!]!
-  country(code: ID!): Country
-  continents(filter: ContinentFilterInput): [Continent!]!
-  continent(code: ID!): Continent
-  languages(filter: LanguageFilterInput): [Language!]!
-  language(code: ID!): Language
-}
-
-type Country {
-  code: ID!
-  name: String!
-  native: String!
-  phone: String!
-  continent: Continent!
-  capital: String
-  currency: String
-  languages: [Language!]!
-  emoji: String!
-  emojiU: String!
-}
-
-type Continent {
-  code: ID!
-  name: String!
-  countries: [Country!]!
-}
-
-type Language {
-  code: ID!
-  name: String!
-  native: String!
-  rtl: Boolean!
-}
-
-input CountryFilterInput {
-  code: StringQueryOperatorInput
-  continent: StringQueryOperatorInput
-}
-
-input ContinentFilterInput {
-  code: StringQueryOperatorInput
-}
-
-input LanguageFilterInput {
-  code: StringQueryOperatorInput
-}
-
-input StringQueryOperatorInput {
-  eq: String
-  in: [String!]
-}
-`
-  },
-  soap: {
-    name: "SOAP Service (CountryInfo)",
-    icon: "📨",
-    protocol: "SOAP",
-    format: "wsdl",
-    description: "CountryInfo SOAP service - Get country details (public, no auth)",
-    baseUrl: "http://webservices.oorsprong.org/websamples.countryinfo/CountryInfoService.wso",
-    spec: `<?xml version="1.0" encoding="UTF-8"?>
-<definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
-             xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
-             xmlns:tns="http://www.oorsprong.org/websamples.countryinfo"
-             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-             targetNamespace="http://www.oorsprong.org/websamples.countryinfo">
-  <types>
-    <xsd:schema targetNamespace="http://www.oorsprong.org/websamples.countryinfo">
-      <xsd:element name="CountryISOCode" type="xsd:string"/>
-      <xsd:element name="FullCountryInfo" type="tns:tCountryInfo"/>
-      <xsd:complexType name="tCountryInfo">
-        <xsd:sequence>
-          <xsd:element name="sISOCode" type="xsd:string"/>
-          <xsd:element name="sName" type="xsd:string"/>
-          <xsd:element name="sCapitalCity" type="xsd:string"/>
-          <xsd:element name="sPhoneCode" type="xsd:string"/>
-          <xsd:element name="sContinentCode" type="xsd:string"/>
-          <xsd:element name="sCurrencyISOCode" type="xsd:string"/>
-          <xsd:element name="sCountryFlag" type="xsd:string"/>
-        </xsd:sequence>
-      </xsd:complexType>
-    </xsd:schema>
-  </types>
-  <message name="FullCountryInfoRequest">
-    <part name="sCountryISOCode" element="tns:CountryISOCode"/>
-  </message>
-  <message name="FullCountryInfoResponse">
-    <part name="FullCountryInfoResult" element="tns:FullCountryInfo"/>
-  </message>
-  <portType name="CountryInfoServiceSoap">
-    <operation name="FullCountryInfo">
-      <input message="tns:FullCountryInfoRequest"/>
-      <output message="tns:FullCountryInfoResponse"/>
-    </operation>
-    <operation name="ListOfCountryNamesByCode">
-      <input message="tns:FullCountryInfoRequest"/>
-      <output message="tns:FullCountryInfoResponse"/>
-    </operation>
-  </portType>
-  <service name="CountryInfoService">
-    <port name="CountryInfoServiceSoap" binding="tns:CountryInfoServiceSoapBinding">
-      <soap:address location="http://webservices.oorsprong.org/websamples.countryinfo/CountryInfoService.wso"/>
-    </port>
-  </service>
-</definitions>`
-  },
-};
+import { ensureTestSuiteFolders } from "@/modules/api-testing/lib/api-testing-utils";
+import { PROTOCOL_TEMPLATES } from "@/modules/api-testing/constants/protocol-templates";
+import { INLINE_ASSERTION_TYPES, INLINE_ASSERTION_OPERATORS } from "@/modules/api-testing/constants/assertion-constants";
+import {
+  exportAsJUnitXML as _exportJUnit,
+  exportAsHTML as _exportHTML,
+  exportAsJSON as _exportJSON,
+  exportAsAllure as _exportAllure,
+  generateJUnitXMLContent,
+  generateHTMLContent,
+  generateAllureContent,
+} from "@/modules/api-testing/lib/report-export";
+import { exportToPostman as _exportToPostman, exportToHAR as _exportToHAR } from "@/modules/api-testing/lib/collection-export";
+import {
+  loadPersistedEnvironments,
+  saveEnvironmentsToLocalStorage,
+  saveEnvironmentToDb,
+  loadEnvironments as _loadEnvironments,
+} from "@/modules/api-testing/lib/environment-persistence";
 
 export default function EnhancedAPITesting() {
   const { toast } = useToast();
@@ -495,31 +349,8 @@ export default function EnhancedAPITesting() {
     schema: ""
   });
 
-  // Assertion type definitions
-  const ASSERTION_TYPES = [
-    { value: "status_code", label: "Status Code", icon: "🔢", description: "Validate HTTP status code" },
-    { value: "response_time", label: "Response Time", icon: "⏱️", description: "Check response time (ms)" },
-    { value: "jsonpath", label: "JSONPath", icon: "📍", description: "Extract and validate JSON values" },
-    { value: "schema", label: "JSON Schema", icon: "📋", description: "Validate against JSON Schema" },
-    { value: "contains", label: "Contains", icon: "🔍", description: "Response contains text" },
-    { value: "not_contains", label: "Not Contains", icon: "🚫", description: "Response doesn't contain text" },
-    { value: "regex", label: "Regex Match", icon: "🎯", description: "Match regular expression" },
-    { value: "header", label: "Header Value", icon: "📨", description: "Validate response header" },
-    { value: "equals", label: "Equals", icon: "⚖️", description: "Exact value match" },
-    { value: "xpath", label: "XPath", icon: "🏷️", description: "Extract and validate XML values" },
-  ];
-
-  const ASSERTION_OPERATORS = [
-    { value: "equals", label: "Equals" },
-    { value: "not_equals", label: "Not Equals" },
-    { value: "contains", label: "Contains" },
-    { value: "not_contains", label: "Not Contains" },
-    { value: "greater_than", label: "Greater Than" },
-    { value: "less_than", label: "Less Than" },
-    { value: "matches_regex", label: "Matches Regex" },
-    { value: "exists", label: "Exists" },
-    { value: "not_exists", label: "Not Exists" },
-  ];
+  // Assertion type definitions — imported from constants/assertion-constants.ts
+  // Available as INLINE_ASSERTION_TYPES and INLINE_ASSERTION_OPERATORS
 
   // Add assertion to list
   const addAssertion = () => {
@@ -552,337 +383,11 @@ export default function EnhancedAPITesting() {
     setAssertions(assertions.filter(a => a.id !== id));
   };
 
-  // Export results as JUnit XML
-  const exportAsJUnitXML = () => {
-    if (!executionResults) return;
-    
-    const testResults = executionResults.test_results || [];
-    const summary = executionResults.summary || {};
-    
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="API Test Suite" tests="${summary.total || 0}" failures="${summary.failed || 0}" errors="0" time="${(summary.total_duration_ms || 0) / 1000}">
-${testResults.map((result: any, idx: number) => `  <testcase name="${result.title || result.name || `Test ${idx + 1}`}" classname="api.tests" time="${(result.response_time_ms || 0) / 1000}">
-${result.status !== 'passed' ? `    <failure message="${result.error_message || 'Test failed'}" type="${result.error_type || 'AssertionError'}">
-      Expected: ${result.expected_status || 200}
-      Actual: ${result.actual_status || 'N/A'}
-    </failure>` : ''}
-  </testcase>`).join('\n')}
-</testsuite>`;
-    
-    const blob = new Blob([xml], { type: 'application/xml' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `api-test-results-${new Date().toISOString().split('T')[0]}.xml`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    toast({
-      title: "Exported",
-      description: "JUnit XML report downloaded",
-    });
-  };
-
-  // Export results as HTML report
-  const exportAsHTML = () => {
-    if (!executionResults) return;
-    
-    const testResults = executionResults.test_results || [];
-    const summary = executionResults.summary || {};
-    
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <title>API Test Report - ${new Date().toLocaleDateString()}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 40px; background: #f5f5f5; }
-    .container { max-width: 1200px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    h1 { color: #333; border-bottom: 2px solid #4f46e5; padding-bottom: 10px; }
-    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 30px 0; }
-    .stat { text-align: center; padding: 20px; background: #f8f9fa; border-radius: 8px; }
-    .stat-value { font-size: 36px; font-weight: bold; }
-    .stat-label { color: #666; margin-top: 5px; }
-    .passed { color: #22c55e; }
-    .failed { color: #ef4444; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-    th { background: #f8f9fa; font-weight: 600; }
-    .badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; }
-    .badge-pass { background: #dcfce7; color: #166534; }
-    .badge-fail { background: #fee2e2; color: #991b1b; }
-    .timestamp { color: #888; font-size: 14px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>API Test Report</h1>
-    <p class="timestamp">Generated: ${new Date().toLocaleString()}</p>
-    
-    <div class="summary">
-      <div class="stat">
-        <div class="stat-value">${summary.total || 0}</div>
-        <div class="stat-label">Total Tests</div>
-      </div>
-      <div class="stat">
-        <div class="stat-value passed">${summary.passed || 0}</div>
-        <div class="stat-label">Passed</div>
-      </div>
-      <div class="stat">
-        <div class="stat-value failed">${summary.failed || 0}</div>
-        <div class="stat-label">Failed</div>
-      </div>
-      <div class="stat">
-        <div class="stat-value">${summary.pass_rate?.toFixed(1) || 0}%</div>
-        <div class="stat-label">Pass Rate</div>
-      </div>
-    </div>
-    
-    <h2>Test Results</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Test Case</th>
-          <th>Status</th>
-          <th>Response Time</th>
-          <th>Status Code</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${testResults.map((result: any, idx: number) => `
-        <tr>
-          <td>${result.title || result.name || `Test ${idx + 1}`}</td>
-          <td><span class="badge ${result.status === 'passed' ? 'badge-pass' : 'badge-fail'}">${result.status || 'unknown'}</span></td>
-          <td>${result.response_time_ms?.toFixed(2) || 'N/A'}ms</td>
-          <td>${result.actual_status || result.status_code || 'N/A'}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-  </div>
-</body>
-</html>`;
-    
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `api-test-report-${new Date().toISOString().split('T')[0]}.html`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    toast({
-      title: "Exported",
-      description: "HTML report downloaded",
-    });
-  };
-
-  // Export results as JSON
-  const exportAsJSON = () => {
-    if (!executionResults) return;
-    
-    const blob = new Blob([JSON.stringify(executionResults, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `api-test-results-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    toast({
-      title: "Exported",
-      description: "JSON results downloaded",
-    });
-  };
-
-  // Export results in Allure format
-  const exportAsAllure = () => {
-    if (!executionResults) return;
-    
-    const testResults = executionResults.test_results || [];
-    const executionId = executionResults.execution_id || `exec_${Date.now()}`;
-    
-    // Generate Allure-compatible JSON files
-    const allureResults: any[] = testResults.map((result: any, idx: number) => {
-      const uuid = `${executionId}_${idx}_${Date.now()}`;
-      const startTime = result.start_time ? new Date(result.start_time).getTime() : Date.now() - (result.response_time_ms || 0);
-      const stopTime = startTime + (result.response_time_ms || 0);
-      
-      return {
-        uuid: uuid,
-        historyId: `${result.test_case_id || result.title || `test_${idx}`}`,
-        name: result.title || result.name || `Test ${idx + 1}`,
-        fullName: `api.tests.${result.test_case_id || `test_${idx}`}`,
-        status: result.status === 'passed' ? 'passed' : 'failed',
-        statusDetails: result.status !== 'passed' ? {
-          message: result.error_message || 'Test failed',
-          trace: result.stack_trace || ''
-        } : undefined,
-        stage: 'finished',
-        start: startTime,
-        stop: stopTime,
-        labels: [
-          { name: 'suite', value: 'API Test Suite' },
-          { name: 'subSuite', value: result.category || 'functional' },
-          { name: 'host', value: 'localhost' },
-          { name: 'thread', value: 'main' },
-          { name: 'package', value: 'api.tests' },
-          { name: 'testMethod', value: result.method || 'GET' },
-          { name: 'severity', value: result.priority || 'normal' },
-          ...(result.tags || []).map((tag: string) => ({ name: 'tag', value: tag }))
-        ],
-        parameters: [
-          { name: 'endpoint', value: result.endpoint || result.url || '' },
-          { name: 'method', value: result.method || 'GET' },
-          { name: 'expected_status', value: String(result.expected_status || 200) },
-          { name: 'actual_status', value: String(result.actual_status || result.status_code || '') }
-        ],
-        attachments: result.response_body ? [
-          {
-            name: 'Response Body',
-            source: `${uuid}-response.json`,
-            type: 'application/json'
-          }
-        ] : [],
-        steps: [
-          {
-            name: `${result.method || 'GET'} ${result.endpoint || result.url || '/'}`,
-            status: result.status === 'passed' ? 'passed' : 'failed',
-            start: startTime,
-            stop: stopTime,
-            attachments: [],
-            parameters: []
-          }
-        ]
-      };
-    });
-
-    // Create a ZIP-like structure with all results
-    const allureContainer = {
-      uuid: executionId,
-      name: 'API Test Suite',
-      children: allureResults.map(r => r.uuid),
-      befores: [],
-      afters: [],
-      start: Math.min(...allureResults.map(r => r.start)),
-      stop: Math.max(...allureResults.map(r => r.stop))
-    };
-
-    // Export as single JSON file (can be used with allure generate)
-    const allureExport = {
-      _meta: {
-        format: 'allure2',
-        version: '2.0',
-        generated: new Date().toISOString()
-      },
-      container: allureContainer,
-      results: allureResults
-    };
-    
-    const blob = new Blob([JSON.stringify(allureExport, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `allure-results-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    toast({
-      title: "Exported",
-      description: "Allure format results downloaded. Use 'allure generate' to create the report.",
-    });
-  };
-
-  // Generate report content for inline viewing
-  const generateJUnitXMLContent = (): string => {
-    if (!executionResults) return '';
-    const testResults = executionResults.test_results || [];
-    const summary = executionResults.summary || {};
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="API Test Suite" tests="${summary.total || 0}" failures="${summary.failed || 0}" errors="0" time="${(summary.total_duration_ms || 0) / 1000}">
-${testResults.map((result: any, idx: number) => `  <testcase name="${result.title || result.name || `Test ${idx + 1}`}" classname="api.tests" time="${(result.response_time_ms || 0) / 1000}">
-${result.status !== 'passed' ? `    <failure message="${result.error_message || 'Test failed'}" type="${result.error_type || 'AssertionError'}">
-      Expected: ${result.expected_status || 200}
-      Actual: ${result.actual_status || 'N/A'}
-    </failure>` : ''}
-  </testcase>`).join('\n')}
-</testsuite>`;
-  };
-
-  const generateHTMLContent = (): string => {
-    if (!executionResults) return '';
-    const testResults = executionResults.test_results || [];
-    const summary = executionResults.summary || {};
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <title>API Test Report - ${new Date().toLocaleDateString()}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 20px; background: #f5f5f5; }
-    .container { max-width: 100%; background: white; padding: 24px; border-radius: 8px; }
-    h1 { color: #333; border-bottom: 2px solid #4f46e5; padding-bottom: 10px; font-size: 1.5rem; }
-    h2 { font-size: 1.2rem; margin-top: 20px; }
-    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 20px 0; }
-    .stat { text-align: center; padding: 16px; background: #f8f9fa; border-radius: 8px; }
-    .stat-value { font-size: 28px; font-weight: bold; }
-    .stat-label { color: #666; margin-top: 4px; font-size: 12px; }
-    .passed { color: #22c55e; }
-    .failed { color: #ef4444; }
-    table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
-    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
-    th { background: #f8f9fa; font-weight: 600; }
-    .badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; display: inline-block; }
-    .badge-pass { background: #dcfce7; color: #166534; }
-    .badge-fail { background: #fee2e2; color: #991b1b; }
-    .timestamp { color: #888; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🧪 API Test Report</h1>
-    <p class="timestamp">Generated: ${new Date().toLocaleString()}</p>
-    <div class="summary">
-      <div class="stat"><div class="stat-value">${summary.total || 0}</div><div class="stat-label">Total Tests</div></div>
-      <div class="stat"><div class="stat-value passed">${summary.passed || 0}</div><div class="stat-label">Passed</div></div>
-      <div class="stat"><div class="stat-value failed">${summary.failed || 0}</div><div class="stat-label">Failed</div></div>
-      <div class="stat"><div class="stat-value">${summary.pass_rate?.toFixed(1) || 0}%</div><div class="stat-label">Pass Rate</div></div>
-    </div>
-    <h2>Test Results</h2>
-    <table>
-      <thead><tr><th>Test Case</th><th>Status</th><th>Response Time</th><th>Status Code</th></tr></thead>
-      <tbody>
-        ${testResults.map((result: any, idx: number) => `
-        <tr>
-          <td>${result.title || result.name || `Test ${idx + 1}`}</td>
-          <td><span class="badge ${result.status === 'passed' ? 'badge-pass' : 'badge-fail'}">${result.status || 'unknown'}</span></td>
-          <td>${result.response_time_ms?.toFixed(2) || 'N/A'}ms</td>
-          <td>${result.actual_status || result.status_code || 'N/A'}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-  </div>
-</body>
-</html>`;
-  };
-
-  const generateAllureContent = (): string => {
-    if (!executionResults) return '';
-    const testResults = executionResults.test_results || [];
-    const executionId = executionResults.execution_id || `exec_${Date.now()}`;
-    const allureResults = testResults.map((result: any, idx: number) => {
-      const uuid = `${executionId}_${idx}`;
-      const startTime = result.start_time ? new Date(result.start_time).getTime() : Date.now();
-      return {
-        uuid, name: result.title || result.name || `Test ${idx + 1}`,
-        status: result.status === 'passed' ? 'passed' : 'failed',
-        start: startTime, stop: startTime + (result.response_time_ms || 0),
-        labels: [{ name: 'suite', value: 'API Test Suite' }],
-        parameters: [
-          { name: 'endpoint', value: result.endpoint || result.url || '' },
-          { name: 'method', value: result.method || 'GET' }
-        ]
-      };
-    });
-    return JSON.stringify({ format: 'allure2', results: allureResults }, null, 2);
-  };
+  // Report export/generation — delegated to lib/report-export.ts
+  const exportAsJUnitXML = () => _exportJUnit(executionResults, toast);
+  const exportAsHTML = () => _exportHTML(executionResults, toast);
+  const exportAsJSON = () => _exportJSON(executionResults, toast);
+  const exportAsAllure = () => _exportAllure(executionResults, toast);
   
   // Pending API requests from Record tab (Quick API Test)
   const [pendingApiRequests, setPendingApiRequests] = useState<any[]>([]);
@@ -980,58 +485,9 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
     });
   };
 
-  const loadPersistedEnvironments = (): any[] => {
-    try {
-      const saved = localStorage.getItem("apex_environments");
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (error) {
-      console.error("Failed to load persisted environments:", error);
-    }
-    return [];
-  };
-
-  const saveEnvironmentsToLocalStorage = (envs: any[]) => {
-    try {
-      localStorage.setItem("apex_environments", JSON.stringify(envs));
-    } catch (error) {
-      console.error("Failed to save environments:", error);
-    }
-  };
-
-  // Save an environment to the database
-  // Best-effort: silently fails if backend is down or CORS blocks
-  const saveEnvironmentToDb = async (env: any) => {
-    try {
-      const envId = env.environment_id || env.id;
-      if (!envId || !env.name) return; // Skip invalid environments
-      const payload = {
-        id: envId,
-        name: env.name,
-        env_type: env.type || env.env_type || "development",
-        base_url: env.base_url || "",
-        variables: Array.isArray(env.variables) ? env.variables : [],
-        auth: (env.auth && typeof env.auth === "object") ? env.auth : {},
-      };
-      // Try POST (create) — backend should handle "already exists" gracefully
-      const resp = await fetch(`${API_BASE_URL}/api/db/environments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      // If 409 Conflict (already exists), try PUT to update
-      if (resp.status === 409 || resp.status === 422) {
-        await fetch(`${API_BASE_URL}/api/db/environments/${envId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }).catch(() => {});
-      }
-    } catch {
-      // Silently ignore — envs work from localStorage as fallback
-    }
-  };
+  // Environment persistence — delegated to lib/environment-persistence.ts
+  // loadPersistedEnvironments, saveEnvironmentsToLocalStorage, saveEnvironmentToDb
+  // are imported from the module above.
 
   const loadCapabilities = async () => {
     try {
@@ -1233,61 +689,8 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
     }
   };
 
-  const loadEnvironments = async () => {
-    try {
-      // Primary source: database
-      const dbResp = await fetch(`${API_BASE_URL}/api/db/environments`);
-      const dbEnvs: any[] = dbResp.ok ? await dbResp.json() : [];
-
-      // Normalize DB format to frontend format
-      const normalized = dbEnvs.map((e: any) => ({
-        environment_id: e.id || e.environment_id,
-        name: e.name,
-        type: e.env_type || e.type || "development",
-        base_url: e.base_url || "",
-        variables: e.variables || [],
-        auth: e.auth || { type: "none" },
-        created_at: e.created_at,
-        updated_at: e.updated_at,
-      }));
-
-      // Merge with localStorage (for migration of old data)
-      const persisted = loadPersistedEnvironments();
-      const allEnvs = [...normalized];
-      
-      // Add any localStorage envs that aren't in DB yet (one-time migration)
-      // Migrate sequentially to avoid flooding the network with parallel requests
-      const envsToMigrate: any[] = [];
-      for (const p of persisted) {
-        const pId = p.environment_id || p.id;
-        // Check by ID or name to avoid duplicates
-        if (!allEnvs.find(e => e.environment_id === pId || e.name === p.name)) {
-          allEnvs.push(p);
-          envsToMigrate.push(p);
-        }
-      }
-      // Migrate up to 5 environments to DB in the background (sequential, not parallel)
-      if (envsToMigrate.length > 0) {
-        (async () => {
-          for (const env of envsToMigrate.slice(0, 5)) {
-            try { await saveEnvironmentToDb(env); } catch {}
-          }
-        })();
-      }
-
-      if (allEnvs.length > 0) {
-        setEnvironments(allEnvs);
-        saveEnvironmentsToLocalStorage(allEnvs);
-      }
-    } catch (error) {
-      console.error("Failed to load environments:", error);
-      // Fallback to localStorage if API fails
-      const persisted = loadPersistedEnvironments();
-      if (persisted.length > 0) {
-        setEnvironments(persisted);
-      }
-    }
-  };
+  // loadEnvironments — delegated to lib/environment-persistence.ts
+  const loadEnvironments = () => _loadEnvironments(setEnvironments);
 
   useEffect(() => {
     const initialize = async () => {
@@ -1522,69 +925,9 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
     }
   };
 
-  const exportToPostman = async () => {
-    if (!testSuite?.test_cases?.length) {
-      toast({ title: "No test suite", description: "Import a spec or HAR first", variant: "destructive" });
-      return;
-    }
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/import/export-postman`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ test_suite: testSuite, name: "QAAI API Collection" }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      const blob = new Blob([data.collection_json], { type: "application/json" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "qaai-postman-collection.json";
-      a.click();
-      URL.revokeObjectURL(a.href);
-      toast({ title: "Exported", description: "Postman collection downloaded" });
-    } catch (e: any) {
-      toast({ title: "Export failed", description: e?.message || "Failed to export Postman", variant: "destructive" });
-    }
-  };
-
-  const exportToHAR = async () => {
-    if (!testSuite?.test_cases?.length) {
-      toast({ title: "No test suite", description: "Import a spec or HAR first", variant: "destructive" });
-      return;
-    }
-    try {
-      const baseUrl = testSuite.base_url || "";
-      const requests = (testSuite.test_cases || []).map((tc: any, i: number) => {
-        const req = tc.request || {};
-        const url = req.url || (baseUrl + (tc.path || ""));
-        return {
-          url,
-          method: tc.method || "GET",
-          headers: req.headers || {},
-          body: req.body,
-          statusCode: tc.expected_status || 200,
-          duration: 0,
-          timestamp: Date.now() / 1000,
-        };
-      });
-      const res = await fetch(`${API_BASE_URL}/api/import/export-har`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requests, creator_name: "QAAI" }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      const blob = new Blob([data.har_json], { type: "application/json" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "qaai-export.har.json";
-      a.click();
-      URL.revokeObjectURL(a.href);
-      toast({ title: "Exported", description: "HAR file downloaded" });
-    } catch (e: any) {
-      toast({ title: "Export failed", description: e?.message || "Failed to export HAR", variant: "destructive" });
-    }
-  };
+  // Collection export — delegated to lib/collection-export.ts
+  const exportToPostman = () => _exportToPostman(testSuite, toast);
+  const exportToHAR = () => _exportToHAR(testSuite, toast);
 
   const handleConnectDatabase = async () => {
     if (!dbConfig.connection_id || !dbConfig.host || !dbConfig.database) {
@@ -4036,7 +3379,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   <CardContent>
                     <div className="border rounded-lg overflow-hidden bg-white">
                       <iframe 
-                        srcDoc={generateHTMLContent()} 
+                        srcDoc={generateHTMLContent(executionResults)} 
                         className="w-full h-[500px] border-0"
                         title="HTML Report Preview"
                       />
@@ -4059,7 +3402,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   </CardHeader>
                   <CardContent>
                     <ResponseCodeViewer
-                      value={generateJUnitXMLContent()}
+                      value={generateJUnitXMLContent(executionResults)}
                       language="xml"
                       height="500px"
                     />
@@ -4111,7 +3454,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                       </AlertDescription>
                     </Alert>
                     <ResponseCodeViewer
-                      value={generateAllureContent()}
+                      value={generateAllureContent(executionResults)}
                       language="json"
                       height="400px"
                     />

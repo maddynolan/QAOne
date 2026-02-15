@@ -50,6 +50,10 @@ const LocalStorage = require('./local-storage');
 const TestExecutor = require('./test-executor');
 const { registerDiagnosticsIPC, getDiagnosticsCollector } = require('./lib/diagnostics-collector');
 
+// Extracted modules (for modularity — same logic, just in separate files)
+const { mapQWordToStepType, getBestCssSelector, buildSelectorObj, deduplicateAndFilterSteps } = require('./index-export-helpers');
+const licenseHelpers = require('./index-license-helpers');
+
 // Playwright recorder instance (standalone browser)
 let playwrightRecorder = null;
 
@@ -93,93 +97,14 @@ let licenseType = null;
 let licenseFeatures = null;
 let storedLicenseKey = null;
 
-// Send current license status to webapp (called after webapp loads)
+// License helper functions (delegated to extracted module)
+// init() is called after sendToWebapp is defined (see below)
 function sendLicenseStatusToWebapp() {
-  if (!licenseManager) {
-    console.log('[License] No license manager, skipping status send');
-    return;
-  }
-  
-  const info = licenseManager.getInfo();
-  console.log('[License] Sending status to webapp:', info ? `valid=${info.valid}` : 'no info');
-  
-  if (info) {
-    sendToWebapp('license-status', {
-      valid: info.valid,
-      key: storedLicenseKey,
-      type: info.type,
-      expiresAt: info.expiresAt,
-      features: info.features,
-      message: info.valid ? null : 'License required'
-    });
-    
-    // If license is expiring soon (within 7 days), notify
-    if (info.valid && info.expiresAt) {
-      const daysLeft = Math.ceil((new Date(info.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-      if (daysLeft <= 7 && daysLeft > 0) {
-        sendToWebapp('license-expiring-soon', { daysLeft });
-      }
-    }
-  } else {
-    // No license info - user needs to activate
-    sendToWebapp('license-status', { valid: false, key: null, message: 'Please enter a license key' });
-  }
+  licenseHelpers.sendLicenseStatusToWebapp();
 }
 
-// Check if license allows using the app
 function checkLicenseForFeature(feature = 'basic') {
-  // If no license manager, allow (development mode)
-  if (!licenseManager) return { allowed: true };
-  
-  const info = licenseManager.getInfo();
-  
-  // No license info at all
-  if (!info) {
-    return { 
-      allowed: false, 
-      reason: 'no_license',
-      message: 'Please enter a valid license key to use this feature.'
-    };
-  }
-  
-  // License explicitly invalid
-  if (!info.valid) {
-    return { 
-      allowed: false, 
-      reason: 'invalid_license',
-      message: 'Your license key is invalid. Please enter a valid license.'
-    };
-  }
-  
-  // Check expiry
-  if (info.expiresAt) {
-    const expiry = new Date(info.expiresAt);
-    const now = new Date();
-    if (now > expiry) {
-      return { 
-        allowed: false, 
-        reason: 'expired',
-        message: `Your license expired on ${expiry.toLocaleDateString()}. Please renew to continue using the app.`
-      };
-    }
-    
-    // Warn if expiring soon (within 3 days)
-    const daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
-    if (daysLeft <= 3 && daysLeft > 0) {
-      console.log(`[License] Warning: License expires in ${daysLeft} day(s)`);
-    }
-  }
-  
-  // Check if feature is available for this license type
-  if (feature !== 'basic' && info.features && !info.features.includes(feature)) {
-    return {
-      allowed: false,
-      reason: 'feature_not_available',
-      message: `This feature requires a higher license tier.`
-    };
-  }
-  
-  return { allowed: true, daysLeft: info.expiresAt ? Math.ceil((new Date(info.expiresAt) - new Date()) / (1000 * 60 * 60 * 24)) : null };
+  return licenseHelpers.checkLicenseForFeature(feature);
 }
 
 // Helper to send IPC to webapp (handles both BrowserView and direct main window loading)
@@ -192,6 +117,8 @@ function sendToWebapp(channel, ...args) {
     console.warn(`[IPC] Cannot send ${channel} - no webapp target available (webappView: ${!!webappView}, mainWindow: ${!!mainWindow})`);
   }
 }
+
+// NOTE: licenseHelpers.init() is called after licenseManager is created in app.whenReady()
 
 // Device ID for licensing
 function getDeviceId() {
@@ -659,6 +586,13 @@ async function initializeServices() {
     serverUrl,
     deviceId,
     store
+  });
+
+  // Wire up license helpers module with references to shared state
+  licenseHelpers.init({
+    licenseManager: licenseManager,
+    getStoredLicenseKey: () => storedLicenseKey,
+    sendToWebapp: sendToWebapp
   });
 
   // Initialize browser controller
@@ -3303,92 +3237,9 @@ ipcMain.handle('export-to-test-builder', async (event, testNameOrData) => {
     if (typeof testNameOrData === 'object' && testNameOrData.steps) {
       console.log('[Export] Received test case object with', testNameOrData.steps.length, 'steps');
       
-      // ============================================================
-      // DEDUPLICATE FILLS - Keep only the LAST fill for each field
-      // This handles Recipe + CDP recorder duplicates
-      // ============================================================
-      const seenFillFields = new Map(); // fieldKey -> index
-      const deduplicatedSteps = [];
-      
-      for (let i = 0; i < testNameOrData.steps.length; i++) {
-        const step = testNameOrData.steps[i];
-        const stepType = (step.type || '').toLowerCase();
-        const isFill = stepType === 'input' || stepType === 'fill';
-        
-        if (isFill) {
-          // Extract field name from step.name like 'Fill "Username": "value"'
-          // Also try args[0] as fallback
-          let fieldName = '';
-          const nameMatch = (step.name || '').match(/Fill\s*"([^"]+)"/i);
-          if (nameMatch) {
-            fieldName = nameMatch[1].toLowerCase().trim();
-          } else {
-            fieldName = (step.args?.[0] || '').toLowerCase().trim();
-          }
-          
-          // Normalize common field name variations
-          // pw, pwd, passwd → password
-          // user, uname → username
-          // email, mail → email
-          const normalizeFieldName = (name) => {
-            const n = name.toLowerCase().trim();
-            if (['pw', 'pwd', 'passwd', 'pass'].includes(n)) return 'password';
-            if (['user', 'uname', 'usr'].includes(n)) return 'username';
-            if (['mail', 'e-mail'].includes(n)) return 'email';
-            return n;
-          };
-          
-          const normalizedFieldName = normalizeFieldName(fieldName);
-          console.log(`[Export Dedupe] Fill step ${i}: "${fieldName}" -> normalized: "${normalizedFieldName}"`);
-          
-          if (normalizedFieldName && normalizedFieldName !== 'input') {
-            const existingIdx = seenFillFields.get(normalizedFieldName);
-            if (existingIdx !== undefined) {
-              // Replace with this one (later fill has more complete value)
-              console.log(`[Export Dedupe] ★ Replacing fill for "${normalizedFieldName}" at index ${existingIdx}`);
-              deduplicatedSteps[existingIdx] = step;
-              continue; // Don't add again
-            }
-            seenFillFields.set(normalizedFieldName, deduplicatedSteps.length);
-          }
-        }
-        
-        deduplicatedSteps.push(step);
-      }
-      
-      // ============================================================
-      // ADDITIONAL FILTERING - Remove phantom/unwanted actions
-      // ============================================================
-      const filteredSteps = deduplicatedSteps.filter((step, idx) => {
-        const name = (step.name || '').toLowerCase();
-        const type = (step.type || '').toLowerCase();
-        
-        // Filter 1: Remove generic "click div" or empty clicks
-        if (type === 'click' && (name.includes('click "div"') || name.includes('click "span"') || name.includes('click ""'))) {
-          console.log('[Export Filter] Removing generic click:', name);
-          return false;
-        }
-        
-        // Filter 2: Remove consecutive duplicate hovers
-        if (type === 'hover') {
-          const nextStep = deduplicatedSteps[idx + 1];
-          if (nextStep && (nextStep.type || '').toLowerCase() === 'hover') {
-            console.log('[Export Filter] Removing consecutive hover:', name);
-            return false;
-          }
-        }
-        
-        return true;
-      });
-      
-      // Renumber steps sequentially
-      const renumberedSteps = filteredSteps.map((step, idx) => ({
-        ...step,
-        order: idx + 1
-      }));
-      
-      console.log(`[Export Dedupe] Final: ${testNameOrData.steps.length} -> ${renumberedSteps.length} steps`);
-      
+      // Deduplicate fills and filter phantom actions (delegated to extracted module)
+      const renumberedSteps = deduplicateAndFilterSteps(testNameOrData.steps);
+
       testCase = {
         ...testNameOrData,
         steps: renumberedSteps
@@ -3469,108 +3320,8 @@ ipcMain.handle('export-to-test-builder', async (event, testNameOrData) => {
     console.log('[Export] Converting raw step data to test case format');
     const testData = testCase; // Save original data for conversion
     
-    // Helper: Extract best CSS selector from recorded selectors (MATCHES WEB EXTENSION)
-    // Web extension stores selectors with 'selector' property (CSS) and 'playwright' property
-    function getBestCssSelector(step) {
-      const selectorObj = step.selectorObj || {};
-      const strategies = selectorObj.strategies || [];
-      
-      // First check if selectorObj already has selector from _buildSelectorObject
-      if (selectorObj.selector && (selectorObj.selector.startsWith('[') || selectorObj.selector.startsWith('#'))) {
-        return selectorObj.selector;
-      }
-      
-      // Priority order: id > testid > name > placeholder > aria > css
-      const priorityTypes = ['id', 'testid', 'name', 'placeholder', 'aria'];
-      
-      for (const type of priorityTypes) {
-        // Try 'selector' property first (new format), then 'value' (old format)
-        const sel = strategies.find(s => s.type === type && (s.selector || s.value));
-        if (sel) {
-          const cssVal = sel.selector || sel.value;
-          if (cssVal && (cssVal.startsWith('[') || cssVal.startsWith('#'))) {
-            return cssVal;
-          }
-        }
-      }
-      
-      // Also check primary
-      const primary = selectorObj.primary;
-      if (typeof primary === 'string' && (primary.startsWith('[') || primary.startsWith('#'))) {
-        return primary;
-      } else if (primary?.selector) {
-        return primary.selector;
-      }
-      
-      // Fall back to any CSS-like selector from strategies
-      const cssSelector = strategies.find(s => {
-        const val = s.selector || s.value;
-        return val && (val.startsWith('[') || val.startsWith('#') || val.startsWith('.'));
-      });
-      if (cssSelector) return cssSelector.selector || cssSelector.value;
-      
-      return '';
-    }
-    
-    // Helper: Build proper selectorObj for Test Builder (MATCHES WEB EXTENSION FORMAT)
-    function buildSelectorObj(step) {
-      const raw = step.selectorObj || {};
-      const strategies = raw.strategies || [];
-      const element = step.raw?.element || {};
-      
-      // Find best CSS selector
-      const cssSelector = getBestCssSelector(step);
-      
-      // Get playwright string from selectorObj if available, otherwise build it
-      let playwright = raw.playwright || '';
-      if (!playwright && cssSelector) {
-        playwright = `locator('${cssSelector}')`;
-      } else if (!playwright && element.name) {
-        playwright = `locator('[name="${element.name}"]')`;
-      } else if (!playwright && element.id) {
-        playwright = `locator('#${element.id}')`;
-      } else if (!playwright && element.placeholder) {
-        playwright = `get_by_placeholder('${element.placeholder}')`;
-      }
-      
-      // Build text selector for ClickText
-      const textSelector = strategies.find(s => s.type === 'text');
-      
-      return {
-        // Match web extension format
-        selector: cssSelector || raw.selector || '',
-        playwright: playwright,
-        primary: typeof raw.primary === 'string' ? raw.primary : (raw.primary?.selector || cssSelector || ''),
-        confidence: raw.confidence || 0,
-        type: raw.type || 'css',
-        // Text content
-        text: textSelector?.value || raw.text || element.text || '',
-        // Element attributes for fallback
-        name: raw.name || element.name || '',
-        id: raw.id || element.id || '',
-        placeholder: raw.placeholder || element.placeholder || '',
-        ariaLabel: raw.ariaLabel || element.ariaLabel || '',
-        // Fallbacks with both selector and playwright
-        fallbacks: (raw.fallbacks || []).map(f => {
-          if (typeof f === 'string') {
-            return { selector: f, playwright: `locator('${f}')` };
-          }
-          return { 
-            selector: f.selector || f.value || '',
-            playwright: f.playwright || (f.selector ? `locator('${f.selector}')` : ''),
-            type: f.type,
-            confidence: f.confidence 
-          };
-        }),
-        strategies: strategies.map(s => ({
-          type: s.type,
-          selector: s.selector || s.value || '',
-          playwright: s.playwright || '',
-          confidence: s.confidence
-        }))
-      };
-    }
-    
+    // getBestCssSelector() and buildSelectorObj() are imported from ./index-export-helpers.js
+
     // Build the test case in the format Test Builder expects
     const formattedTestCase = {
       id: `tc_${Date.now()}`,
@@ -3657,20 +3408,7 @@ ipcMain.handle('export-to-test-builder', async (event, testNameOrData) => {
   }
 });
 
-function mapQWordToStepType(qword) {
-  const map = {
-    'GoTo': 'navigate',
-    'ClickText': 'click',
-    'ClickElement': 'click',
-    'Fill': 'input',
-    'Select': 'select',
-    'Check': 'click',
-    'Uncheck': 'click',
-    'AssertText': 'assert',
-    'Wait': 'wait'
-  };
-  return map[qword] || 'click';
-}
+// mapQWordToStepType is imported from ./index-export-helpers.js
 
 // Utility handlers
 ipcMain.handle('check-updates', async () => {

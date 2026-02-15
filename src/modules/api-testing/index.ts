@@ -28,5 +28,28 @@ export { default as ChainResultsView } from './components/ChainResultsView';
 export { default as ChainStepCard } from './components/ChainStepCard';
 export { ASSERTION_TYPES, ASSERTION_OPERATORS } from './components/constants';
 
+// Constants
+export { PROTOCOL_TEMPLATES } from './constants/protocol-templates';
+export { INLINE_ASSERTION_TYPES, INLINE_ASSERTION_OPERATORS } from './constants/assertion-constants';
+
+// Lib / Services
+export { ensureTestSuiteFolders } from './lib/api-testing-utils';
+export {
+  exportAsJUnitXML,
+  exportAsHTML,
+  exportAsJSON,
+  exportAsAllure,
+  generateJUnitXMLContent,
+  generateHTMLContent,
+  generateAllureContent,
+} from './lib/report-export';
+export { exportToPostman, exportToHAR } from './lib/collection-export';
+export {
+  loadPersistedEnvironments,
+  saveEnvironmentsToLocalStorage,
+  saveEnvironmentToDb,
+  loadEnvironments,
+} from './lib/environment-persistence';
+
 // Store
 export { useApiTestingStore } from './store/apiTestingStore';
