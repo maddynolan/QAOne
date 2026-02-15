@@ -24,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useTestCases, useSummary, TestCaseListItem } from '@/hooks/useTestData';
 import { useTestDataStore } from '@/stores/testDataStore';
-import { VirtualTestCaseList } from '../VirtualTestCaseList';
+import { VirtualTestCaseList } from '@/modules/test-management/components/VirtualTestCaseList';
 import { Pagination } from '../Pagination';
 import {
   DropdownMenu,

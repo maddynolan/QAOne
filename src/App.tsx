@@ -46,62 +46,78 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 // AI Provider - Global AI settings
 import { AIProvider } from "./contexts/AIContext";
 
-// Core Pages
-import PlaywrightRecorderPage from "./pages/PlaywrightRecorderPage";
-import UnifiedWorkflowEditor from "./pages/UnifiedWorkflowEditor";
+// ── Recorder Module ──
+import PlaywrightRecorderPage from "./modules/recorder/pages/PlaywrightRecorderPage";
+import SelfHealing from "./modules/recorder/pages/SelfHealing";
+import ElementRepository from "./modules/recorder/pages/ElementRepository";
+
+// ── Test Management Module ──
+import UnifiedWorkflowEditor from "./modules/test-management/pages/UnifiedWorkflowEditor";
+import TestRepository from "./modules/test-management/pages/TestRepository";
+import EnterpriseTestRepository from "./modules/test-management/pages/EnterpriseTestRepository";
+import TestCases from "./modules/test-management/pages/TestCases";
+import CreateTestCase from "./modules/test-management/pages/CreateTestCase";
+import EditTestCase from "./modules/test-management/pages/EditTestCase";
+import TestCaseExecution from "./modules/test-management/pages/TestCaseExecution";
+import TestSuites from "./modules/test-management/pages/TestSuites";
+import TestRuns from "./modules/test-management/pages/TestRuns";
+import TestPlans from "./modules/test-management/pages/TestPlans";
+import CreateTestPlan from "./modules/test-management/pages/CreateTestPlan";
+import TestPlanDetail from "./modules/test-management/pages/TestPlanDetail";
+import TestPlayground from "./modules/test-management/pages/TestPlayground";
+import ScheduledRuns from "./modules/test-management/pages/ScheduledRuns";
+
+// ── API Testing Module ──
 // Lazy-load API Testing so a bug there cannot crash the whole site (e.g. flowstral.com)
-const EnhancedAPITesting = lazy(() => import("./pages/EnhancedAPITesting"));
-import VirtualUserGenerator from "./pages/VirtualUserGenerator";
-import SalesforceToolsPage from "./pages/SalesforceToolsPage";
-import MobileTestingPage from "./pages/MobileTestingPage";
-import FlowpilotPage from "./pages/FlowpilotPage";
-import AITestingPage from "./pages/AITestingPage";
+const EnhancedAPITesting = lazy(() => import("./modules/api-testing/pages/EnhancedAPITesting"));
+import APICoverageMap from "./modules/api-testing/pages/APICoverageMap";
 
-// Test Cases related pages
-import TestCases from "./pages/TestCases";
-import TestRepository from "./pages/TestRepository";
-import EnterpriseTestRepository from "./pages/EnterpriseTestRepository";
-import CreateTestCase from "./pages/CreateTestCase";
-import EditTestCase from "./pages/EditTestCase";
-import TestCaseExecution from "./pages/TestCaseExecution";
-// TestExecution.tsx removed - functionality consolidated into TestRepository
-import TestSuites from "./pages/TestSuites";
-import TestRuns from "./pages/TestRuns";
-import TestPlans from "./pages/TestPlans";
-import CreateTestPlan from "./pages/CreateTestPlan";
-import TestPlanDetail from "./pages/TestPlanDetail";
+// ── Performance Module ──
+import VirtualUserGenerator from "./modules/performance/pages/VirtualUserGenerator";
 
-// Web-only additional pages
-import Dashboard from "./pages/Dashboard";
-import Analytics from "./pages/Analytics";
-import FrameworkAnalyzer from "./pages/FrameworkAnalyzer";
-import CodeAlchemy from "./pages/CodeAlchemy";
-import Traceability from "./pages/Traceability";
-import Accessibility from "./pages/Accessibility";
-import Requirements from "./pages/Requirements";
-import CreateRequirement from "./pages/CreateRequirement";
-import Defects from "./pages/Defects";
-import CreateDefect from "./pages/CreateDefect";
-import Settings from "./pages/Settings";
-import ScheduledRuns from "./pages/ScheduledRuns";
-import CICDIntegration from "./pages/CICDIntegration";
-import ElementRepository from "./pages/ElementRepository";
-import SelfHealing from "./pages/SelfHealing";
-import Integrations from "./pages/Integrations";
-import Results from "./pages/Results";
-import ProjectManagement from "./pages/ProjectManagement";
-import VisualTestingPage from "./pages/VisualTestingPage";
-import SecretsVault from "./pages/SecretsVault";
-import TestPlayground from "./pages/TestPlayground";
-import APICoverageMap from "./pages/APICoverageMap";
-import DataDependencyGraph from "./pages/DataDependencyGraph";
-import APMConfig from "./pages/APMConfig";
-import LicenseAdminPage from "./pages/LicenseAdminPage";
+// ── Mobile Testing Module ──
+import MobileTestingPage from "./modules/mobile-testing/pages/MobileTestingPage";
+
+// ── Accessibility Module ──
+import Accessibility from "./modules/accessibility/pages/Accessibility";
+
+// ── Visual Testing Module ──
+import VisualTestingPage from "./modules/visual-testing/pages/VisualTestingPage";
+
+// ── Salesforce Module ──
+import SalesforceToolsPage from "./modules/salesforce/pages/SalesforceToolsPage";
+
+// ── AI Testing Module ──
+import FlowpilotPage from "./modules/ai-testing/pages/FlowpilotPage";
+import AITestingPage from "./modules/ai-testing/pages/AITestingPage";
+
+// ── Dashboard Module ──
+import Dashboard from "./modules/dashboard/pages/Dashboard";
+import Analytics from "./modules/dashboard/pages/Analytics";
+import Results from "./modules/dashboard/pages/Results";
+
+// ── Platform Module (cross-cutting) ──
+import Settings from "./modules/platform/pages/Settings";
+import Integrations from "./modules/platform/pages/Integrations";
+import Defects from "./modules/platform/pages/Defects";
+import CreateDefect from "./modules/platform/pages/CreateDefect";
+import Requirements from "./modules/platform/pages/Requirements";
+import CreateRequirement from "./modules/platform/pages/CreateRequirement";
+import Traceability from "./modules/platform/pages/Traceability";
+import CICDIntegration from "./modules/platform/pages/CICDIntegration";
+import SecretsVault from "./modules/platform/pages/SecretsVault";
+import ProjectManagement from "./modules/platform/pages/ProjectManagement";
+import FrameworkAnalyzer from "./modules/platform/pages/FrameworkAnalyzer";
+import CodeAlchemy from "./modules/platform/pages/CodeAlchemy";
+import DataDependencyGraph from "./modules/platform/pages/DataDependencyGraph";
+import APMConfig from "./modules/platform/pages/APMConfig";
+import LicenseAdminPage from "./modules/platform/pages/LicenseAdminPage";
+import NotFound from "./modules/platform/pages/NotFound";
 
 // Auth (keep for future)
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute, PublicRoute } from "./components/ProtectedRoute";
-import { AuthPage } from "./pages/AuthPage";
+import { AuthPage } from "./modules/platform/pages/AuthPage";
 
 // Landing Page & Marketing Pages
 import LandingPage from "./pages/LandingPage";
@@ -122,7 +138,6 @@ import WelcomePage from "./pages/marketing/WelcomePage";
 
 // Utilities
 import { dataStorageService } from "./lib/data-storage";
-import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 

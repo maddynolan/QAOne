@@ -110,7 +110,7 @@ async def lifespan(app: FastAPI):
         
         # Auto-connect to Salesforce if credentials are saved
         try:
-            from app.routers.salesforce_api import auto_connect_salesforce
+            from app.routers.salesforce.salesforce_api import auto_connect_salesforce
             sf_result = await auto_connect_salesforce()
             if sf_result.get("connected"):
                 logger.info(f"[OK] Salesforce auto-connected: {sf_result.get('instance_url')} ({sf_result.get('username', 'unknown')})")
@@ -7037,63 +7037,63 @@ async def health_check_database():
 # ============================================================================
 
 # Health and metrics
-from app.routers.health_api import router as health_router
+from app.routers.platform.health_api import router as health_router
 app.include_router(health_router)
 
 # Dashboard API
-from app.routers.dashboard_api import router as dashboard_router
+from app.routers.platform.dashboard_api import router as dashboard_router
 app.include_router(dashboard_router)
 
 # Phase 4.1: Plugin API endpoints
-from app.routers.plugin_api import router as plugin_router
+from app.routers.platform.plugin_api import router as plugin_router
 app.include_router(plugin_router)
 
 # App-First Flow endpoints
-from app.routers.app_first_flow import router as app_first_flow_router
+from app.routers.platform.app_first_flow import router as app_first_flow_router
 app.include_router(app_first_flow_router)
 
 # Flowstral API - Simple and Fast Script Generation
-from app.routers.playwright_recorder_api import router as flowstral_router
+from app.routers.recorder.playwright_recorder_api import router as flowstral_router
 app.include_router(flowstral_router)
 
 # Flowstral Engine API - Robust Automation Engine for Enterprise Apps
-from app.routers.flowstral_engine_api import router as flowstral_engine_router
+from app.routers.recorder.flowstral_engine_api import router as flowstral_engine_router
 app.include_router(flowstral_engine_router)
 
 # CDP Recorder API - Browser Recording WITHOUT Extension (like Testim/Tosca)
-from app.routers.cdp_recorder_api import router as cdp_recorder_router
+from app.routers.recorder.cdp_recorder_api import router as cdp_recorder_router
 app.include_router(cdp_recorder_router)
 
 # License Management API - Desktop Agent Licensing (mount under /api for desktop client)
-from app.routers.license_api import router as license_router
+from app.routers.platform.license_api import router as license_router
 app.include_router(license_router, prefix="/api")
 
 # Download Proxy - Serves GitHub release assets for private repos
-from app.routers.download_api import router as download_router
+from app.routers.platform.download_api import router as download_router
 app.include_router(download_router, prefix="/api")
 
 # Agent WebSocket API - Real-time Desktop Agent Communication
-from app.routers.agent_websocket import router as agent_ws_router
+from app.routers.ai.agent_websocket import router as agent_ws_router
 app.include_router(agent_ws_router)
 
 # COMMENTED OUT: Flowstral endpoints (old recording system)
-# from app.routers.flowstral_api import router as flowstral_router
-# from app.routers.flowstral_config_api import router as flowstral_config_router
+# from app.routers.recorder.flowstral_api import router as flowstral_router
+# from app.routers.recorder.flowstral_config_api import router as flowstral_config_router
 # app.include_router(flowstral_router)
 # app.include_router(flowstral_config_router)
 
-from app.routers.test_case_api import router as test_case_router
-from app.routers.test_cases_crud_api import router as test_cases_crud_router
-from app.routers.test_case_rewrite_api import router as test_case_rewrite_router
-from app.routers.test_runs_api import router as test_runs_router
-from app.routers.test_plans_api import router as test_plans_router
-from app.routers.defects_api import router as defects_router
-from app.routers.requirements_api import router as requirements_router
-from app.routers.tenants_api import router as tenants_router
-from app.routers.agents_api import router as agents_router
-from app.routers.workflows_api import router as workflows_router
-from app.routers.models_api import router as models_router
-from app.routers.ai_generation_api import router as ai_generation_router
+from app.routers.test_management.test_case_api import router as test_case_router
+from app.routers.test_management.test_cases_crud_api import router as test_cases_crud_router
+from app.routers.test_management.test_case_rewrite_api import router as test_case_rewrite_router
+from app.routers.test_management.test_runs_api import router as test_runs_router
+from app.routers.test_management.test_plans_api import router as test_plans_router
+from app.routers.platform.defects_api import router as defects_router
+from app.routers.platform.requirements_api import router as requirements_router
+from app.routers.platform.tenants_api import router as tenants_router
+from app.routers.ai.agents_api import router as agents_router
+from app.routers.test_management.workflows_api import router as workflows_router
+from app.routers.ai.models_api import router as models_router
+from app.routers.ai.ai_generation_api import router as ai_generation_router
 app.include_router(test_case_router)
 app.include_router(test_cases_crud_router)
 app.include_router(test_case_rewrite_router)
@@ -7108,47 +7108,47 @@ app.include_router(models_router)
 app.include_router(ai_generation_router)
 
 # LLM API with cost optimization
-from app.routers.llm_api import router as llm_router
+from app.routers.ai.llm_api import router as llm_router
 app.include_router(llm_router)
 
 # API Import and Gherkin routers
-from app.routers.api_import_api import router as api_import_router
-from app.routers.gherkin_api import router as gherkin_router
+from app.routers.api_testing.api_import_api import router as api_import_router
+from app.routers.test_management.gherkin_api import router as gherkin_router
 
 app.include_router(api_import_router)
 app.include_router(gherkin_router)
 
 # Automation API router
-from app.routers.automation_api import router as automation_router
+from app.routers.test_management.automation_api import router as automation_router
 app.include_router(automation_router)
 
 # Requirement-to-TestCase API
-from app.routers.requirement_to_testcase_api import router as requirement_to_testcase_router
+from app.routers.test_management.requirement_to_testcase_api import router as requirement_to_testcase_router
 app.include_router(requirement_to_testcase_router)
 
 # Autonomous App Exploration API
-from app.routers.exploration_api import router as exploration_router
+from app.routers.exploration.exploration_api import router as exploration_router
 app.include_router(exploration_router)
 
 # Exploration Test Generation API
-from app.routers.exploration_test_generation_api import router as exploration_test_generation_router
+from app.routers.exploration.exploration_test_generation_api import router as exploration_test_generation_router
 app.include_router(exploration_test_generation_router)
 
 # Exploration Reporting API
-from app.routers.exploration_reporting_api import router as exploration_reporting_router
+from app.routers.exploration.exploration_reporting_api import router as exploration_reporting_router
 app.include_router(exploration_reporting_router)
 
 # Nexus Autonomous Exploratory Testing API
-from app.routers.nexus_exploratory_api import router as nexus_exploratory_router
+from app.routers.exploration.nexus_exploratory_api import router as nexus_exploratory_router
 app.include_router(nexus_exploratory_router)
 
 # Blaze - Real Autonomous Exploratory Testing (no AI dependency)
-from app.routers.blaze_api import router as blaze_router
+from app.routers.exploration.blaze_api import router as blaze_router
 app.include_router(blaze_router)
 
 # AI Vision Self-Healing API (GPT-4 Vision powered)
 try:
-    from app.routers.vision_healing_api import router as vision_healing_router
+    from app.routers.ai.vision_healing_api import router as vision_healing_router
     app.include_router(vision_healing_router)
     logger.info("Vision Self-Healing API registered")
 except ImportError as e:
@@ -7156,22 +7156,22 @@ except ImportError as e:
 
 # AI-Enhanced Automation API (Zero-Failure Playback)
 try:
-    from app.routers.ai_automation_api import router as ai_automation_router
+    from app.routers.ai.ai_automation_api import router as ai_automation_router
     app.include_router(ai_automation_router)
     logger.info("AI Automation API registered (zero-failure playback)")
 except ImportError as e:
     logger.warning(f"AI Automation API not available: {e}")
 
 # Exploration Complete Workflow API
-from app.routers.exploration_workflow_api import router as exploration_workflow_router
+from app.routers.exploration.exploration_workflow_api import router as exploration_workflow_router
 app.include_router(exploration_workflow_router)
 
 # Prometheus Metrics API
-from app.routers.metrics_api import router as metrics_router
+from app.routers.platform.metrics_api import router as metrics_router
 app.include_router(metrics_router)
 
 # Secrets Vault API - Encrypted secrets management
-from app.routers.secrets_api import router as secrets_router
+from app.routers.platform.secrets_api import router as secrets_router
 app.include_router(secrets_router)
 
 # Enterprise integrations
@@ -7179,104 +7179,104 @@ from app.routers.integrations.jira_webhook import router as jira_webhook_router
 app.include_router(jira_webhook_router)
 
 # Performance Testing API
-from app.routers.performance_api import router as performance_router
+from app.routers.performance.performance_api import router as performance_router
 app.include_router(performance_router)
 
 # Protocol Recording API - HTTP traffic capture for load testing
-from app.routers.protocol_recording_api import router as protocol_recording_router
+from app.routers.performance.protocol_recording_api import router as protocol_recording_router
 app.include_router(protocol_recording_router)
 
 # System Resource Monitoring API - CPU, Memory, Disk, Network (LOCAL machine)
-from app.routers.system_monitoring_api import router as system_monitoring_router
+from app.routers.platform.system_monitoring_api import router as system_monitoring_router
 app.include_router(system_monitoring_router)
 
 # Server Resource Monitoring API - Like LoadRunner SiteScope (TARGET servers)
-from app.routers.server_monitoring_api import router as server_monitoring_router
+from app.routers.platform.server_monitoring_api import router as server_monitoring_router
 app.include_router(server_monitoring_router)
 
 # OCR Fallback API - Last resort when all DOM locators fail
-from app.routers.ocr_fallback_api import router as ocr_fallback_router
+from app.routers.ai.ocr_fallback_api import router as ocr_fallback_router
 app.include_router(ocr_fallback_router)
 
 # Accessibility Testing API
-from app.routers.accessibility_api import router as accessibility_router
+from app.routers.accessibility.accessibility_api import router as accessibility_router
 app.include_router(accessibility_router)
 
 # NEW: Real Axe-Core Accessibility Scanning (v2)
-from app.routers.accessibility_scan_api import router as a11y_scan_router
+from app.routers.accessibility.accessibility_scan_api import router as a11y_scan_router
 app.include_router(a11y_scan_router)
 
 # Compliance and competitive optimizations
-from app.routers.compliance_api import router as compliance_router
+from app.routers.accessibility.compliance_api import router as compliance_router
 app.include_router(compliance_router)
 
 # Enhanced API Testing (Enterprise-grade, ReadyAPI-level)
-from app.routers.enhanced_api_testing_api import router as enhanced_api_testing_router
+from app.routers.api_testing.enhanced_api_testing_api import router as enhanced_api_testing_router
 app.include_router(enhanced_api_testing_router)
 
 # Salesforce Metadata Validation API
-from app.routers.salesforce_api import router as salesforce_router
+from app.routers.salesforce.salesforce_api import router as salesforce_router
 app.include_router(salesforce_router)
 
 # Salesforce Authentication Service (for parallel test execution)
-from app.routers.salesforce_auth import router as salesforce_auth_router
+from app.routers.salesforce.salesforce_auth import router as salesforce_auth_router
 app.include_router(salesforce_auth_router)
 
 # Framework Analyzer - Analyze and convert automation frameworks
-from app.routers.framework_analyzer_api import router as framework_analyzer_router
+from app.routers.platform.framework_analyzer_api import router as framework_analyzer_router
 app.include_router(framework_analyzer_router)
 
 # CodeAlchemy - Transform any repository into executable test cases
-from app.routers.code_alchemy_api import router as code_alchemy_router
+from app.routers.platform.code_alchemy_api import router as code_alchemy_router
 app.include_router(code_alchemy_router)
 
 # Database API - Unified SQLite/PostgreSQL storage with caching
-from app.routers.database_api import router as database_router
+from app.routers.platform.database_api import router as database_router
 app.include_router(database_router)
 
 # Project Management API - Better than Jira
-from app.routers.project_management_api import router as project_management_router
+from app.routers.platform.project_management_api import router as project_management_router
 app.include_router(project_management_router)
 
 # Traceability API - Requirements to Test Runs coverage matrix
-from app.routers.traceability_api import router as traceability_router
+from app.routers.platform.traceability_api import router as traceability_router
 app.include_router(traceability_router)
 
 # Sample Data (for testing/demos)
-from app.routers.sample_data_api import router as sample_data_router
+from app.routers.test_management.sample_data_api import router as sample_data_router
 app.include_router(sample_data_router)
 
 # Enterprise Scale API (v2) - Production-ready paginated endpoints
-from app.routers.scale_api import router as scale_api_router
+from app.routers.performance.scale_api import router as scale_api_router
 app.include_router(scale_api_router)
 
 # Complex Verifications API - Email, PDF, File verification
-from app.routers.complex_verifications import router as complex_verifications_router
+from app.routers.test_management.complex_verifications import router as complex_verifications_router
 app.include_router(complex_verifications_router)
 
 # OAuth2 Authentication API - Enterprise-grade OAuth2 support (like ReadyAPI)
-from app.routers.oauth2_api import router as oauth2_router
+from app.routers.platform.oauth2_api import router as oauth2_router
 app.include_router(oauth2_router)
 
 # Request Chaining API - Like ReadyAPI TestSuites with request chaining
-from app.routers.request_chaining_api import router as request_chaining_router
+from app.routers.api_testing.request_chaining_api import router as request_chaining_router
 app.include_router(request_chaining_router)
 
 # OWASP API Security Testing - Automated security scanning
-from app.routers.owasp_security_api import router as owasp_security_router
+from app.routers.platform.owasp_security_api import router as owasp_security_router
 app.include_router(owasp_security_router)
 
 # Visual Testing - Robust visual regression testing with multiple comparison modes
-from app.routers.visual_testing_api import router as visual_testing_router
+from app.routers.visual_testing.visual_testing_api import router as visual_testing_router
 app.include_router(visual_testing_router)
 
 # Leads API - Lead generation and tracking for sales
-from app.routers.leads_api import router as leads_router
+from app.routers.platform.leads_api import router as leads_router
 app.include_router(leads_router)
 
 # AI Testing API - Revolutionary plain-English testing
 try:
-    from app.routers.ai_testing import router as ai_testing_router
+    from app.routers.ai.ai_testing import router as ai_testing_router
     app.include_router(ai_testing_router)
     logger.info("AI Testing API registered")
 except Exception as e:
@@ -7285,7 +7285,7 @@ except Exception as e:
 # AI Enhancements API - False positive persistence, flaky step detection, AI failure explainer
 # Independent module: works with or without AI keys, never blocks existing flows
 try:
-    from app.routers.ai_enhancements_api import router as ai_enhancements_router
+    from app.routers.ai.ai_enhancements_api import router as ai_enhancements_router
     app.include_router(ai_enhancements_router)
     logger.info("AI Enhancements API registered")
 except Exception as e:

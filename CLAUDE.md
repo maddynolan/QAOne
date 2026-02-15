@@ -2,7 +2,7 @@
 
 > **This file is the starting reference for all Claude sessions working on this codebase.**
 > It must be kept up-to-date whenever changes are made to components, APIs, or architecture.
-> Last updated: 2026-02-13
+> Last updated: 2026-02-14
 
 ---
 
@@ -73,35 +73,102 @@ QAAI (also branded as Flowstral/ArisTrace) is an enterprise QA automation platfo
 
 ```
 / (root)
-├── src/                      # React frontend (262 TSX/TS files, 60+ pages)
-│   ├── pages/                # Page components
-│   ├── components/           # 137 component files
-│   │   ├── ui/               # 40+ shadcn/ui primitives
-│   │   ├── api-testing/      # 8 API testing components
-│   │   ├── mobile-testing/   # 6 mobile testing components
-│   │   ├── salesforce/       # 6 Salesforce components
-│   │   ├── confidence/       # 3 confidence scoring components
-│   │   └── FlowstralWorkflowEditor/  # 7 builder sub-components
-│   ├── stores/               # Zustand stores (testDataStore, apiTestingStore, mobileTestingStore)
-│   ├── contexts/             # ThemeContext, AIContext, AuthContext, LandingPluginsContext
-│   ├── hooks/                # useExecutionWebSocket, custom hooks
-│   └── lib/                  # api-config, electron-bridge, services
-├── backend/                  # FastAPI backend (v3.4.0)
+├── src/                          # React frontend
+│   ├── modules/                  # ★ Domain-separated feature modules (11 modules)
+│   │   ├── recorder/             # Browser recording, playback, AI self-healing
+│   │   │   ├── pages/            # PlaywrightRecorderPage (520KB), SelfHealing, ElementRepository
+│   │   │   ├── components/       # ManualAssistCard, ElementRepairWizard, AITestGenerator, confidence/
+│   │   │   └── lib/              # aiEnhancements, automation-linking, failureClassification
+│   │   ├── test-management/      # Test cases, builder, execution, runs
+│   │   │   ├── pages/            # UnifiedWorkflowEditor (538KB), TestRepository (340KB), +15 more
+│   │   │   ├── components/       # FlowstralWorkflowEditor/, ReusableModulesManager, etc.
+│   │   │   └── lib/              # test-management-service, results-ingestion-service
+│   │   ├── api-testing/          # Multi-protocol API testing
+│   │   │   ├── pages/            # EnhancedAPITesting (200KB), APICoverageMap, APIImport
+│   │   │   ├── components/       # RequestBuilder, CollectionSidebar, etc. (16 files)
+│   │   │   └── store/            # apiTestingStore (Zustand)
+│   │   ├── performance/          # Load testing & virtual users
+│   │   │   └── pages/            # VirtualUserGenerator, Performance
+│   │   ├── mobile-testing/       # Mobile app testing via Maestro
+│   │   │   ├── pages/            # MobileTestingPage
+│   │   │   ├── components/       # MobileTestStudio, MobileDeviceLab, etc. (7 files)
+│   │   │   └── store/            # mobileTestingStore (Zustand)
+│   │   ├── accessibility/        # WCAG compliance scanning
+│   │   │   └── pages/            # Accessibility
+│   │   ├── visual-testing/       # Visual regression testing
+│   │   │   └── pages/            # VisualTestingPage
+│   │   ├── salesforce/           # Salesforce-specific tools
+│   │   │   ├── pages/            # SalesforceToolsPage
+│   │   │   ├── components/       # 19 Salesforce components + salesforce/ subfolder
+│   │   │   └── lib/              # salesforce-api, salesforce-service, etc. (5 files)
+│   │   ├── ai-testing/           # AI-powered testing
+│   │   │   ├── pages/            # AITestingPage, FlowpilotPage
+│   │   │   └── components/       # AIChatTesting, AIExplorerAgent, AIFlowExplorer
+│   │   ├── dashboard/            # Dashboard & analytics
+│   │   │   └── pages/            # Dashboard, Analytics, Results
+│   │   └── platform/             # Cross-cutting (settings, integrations, defects, etc.)
+│   │       ├── pages/            # Settings, Integrations, Defects, Requirements, etc. (23 pages)
+│   │       └── components/       # PluginManagement, WorkspaceSwitcher
+│   ├── pages/                    # Landing page + marketing pages only
+│   │   ├── LandingPage.tsx
+│   │   └── marketing/            # SmartRecorder, Pricing, About, etc.
+│   ├── components/               # Shared layout & UI components
+│   │   ├── ui/                   # 49 shadcn/ui primitives
+│   │   ├── enterprise/           # Enterprise UI components
+│   │   ├── StreamlinedLayout.tsx  # Main app layout
+│   │   ├── AppSidebar.tsx        # Navigation sidebar
+│   │   ├── LicenseGate.tsx       # License enforcement wrapper
+│   │   └── ProtectedRoute.tsx    # Auth route guard
+│   ├── stores/                   # Shared Zustand stores (testDataStore)
+│   ├── contexts/                 # ThemeContext, AIContext, AuthContext
+│   ├── hooks/                    # useExecutionWebSocket, custom hooks
+│   ├── lib/                      # Shared utilities (api-config, electron-bridge, data-storage)
+│   └── App.tsx                   # Root routing — imports from modules/*
+├── backend/                      # FastAPI backend
 │   └── app/
-│       ├── main.py           # Entry point (313KB)
-│       ├── routers/          # 67 API router files
-│       ├── services/         # 295+ services across 26 subdirectories
-│       ├── schemas/          # Pydantic models
-│       └── middleware/       # RBAC, tenant, trace logging
-├── flowstral-engine/         # TypeScript recording/execution engine
-│   └── src/                  # FlowstralEngine, ElementCollector, PlaywrightScriptGenerator, etc.
-├── flowstral-extension/      # Chrome extension (MV3)
-│   └── src/                  # background, content, sidepanel, lib
-├── flowstral-desktop/        # Electron desktop app
-│   └── src/main/             # Main process, embedded browser, test executor
-├── docs/                     # 270+ documentation files
-└── supabase/                 # Database migrations
+│       ├── main.py               # Entry point (313KB)
+│       ├── routers/              # ★ Domain-grouped router subdirectories (10 groups)
+│       │   ├── recorder/         # playwright_recorder_api, cdp_recorder_api, flowstral_*
+│       │   ├── test_management/  # test_cases_crud_api, test_runs_api, test_plans_api, etc.
+│       │   ├── api_testing/      # enhanced_api_testing_api, api_import_api, request_chaining_api
+│       │   ├── performance/      # performance_api, protocol_recording_api, scale_api
+│       │   ├── ai/               # ai_generation_api, ai_automation_api, vision_healing_api, etc.
+│       │   ├── accessibility/    # accessibility_api, accessibility_scan_api, compliance_api
+│       │   ├── visual_testing/   # visual_testing_api
+│       │   ├── salesforce/       # salesforce_api, salesforce_auth
+│       │   ├── exploration/      # exploration_api, nexus_exploratory_api, blaze_api, etc.
+│       │   ├── platform/         # health_api, dashboard_api, secrets_api, license_api, etc.
+│       │   └── integrations/     # jira_webhook
+│       ├── services/             # 295+ services across 26 subdirectories
+│       ├── schemas/              # Pydantic models
+│       └── middleware/           # RBAC, tenant, trace logging
+├── flowstral-engine/             # TypeScript recording/execution engine
+│   └── src/                      # FlowstralEngine, ElementCollector, PlaywrightScriptGenerator
+├── flowstral-extension/          # Chrome extension (MV3)
+│   └── src/                      # background, content, sidepanel, lib
+├── flowstral-desktop/            # Electron desktop app
+│   └── src/main/                 # Main process, embedded browser, test executor
+├── docs/                         # 270+ documentation files
+└── supabase/                     # Database migrations
 ```
+
+### Module Map
+
+| Frontend Module | Backend Router Group | Key Concern |
+|----------------|---------------------|-------------|
+| `src/modules/recorder/` | `routers/recorder/` | Browser recording, AI self-healing |
+| `src/modules/test-management/` | `routers/test_management/` | Test lifecycle (create → execute → report) |
+| `src/modules/api-testing/` | `routers/api_testing/` | Multi-protocol API testing |
+| `src/modules/performance/` | `routers/performance/` | Load testing, virtual users |
+| `src/modules/mobile-testing/` | — | Mobile testing via Maestro CLI |
+| `src/modules/accessibility/` | `routers/accessibility/` | WCAG compliance scanning |
+| `src/modules/visual-testing/` | `routers/visual_testing/` | Visual regression testing |
+| `src/modules/salesforce/` | `routers/salesforce/` | Salesforce-specific tools |
+| `src/modules/ai-testing/` | `routers/ai/` | AI-powered test generation |
+| `src/modules/dashboard/` | `routers/platform/` | Dashboard & analytics |
+| `src/modules/platform/` | `routers/platform/` | Settings, integrations, cross-cutting |
+
+Each module has its own `index.ts` barrel export and `README.md` documentation.
 
 ### Key Config Files
 
@@ -133,15 +200,15 @@ cd backend && uvicorn app.main:app --reload  # Backend at localhost:8000
 
 | System | How | Key Files |
 |--------|-----|-----------|
-| CDP Recorder | Backend launches browser via Chrome DevTools Protocol | `backend/app/routers/cdp_recorder_api.py`, `backend/app/services/cdp_recorder/` |
-| Playwright Recorder | Extension sends actions to backend | `backend/app/routers/playwright_recorder_api.py` (44 endpoints, prefix `/api/playwright`) |
-| Flowstral Pipeline | Full-stack: extension + Action Graph + multi-modal analysis | `backend/app/routers/flowstral_api.py` (prefix `/api/flowstral`) |
+| CDP Recorder | Backend launches browser via Chrome DevTools Protocol | `backend/app/routers/recorder/cdp_recorder_api.py`, `backend/app/services/cdp_recorder/` |
+| Playwright Recorder | Extension sends actions to backend | `backend/app/routers/recorder/playwright_recorder_api.py` (44 endpoints, prefix `/api/playwright`) |
+| Flowstral Pipeline | Full-stack: extension + Action Graph + multi-modal analysis | `backend/app/routers/recorder/flowstral_api.py` (prefix `/api/flowstral`) |
 
 ### Frontend
 
 | File | Size | Purpose |
 |------|------|---------|
-| `src/pages/PlaywrightRecorderPage.tsx` | ~520KB | Main recorder page — step list, suggestions, playback, AI auto-fix |
+| `src/modules/recorder/pages/PlaywrightRecorderPage.tsx` | ~520KB | Main recorder page — step list, suggestions, playback, AI auto-fix |
 
 ### AI Self-Healing Auto-Fix (v3.10.1+)
 
@@ -181,15 +248,15 @@ When AI auto-fix fails, the **ManualAssistCard** appears inline below the failed
 - Reuses `HealingOrchestrator` vision pipeline for paste_screenshot mode
 
 **Frontend:**
-- `src/components/ManualAssistCard.tsx` — inline 3-tab card component
-- `src/lib/aiEnhancements.ts` — `manualAssistPasteElement()`, `manualAssistEnterSelector()`, `manualAssistScreenshot()` API helpers
+- `src/modules/recorder/components/ManualAssistCard.tsx` — inline 3-tab card component
+- `src/modules/recorder/lib/aiEnhancements.ts` — `manualAssistPasteElement()`, `manualAssistEnterSelector()`, `manualAssistScreenshot()` API helpers
 - When user clicks "Use This" on a selector → step's selector is updated in-place via `setActions()`
 
 **Key files:**
-- `src/lib/aiEnhancements.ts` — `autoFixStep()`, `detectFalsePositive()`, `explainFailure()`, `manualAssistPasteElement()`, `manualAssistEnterSelector()`, `manualAssistScreenshot()` API helpers
-- `src/components/ManualAssistCard.tsx` — inline 3-tab card for manual step fixing
-- `src/components/confidence/ElementRepairWizard.tsx` — 4-tab dialog (Manual, Pick, Debug, AI) for advanced repair
-- `backend/app/routers/ai_enhancements_api.py` — `/api/ai/enhancements/auto-fix-step` + `/api/ai/enhancements/manual-assist` endpoints
+- `src/modules/recorder/lib/aiEnhancements.ts` — `autoFixStep()`, `detectFalsePositive()`, `explainFailure()`, `manualAssistPasteElement()`, `manualAssistEnterSelector()`, `manualAssistScreenshot()` API helpers
+- `src/modules/recorder/components/ManualAssistCard.tsx` — inline 3-tab card for manual step fixing
+- `src/modules/recorder/components/ElementRepairWizard.tsx` — 4-tab dialog (Manual, Pick, Debug, AI) for advanced repair
+- `backend/app/routers/ai/ai_enhancements_api.py` — `/api/ai/enhancements/auto-fix-step` + `/api/ai/enhancements/manual-assist` endpoints
 - `backend/app/services/automation/healing_orchestrator.py` — HealingOrchestrator backend service
 - `backend/app/services/automation/dom_element_parser.py` — HTML → element dict parser
 
@@ -316,10 +383,10 @@ Subdirectories: `collector/`, `core/`, `detection/`, `generator/`, `handlers/`, 
 
 | File | Size | Purpose |
 |------|------|---------|
-| `src/pages/UnifiedWorkflowEditor.tsx` | ~538KB | Primary no-code/code test builder with 60+ step types |
-| `src/pages/TestRepository.tsx` | ~340KB | Test management hub (folders, suites, releases) |
-| `src/pages/TestPlayground.tsx` | ~1,858 lines | 10-tab interactive testing playground |
-| `src/components/FlowstralWorkflowEditor/` | Directory | Visual canvas-based workflow editor |
+| `src/modules/test-management/pages/UnifiedWorkflowEditor.tsx` | ~538KB | Primary no-code/code test builder with 60+ step types |
+| `src/modules/test-management/pages/TestRepository.tsx` | ~340KB | Test management hub (folders, suites, releases) |
+| `src/modules/test-management/pages/TestPlayground.tsx` | ~1,858 lines | 10-tab interactive testing playground |
+| `src/modules/test-management/components/FlowstralWorkflowEditor/` | Directory | Visual canvas-based workflow editor |
 
 **FlowstralWorkflowEditor Sub-Components:**
 
@@ -337,11 +404,11 @@ Subdirectories: `collector/`, `core/`, `detection/`, `generator/`, `handlers/`, 
 
 | File | Prefix | Purpose |
 |------|--------|---------|
-| `backend/app/routers/test_cases_crud_api.py` | `/test-cases` | Test case CRUD (16 endpoints), PostgreSQL with in-memory fallback |
-| `backend/app/routers/test_plans_api.py` | `/test-plans` | Test plan management (4 endpoints) |
-| `backend/app/routers/gherkin_api.py` | `/api/gherkin` | BDD/Gherkin support (3 endpoints) |
-| `backend/app/routers/ai_generation_api.py` | `/ai` | AI test generation (28 endpoints) |
-| `backend/app/routers/requirement_to_testcase_api.py` | `/api/req2tc` | Requirement-to-test-case conversion |
+| `backend/app/routers/test_management/test_cases_crud_api.py` | `/test-cases` | Test case CRUD (16 endpoints), PostgreSQL with in-memory fallback |
+| `backend/app/routers/test_management/test_plans_api.py` | `/test-plans` | Test plan management (4 endpoints) |
+| `backend/app/routers/test_management/gherkin_api.py` | `/api/gherkin` | BDD/Gherkin support (3 endpoints) |
+| `backend/app/routers/ai/ai_generation_api.py` | `/ai` | AI test generation (28 endpoints) |
+| `backend/app/routers/test_management/requirement_to_testcase_api.py` | `/api/req2tc` | Requirement-to-test-case conversion |
 
 ### Test Generation Pipeline
 
@@ -378,8 +445,8 @@ Subdirectories: `collector/`, `core/`, `detection/`, `generator/`, `handlers/`, 
 
 | File | Size | Purpose |
 |------|------|---------|
-| `src/pages/TestCaseExecution.tsx` | 54KB | Step-by-step execution UI with screenshots, evidence capture |
-| `src/pages/TestRuns.tsx` | — | Test run listing and management |
+| `src/modules/test-management/pages/TestCaseExecution.tsx` | 54KB | Step-by-step execution UI with screenshots, evidence capture |
+| `src/modules/test-management/pages/TestRuns.tsx` | — | Test run listing and management |
 | `src/hooks/useExecutionWebSocket.ts` | — | WebSocket hook for real-time execution progress |
 
 **WebSocket Message Types:**
@@ -393,9 +460,9 @@ Subdirectories: `collector/`, `core/`, `detection/`, `generator/`, `handlers/`, 
 
 | File | Prefix | Purpose |
 |------|--------|---------|
-| `backend/app/routers/test_runs_api.py` | `/test-runs` | Test run execution and reporting (14 endpoints), WebSocket support |
-| `backend/app/routers/automation_api.py` | `/automation` | Script conversion, test execution, locator analysis |
-| `backend/app/routers/complex_verifications.py` | `/api/complex-verify` | Email/PDF/file verification (10 endpoints) |
+| `backend/app/routers/test_management/test_runs_api.py` | `/test-runs` | Test run execution and reporting (14 endpoints), WebSocket support |
+| `backend/app/routers/test_management/automation_api.py` | `/automation` | Script conversion, test execution, locator analysis |
+| `backend/app/routers/test_management/complex_verifications.py` | `/api/complex-verify` | Email/PDF/file verification (10 endpoints) |
 
 ### Key Backend Services
 
@@ -431,7 +498,7 @@ Chains all existing healing services with early-return-on-first-success:
 - `PlaywrightRecorderPage.tsx` — "🤖 Auto-Fix All" button in test result summary fixes all failed steps at once
 - `PlaywrightRecorderPage.tsx` — `autoFixingSteps` state (Set<number>) tracks in-progress fixes; `autoFixResults` (Map) stores outcomes
 - `ElementRepairWizard.tsx` — Advanced 4-tab repair dialog (Manual, Pick, Debug, AI) for cases where auto-fix fails
-- `src/lib/aiEnhancements.ts` — `autoFixStep()`, `detectFalsePositive()`, `explainFailure()`, `saveFalsePositive()`, `removeFalsePositive()`, `getFalsePositives()`, `getFlakySteps()` API helpers
+- `src/modules/recorder/lib/aiEnhancements.ts` — `autoFixStep()`, `detectFalsePositive()`, `explainFailure()`, `saveFalsePositive()`, `removeFalsePositive()`, `getFalsePositives()`, `getFlakySteps()` API helpers
 
 ### Complex Verifications
 
@@ -449,8 +516,8 @@ Chains all existing healing services with early-return-on-first-success:
 
 | File | Size | Purpose |
 |------|------|---------|
-| `src/pages/MobileTestingPage.tsx` | 186 lines | Hub with 6 tabs: studio, flows, device-lab, runs, inspector, tools |
-| `src/components/MobileDeviceSelector.tsx` | 532 lines | Device emulation selection (50+ profiles, network throttling) |
+| `src/modules/mobile-testing/pages/MobileTestingPage.tsx` | 186 lines | Hub with 6 tabs: studio, flows, device-lab, runs, inspector, tools |
+| `src/modules/mobile-testing/components/MobileDeviceSelector.tsx` | 532 lines | Device emulation selection (50+ profiles, network throttling) |
 
 **Sub-Components** (`src/components/mobile-testing/`):
 
@@ -465,7 +532,7 @@ Chains all existing healing services with early-return-on-first-success:
 
 ### State Management
 
-**Zustand Store:** `src/stores/mobileTestingStore.ts`
+**Zustand Store:** `src/modules/mobile-testing/store/mobileTestingStore.ts`
 
 Key state: `activeTab`, `isStudioRunning`, `maestroInstalled`, `nativeDevices`, `selectedPlatform`, `appBundleId`, `flows`, `folders`, `testRuns`, `studioOutput`
 
@@ -496,9 +563,9 @@ interface MobileTestRun { id, flow_id, flow_name, platform, device, status, dura
 
 | File | Size | Purpose |
 |------|------|---------|
-| `src/pages/EnhancedAPITesting.tsx` | ~200KB | Main API testing page — builder, import, execute, chains, environments |
+| `src/modules/api-testing/pages/EnhancedAPITesting.tsx` | ~200KB | Main API testing page — builder, import, execute, chains, environments |
 
-**Sub-Components** (`src/components/api-testing/`):
+**Sub-Components** (`src/modules/api-testing/components/`):
 
 | File | Purpose |
 |------|---------|
@@ -562,7 +629,7 @@ interface MobileTestRun { id, flow_id, flow_name, platform, device, status, dura
 
 ### State Management
 
-**Zustand Store:** `src/stores/apiTestingStore.ts` (with `devtools` + `persist` + `immer` middleware)
+**Zustand Store:** `src/modules/api-testing/store/apiTestingStore.ts` (with `devtools` + `persist` + `immer` middleware)
 
 Key state: saved requests, request chains, collections, folders, environments, variables
 
@@ -577,9 +644,9 @@ Key actions:
 
 | File | Prefix | Endpoints | Purpose |
 |------|--------|-----------|---------|
-| `backend/app/routers/enhanced_api_testing_api.py` | `/api/v2/testing` | 46 | Multi-protocol API testing (REST, SOAP, GraphQL, gRPC, Kafka, MQTT, WebSocket, AMQP) |
-| `backend/app/routers/api_import_api.py` | `/api/import` | 9 | OpenAPI/HAR/Postman import, export, test generation |
-| `backend/app/routers/request_chaining_api.py` | `/api/chain` | 9 | Request chaining for API testing |
+| `backend/app/routers/api_testing/enhanced_api_testing_api.py` | `/api/v2/testing` | 46 | Multi-protocol API testing (REST, SOAP, GraphQL, gRPC, Kafka, MQTT, WebSocket, AMQP) |
+| `backend/app/routers/api_testing/api_import_api.py` | `/api/import` | 9 | OpenAPI/HAR/Postman import, export, test generation |
+| `backend/app/routers/api_testing/request_chaining_api.py` | `/api/chain` | 9 | Request chaining for API testing |
 
 ### Key Backend Services
 
@@ -622,15 +689,15 @@ REST, SOAP/WSDL, GraphQL, gRPC, Kafka, MQTT, WebSocket, AMQP (RabbitMQ)
 
 | File | Size | Purpose |
 |------|------|---------|
-| `src/pages/Performance.tsx` | 89KB | Performance testing UI — scenarios, execution, results, charts |
+| `src/modules/performance/pages/Performance.tsx` | 89KB | Performance testing UI — scenarios, execution, results, charts |
 
 ### Backend
 
 | File | Prefix | Endpoints | Purpose |
 |------|--------|-----------|---------|
-| `backend/app/routers/performance_api.py` | `/performance` | 80 | Load testing engine, transaction analysis, metrics |
-| `backend/app/routers/protocol_recording_api.py` | `/api/protocol-recording` | 13 | HTTP traffic capture during browser sessions |
-| `backend/app/routers/scale_api.py` | `/api/v2` | 8 | Paginated queries for 100K+ test cases |
+| `backend/app/routers/performance/performance_api.py` | `/performance` | 80 | Load testing engine, transaction analysis, metrics |
+| `backend/app/routers/performance/protocol_recording_api.py` | `/api/protocol-recording` | 13 | HTTP traffic capture during browser sessions |
+| `backend/app/routers/performance/scale_api.py` | `/api/v2` | 8 | Paginated queries for 100K+ test cases |
 
 ### Key Backend Services
 
@@ -674,7 +741,7 @@ REST, SOAP/WSDL, GraphQL, gRPC, Kafka, MQTT, WebSocket, AMQP (RabbitMQ)
 
 | File | Size | Purpose |
 |------|------|---------|
-| `src/pages/Accessibility.tsx` | 347 lines | URL-based scanner — level selection (A/AA/AAA), component scans, issue filtering |
+| `src/modules/accessibility/pages/Accessibility.tsx` | 347 lines | URL-based scanner — level selection (A/AA/AAA), component scans, issue filtering |
 
 ### Types
 
@@ -688,8 +755,8 @@ interface ScanResult { scan_id, url, summary: { total, critical, serious, modera
 
 | File | Prefix | Purpose |
 |------|--------|---------|
-| `backend/app/routers/accessibility_api.py` | `/api/accessibility` | Main scan endpoint (10 endpoints) |
-| `backend/app/routers/accessibility_scan_api.py` | `/api/a11y` | V2 scanning with reports (6 endpoints) |
+| `backend/app/routers/accessibility/accessibility_api.py` | `/api/accessibility` | Main scan endpoint (10 endpoints) |
+| `backend/app/routers/accessibility/accessibility_scan_api.py` | `/api/a11y` | V2 scanning with reports (6 endpoints) |
 
 ### Key Backend Services
 
@@ -733,7 +800,7 @@ interface ScanResult { scan_id, url, summary: { total, critical, serious, modera
 
 | File | Size | Purpose |
 |------|------|---------|
-| `src/pages/VisualTestingPage.tsx` | 1324 lines | Dashboard, Compare, Baselines, Recent Diffs tabs |
+| `src/modules/visual-testing/pages/VisualTestingPage.tsx` | 1324 lines | Dashboard, Compare, Baselines, Recent Diffs tabs |
 
 ### 6 Comparison Modes
 
@@ -758,7 +825,7 @@ interface ComparisonResult { passed, diff_percentage, diff_pixel_count, total_pi
 
 | File | Prefix | Purpose |
 |------|--------|---------|
-| `backend/app/routers/visual_testing_api.py` | `/api/visual-testing` | Compare, baselines, capture, diffs (15 endpoints) |
+| `backend/app/routers/visual_testing/visual_testing_api.py` | `/api/visual-testing` | Compare, baselines, capture, diffs (15 endpoints) |
 
 ### Key Backend Service
 
@@ -809,7 +876,7 @@ interface ComparisonResult { passed, diff_percentage, diff_pixel_count, total_pi
 - `backend/app/services/llm/` — LLM services with prompt caching
 - `backend/app/services/ai/` — AI generation, failure analysis
 - `backend/app/config/llm_config.py` — Provider configuration
-- `backend/app/routers/ai_generation_api.py` — 28 AI endpoints (prefix `/ai`)
+- `backend/app/routers/ai/ai_generation_api.py` — 28 AI endpoints (prefix `/ai`)
 
 ### WebSocket Real-Time
 
@@ -838,9 +905,9 @@ PostgreSQL (primary) with **in-memory fallback**:
 
 ## Conventions & Patterns
 
-1. **Frontend**: Pages in `src/pages/`, components in `src/components/`, path alias `@/` = `src/`
-2. **Backend**: Routers in `backend/app/routers/`, services in `backend/app/services/`, Pydantic schemas in `backend/app/schemas/`
-3. **State**: Zustand stores with `devtools` + `persist` + `immer` middleware
+1. **Frontend**: Organized into `src/modules/{domain}/` with pages/, components/, lib/, store/ subdirectories. Shared utilities in `src/lib/`, `src/contexts/`, `src/hooks/`, `src/components/ui/`. Path alias `@/` = `src/`
+2. **Backend**: Routers in `backend/app/routers/{domain}/`, services in `backend/app/services/`, Pydantic schemas in `backend/app/schemas/`
+3. **State**: Zustand stores co-located with their modules (e.g., `src/modules/api-testing/store/`), middleware: `devtools` + `persist` + `immer`
 4. **Styling**: Tailwind CSS utility classes, CSS variables for theming, dark mode via `dark:` prefix
 5. **API calls**: Axios with centralized base URL from `api-config.ts`
 6. **Error boundaries**: TabErrorBoundary pattern for isolated failures
@@ -853,41 +920,50 @@ PostgreSQL (primary) with **in-memory fallback**:
 
 ## Quick Reference — All API Router Prefixes
 
-| Router | Prefix | Key Purpose |
-|--------|--------|-------------|
-| accessibility_api | `/api/accessibility` | A11y scans |
-| accessibility_scan_api | `/api/a11y` | A11y v2 with reports |
-| ai_generation_api | `/ai` | Test generation, triage, model gateway |
-| ai_automation_api | `/ai-automation` | Element resolution, failure analysis |
-| ai_enhancements_api | `/api/ai/enhancements` | False positives, flaky detection |
-| api_import_api | `/api/import` | OpenAPI/HAR/Postman import |
-| automation_api | `/automation` | Script conversion, execution |
-| cdp_recorder_api | `/cdp-recorder` | CDP recording |
-| code_alchemy_api | `/api/code-alchemy` | Repository import |
-| complex_verifications | `/api/complex-verify` | Email/PDF/file checks |
-| dashboard_api | `/dashboard` | Dashboard metrics |
-| database_api | `/api/db` | Database CRUD |
-| defects_api | `/defects` | Defect management |
-| enhanced_api_testing_api | `/api/v2/testing` | Multi-protocol API testing |
-| flowstral_api | `/api/flowstral` | Recording sessions |
-| flowstral_engine_api | `/api/flowstral/engine` | Engine operations |
-| framework_analyzer_api | `/api/framework` | Framework detection |
-| health_api | `/health` | Health checks |
-| license_api | `/api/license` | License management |
-| performance_api | `/performance` | Load testing |
-| playwright_recorder_api | `/api/playwright` | Playwright recording |
-| project_management_api | `/api/projects` | Project management |
-| protocol_recording_api | `/api/protocol-recording` | HTTP traffic capture |
-| request_chaining_api | `/api/chain` | Request chaining |
-| requirements_api | `/api/requirements` | Requirements management |
-| salesforce_api | `/api/salesforce` | Salesforce integration |
-| scale_api | `/api/v2` | Paginated queries |
-| secrets_api | `/api/secrets` | Secrets vault |
-| test_cases_crud_api | `/test-cases` | Test case CRUD |
-| test_plans_api | `/test-plans` | Test plans |
-| test_runs_api | `/test-runs` | Test execution |
-| visual_testing_api | `/api/visual-testing` | Visual regression |
-| vision_healing_api | `/api/vision` | Vision-based healing |
+| Group | Router | Prefix | Key Purpose |
+|-------|--------|--------|-------------|
+| **recorder/** | playwright_recorder_api | `/api/playwright` | Playwright recording (44 endpoints) |
+| | cdp_recorder_api | `/cdp-recorder` | CDP recording |
+| | flowstral_api | `/api/flowstral` | Recording sessions |
+| | flowstral_engine_api | `/api/flowstral/engine` | Engine operations |
+| **test_management/** | test_cases_crud_api | `/test-cases` | Test case CRUD (16 endpoints) |
+| | test_runs_api | `/test-runs` | Test execution (14 endpoints) |
+| | test_plans_api | `/test-plans` | Test plans |
+| | automation_api | `/automation` | Script conversion, execution |
+| | gherkin_api | `/api/gherkin` | BDD/Gherkin support |
+| | requirement_to_testcase_api | `/api/req2tc` | Req-to-test conversion |
+| | complex_verifications | `/api/complex-verify` | Email/PDF/file checks |
+| **api_testing/** | enhanced_api_testing_api | `/api/v2/testing` | Multi-protocol API testing (46 endpoints) |
+| | api_import_api | `/api/import` | OpenAPI/HAR/Postman import |
+| | request_chaining_api | `/api/chain` | Request chaining |
+| **performance/** | performance_api | `/performance` | Load testing (80 endpoints) |
+| | protocol_recording_api | `/api/protocol-recording` | HTTP traffic capture |
+| | scale_api | `/api/v2` | Paginated queries |
+| **ai/** | ai_generation_api | `/ai` | Test generation, triage (28 endpoints) |
+| | ai_automation_api | `/ai-automation` | Element resolution, failure analysis |
+| | ai_enhancements_api | `/api/ai/enhancements` | False positives, flaky detection |
+| | vision_healing_api | `/api/vision` | Vision-based healing |
+| | ai_testing | `/api/ai-testing` | AI testing |
+| | llm_api | `/api/llm` | LLM gateway |
+| **accessibility/** | accessibility_api | `/api/accessibility` | A11y scans (10 endpoints) |
+| | accessibility_scan_api | `/api/a11y` | A11y v2 with reports |
+| | compliance_api | `/api/compliance` | Compliance checking |
+| **visual_testing/** | visual_testing_api | `/api/visual-testing` | Visual regression (15 endpoints) |
+| **salesforce/** | salesforce_api | `/api/salesforce` | Salesforce integration |
+| | salesforce_auth | `/api/salesforce/auth` | Salesforce OAuth2 |
+| **exploration/** | exploration_api | `/exploration` | Autonomous exploration |
+| | nexus_exploratory_api | `/api/nexus` | Nexus testing |
+| | blaze_api | `/api/blaze` | Blaze testing |
+| **platform/** | health_api | `/health` | Health checks |
+| | dashboard_api | `/dashboard` | Dashboard metrics |
+| | license_api | `/api/license` | License management |
+| | secrets_api | `/api/secrets` | Secrets vault |
+| | database_api | `/api/db` | Database CRUD |
+| | defects_api | `/defects` | Defect management |
+| | requirements_api | `/api/requirements` | Requirements management |
+| | project_management_api | `/api/projects` | Project management |
+| | framework_analyzer_api | `/api/framework` | Framework detection |
+| | code_alchemy_api | `/api/code-alchemy` | Repository import |
 
 ---
 
