@@ -461,14 +461,14 @@ export default function PricingPage() {
               <div className="flex gap-3 mb-8">
                 <Button
                   className="flex-1 h-12 rounded-xl font-semibold bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white shadow-lg shadow-blue-500/25 transition-all"
-                  onClick={() => window.location.href = 'mailto:sales@flowstral.com?subject=Enterprise%20Inquiry'}
+                  onClick={() => navigate('/contact')}
                 >
                   Talk to Sales <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
                 <Button
                   variant="outline"
                   className="h-12 rounded-xl font-semibold border-violet-300 text-violet-600 hover:bg-violet-50"
-                  onClick={() => window.location.href = 'mailto:sales@flowstral.com?subject=Schedule%20Demo'}
+                  onClick={() => navigate('/contact')}
                 >
                   <CalendarCheck className="w-4 h-4 mr-1.5" /> Demo
                 </Button>
@@ -510,52 +510,52 @@ export default function PricingPage() {
       </section>
 
       {/* Why Enterprise — Tool Consolidation ROI */}
-      <section className="py-20 px-6 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+      <section className="py-20 px-6 bg-gradient-to-b from-slate-50 via-white to-slate-50 border-y border-slate-200/60">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <Badge className="mb-4 bg-white/10 text-white border-white/20 px-4 py-1.5">
+            <Badge className="mb-4 bg-violet-100 text-violet-700 border-violet-200 px-4 py-1.5">
               <DollarSign className="w-3.5 h-3.5 mr-1.5 inline" />
               ROI Calculator
             </Badge>
-            <h2 className="text-3xl lg:text-4xl font-bold text-white mb-4">
+            <h2 className="text-3xl lg:text-4xl font-bold text-slate-900 mb-4">
               Replace 5-8 Tools. Save ${totalSavingsLow}K-${totalSavingsHigh}K/Year.
             </h2>
-            <p className="text-lg text-slate-300 max-w-2xl mx-auto">
+            <p className="text-lg text-slate-600 max-w-2xl mx-auto">
               Most enterprise QA teams spend over $200K annually on fragmented testing tools. Flowstral consolidates everything into one platform, one vendor, one contract.
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
             {replacedTools.map((tool, i) => (
-              <div key={i} className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-5 hover:bg-white/10 transition-colors">
+              <div key={i} className="bg-white border border-slate-200 rounded-2xl p-5 hover:shadow-md hover:border-slate-300 transition-all">
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">{tool.category}</p>
-                <p className="text-white font-semibold mb-2">{tool.name}</p>
-                <p className="text-emerald-400 font-bold text-lg">{tool.cost}</p>
+                <p className="text-slate-900 font-semibold mb-2">{tool.name}</p>
+                <p className="text-emerald-600 font-bold text-lg">{tool.cost}</p>
               </div>
             ))}
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
-            <div className="bg-gradient-to-br from-blue-500/20 to-violet-500/20 backdrop-blur border border-white/10 rounded-2xl p-8 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-blue-500/20 flex items-center justify-center mx-auto mb-4">
-                <Layers className="w-7 h-7 text-blue-400" />
+            <div className="bg-gradient-to-br from-blue-50 to-violet-50 border border-blue-200/60 rounded-2xl p-8 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center mx-auto mb-4">
+                <Layers className="w-7 h-7 text-blue-600" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">One Platform</h3>
-              <p className="text-sm text-slate-300">Replace 8 separate tools with a single, unified testing platform. No more context-switching between vendors.</p>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">One Platform</h3>
+              <p className="text-sm text-slate-600">Replace 8 separate tools with a single, unified testing platform. No more context-switching between vendors.</p>
             </div>
-            <div className="bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 backdrop-blur border border-white/10 rounded-2xl p-8 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
-                <DollarSign className="w-7 h-7 text-emerald-400" />
+            <div className="bg-gradient-to-br from-emerald-50 to-cyan-50 border border-emerald-200/60 rounded-2xl p-8 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+                <DollarSign className="w-7 h-7 text-emerald-600" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">One Contract</h3>
-              <p className="text-sm text-slate-300">Eliminate procurement complexity. One vendor, one renewal, one point of contact for all your testing needs.</p>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">One Contract</h3>
+              <p className="text-sm text-slate-600">Eliminate procurement complexity. One vendor, one renewal, one point of contact for all your testing needs.</p>
             </div>
-            <div className="bg-gradient-to-br from-violet-500/20 to-pink-500/20 backdrop-blur border border-white/10 rounded-2xl p-8 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-violet-500/20 flex items-center justify-center mx-auto mb-4">
-                <BarChart3 className="w-7 h-7 text-violet-400" />
+            <div className="bg-gradient-to-br from-violet-50 to-pink-50 border border-violet-200/60 rounded-2xl p-8 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-violet-100 flex items-center justify-center mx-auto mb-4">
+                <BarChart3 className="w-7 h-7 text-violet-600" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">One Dashboard</h3>
-              <p className="text-sm text-slate-300">Unified analytics across all testing types. See quality metrics, trends, and coverage in a single view.</p>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">One Dashboard</h3>
+              <p className="text-sm text-slate-600">Unified analytics across all testing types. See quality metrics, trends, and coverage in a single view.</p>
             </div>
           </div>
         </div>
@@ -693,7 +693,7 @@ export default function PricingPage() {
               </Button>
               <Button
                 className="h-12 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700"
-                onClick={() => window.location.href = 'mailto:sales@flowstral.com'}
+                onClick={() => navigate('/contact')}
               >
                 <Mail className="w-5 h-5 mr-2" /> Contact Sales
               </Button>
@@ -721,7 +721,7 @@ export default function PricingPage() {
             <Button
               variant="outline"
               className="h-14 px-8 rounded-xl text-lg font-semibold border-2 border-white/50 text-white hover:bg-white/10 transition-all"
-              onClick={() => window.location.href = 'mailto:sales@flowstral.com?subject=Enterprise%20Inquiry'}
+              onClick={() => navigate('/contact')}
             >
               <Building2 className="w-5 h-5 mr-2" /> Talk to Sales
             </Button>
