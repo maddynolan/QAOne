@@ -1526,27 +1526,9 @@ function SocialProofSection() {
   const replacedTools = ['Selenium Grid', 'Postman', 'JMeter', 'Applitools', 'axe DevTools', 'Sauce Labs'];
 
   return (
-    <section className="py-20 bg-slate-50 border-y border-slate-200/60">
+    <section className="py-16 bg-slate-50 border-y border-slate-200/60">
       <div className="max-w-7xl mx-auto px-6">
-        {/* Trusted By */}
-        <div className="text-center mb-12">
-          <p className="text-sm font-semibold text-slate-400 uppercase tracking-widest mb-8">
-            Trusted by QA teams at innovative companies
-          </p>
-          <div className="flex flex-wrap justify-center gap-8 items-center">
-            {Array.from({ length: 6 }).map((_, idx) => (
-              <div
-                key={idx}
-                className="w-32 h-12 rounded-lg bg-slate-200/60 flex items-center justify-center text-sm text-slate-400 font-medium"
-              >
-                Logo
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Replace Your Stack */}
-        <div className="text-center mt-16">
+        <div className="text-center">
           <h3 className="text-xl font-bold text-slate-900 mb-6">
             Replace your entire testing stack
           </h3>
