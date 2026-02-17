@@ -2,7 +2,7 @@
 
 > **This file is the starting reference for all Claude sessions working on this codebase.**
 > It must be kept up-to-date whenever changes are made to components, APIs, or architecture.
-> Last updated: 2026-02-14
+> Last updated: 2026-02-16
 
 ---
 
@@ -204,11 +204,23 @@ cd backend && uvicorn app.main:app --reload  # Backend at localhost:8000
 | Playwright Recorder | Extension sends actions to backend | `backend/app/routers/recorder/playwright_recorder_api.py` (44 endpoints, prefix `/api/playwright`) |
 | Flowstral Pipeline | Full-stack: extension + Action Graph + multi-modal analysis | `backend/app/routers/recorder/flowstral_api.py` (prefix `/api/flowstral`) |
 
+### Cross-Browser Recording (v3.11.6+)
+
+The Recorder supports Chromium, Firefox, and WebKit (Safari) via a browser selection dropdown in the toolbar.
+
+**Frontend:**
+- `PlaywrightRecorderPage.tsx` — `selectedBrowser` state (`'chromium' | 'firefox' | 'webkit'`), passed as `browserType` in IPC/backend calls
+- `RecordingControlsPanel.tsx` — `<Select>` dropdown with Globe icon for browser engine selection (after network selector)
+
+**Electron:**
+- `playwright-recorder.js` — imports `chromium`, `firefox`, `webkit` from `playwright`; `launchBrowserWithFallback()` accepts `browserType` parameter and selects the matching engine; channel fallback variants (chrome, msedge) only used for Chromium
+- `index.js` — `playwright-recorder-start` handler extracts `browserType` from args and passes to `playwrightRecorder.start(url, { browserType })`
+
 ### Frontend
 
 | File | Size | Purpose |
 |------|------|---------|
-| `src/modules/recorder/pages/PlaywrightRecorderPage.tsx` | ~520KB | Main recorder page — step list, suggestions, playback, AI auto-fix |
+| `src/modules/recorder/pages/PlaywrightRecorderPage.tsx` | ~520KB | Main recorder page — step list, suggestions, playback, AI auto-fix, cross-browser selection |
 
 ### AI Self-Healing Auto-Fix (v3.10.1+)
 
@@ -510,7 +522,7 @@ Chains all existing healing services with early-return-on-first-success:
 
 ## Component 4: Mobile Testing
 
-> Native mobile app testing via Maestro CLI with device lab management, test flows, and execution.
+> Native mobile app testing via Maestro CLI with device lab management, test flows, execution, inspector, and advanced tools. Fully wired to real device IPC as of v3.11.6.
 
 ### Frontend
 
@@ -519,22 +531,72 @@ Chains all existing healing services with early-return-on-first-success:
 | `src/modules/mobile-testing/pages/MobileTestingPage.tsx` | 186 lines | Hub with 6 tabs: studio, flows, device-lab, runs, inspector, tools |
 | `src/modules/mobile-testing/components/MobileDeviceSelector.tsx` | 532 lines | Device emulation selection (50+ profiles, network throttling) |
 
-**Sub-Components** (`src/components/mobile-testing/`):
+**Sub-Components** (`src/modules/mobile-testing/components/`):
 
 | File | Purpose |
 |------|---------|
-| `MobileTestStudio.tsx` | Maestro Studio recording — start/stop, YAML flow editor, real-time console |
-| `MobileTestFlows.tsx` | Saved flow management — CRUD, folders, import/export YAML, templates |
-| `MobileDeviceLab.tsx` | Device management — install/uninstall apps, screenshots, logs |
-| `MobileTestRuns.tsx` | Execution history — stats, filtering, detailed reports |
-| `MobileInspector.tsx` | Element hierarchy viewer — selector generation, property inspection |
-| `MobileAdvancedTools.tsx` | Deep links, push notifications, biometrics, network/geo mocking |
+| `MobileTestStudio.tsx` | Maestro Studio recording — start/stop, YAML flow editor, real-time console output via `mobile-studio-output` IPC events |
+| `MobileTestFlows.tsx` | Saved flow management — CRUD, folders, import/export YAML, templates, run via `mobile.runNativeTest()` |
+| `MobileDeviceLab.tsx` | Device management — real screenshots (adb/xcrun), live log streaming (logcat/syslog), app install/uninstall via IPC, file browser for APK/IPA |
+| `MobileTestRuns.tsx` | Execution history — stats, filtering, detailed reports, re-run button (finds flow → re-executes via IPC) |
+| `MobileInspector.tsx` | Element hierarchy viewer — real device hierarchy via `uiautomator dump` XML with `parseXmlHierarchy()` parser, fallback to sample data |
+| `MobileAdvancedTools.tsx` | Deep links, push notifications, biometrics, geolocation, network conditioning, orientation/appearance/locale/font scale — all wired to real IPC |
+
+### IPC Architecture (v3.11.6+)
+
+All mobile operations flow through 4 layers: **MaestroRunner → IPC handler → preload → electron-bridge → React component**.
+
+**MaestroRunner** (`flowstral-desktop/src/main/lib/maestro-integration.js`):
+
+| Method | Android CLI | iOS CLI |
+|--------|-------------|---------|
+| `takeScreenshot(deviceId)` | `adb shell screencap` + `adb pull` | `xcrun simctl io screenshot` |
+| `startLogCapture(deviceId, filter)` | `adb logcat` (spawned) | `xcrun simctl spawn log stream` (spawned) |
+| `installApp(appPath, deviceId)` | `adb install -r` | `xcrun simctl install` |
+| `uninstallApp(bundleId, deviceId)` | `adb uninstall` | `xcrun simctl uninstall` |
+| `getElementHierarchy(deviceId)` | `adb shell uiautomator dump` → XML | `xcrun simctl ui describe-all` → text |
+| `openDeepLink(url, deviceId)` | `adb shell am start -a VIEW -d` | `xcrun simctl openurl` |
+| `sendPushNotification(payload, bundleId, deviceId)` | `adb shell am broadcast` | `xcrun simctl push` (temp JSON file) |
+| `simulateBiometric(result, deviceId)` | `adb shell am broadcast FINGERPRINT_AUTH` | `xcrun simctl spawn notifyutil` |
+| `setGeoLocation(lat, lng, deviceId)` | `adb emu geo fix` | `xcrun simctl location set` |
+| `setNetworkCondition(profile, deviceId)` | `adb shell svc wifi/data enable/disable` | Network Link Conditioner note |
+| `setOrientation(orientation, deviceId)` | `adb shell settings put user_rotation` | N/A (Simulator.app) |
+| `setAppearance(mode, deviceId)` | `adb shell cmd uimode night` | `xcrun simctl ui appearance` |
+| `setLocale(locale, deviceId)` | `adb shell setprop persist.sys.locale` | `xcrun simctl spawn defaults write` |
+| `setFontScale(scale, deviceId)` | `adb shell settings put font_scale` | `xcrun simctl spawn defaults write` |
+
+**IPC Handlers** (`flowstral-desktop/src/main/index.js`):
+
+| Channel | Purpose |
+|---------|---------|
+| `mobile-check-maestro` | Validate Maestro CLI installation |
+| `mobile-run-native-test` | Execute test flow with step/progress/error callbacks |
+| `mobile-get-native-devices` | List connected devices/emulators |
+| `mobile-start-studio` / `mobile-stop-studio` / `mobile-studio-status` | Maestro Studio lifecycle |
+| `mobile-screenshot` | Take screenshot, return base64 |
+| `mobile-start-logs` / `mobile-stop-logs` | Stream device logs via `mobile-log-line` events |
+| `mobile-install-app` / `mobile-uninstall-app` | App management |
+| `mobile-browse-app` | File dialog for APK/IPA selection |
+| `mobile-get-hierarchy` | Element tree from device |
+| `mobile-open-deep-link` | Open deep link / URL scheme |
+| `mobile-send-push` | Send push notification |
+| `mobile-simulate-biometric` | Simulate biometric result |
+| `mobile-set-geolocation` | Set GPS coordinates |
+| `mobile-set-network` | Set network conditions |
+| `mobile-set-orientation` | Set portrait/landscape |
+| `mobile-set-appearance` | Set dark/light mode |
+| `mobile-set-locale` | Set device locale |
+| `mobile-set-font-scale` | Set accessibility font scale |
+
+**Preload** (`flowstral-desktop/src/main/webapp-preload.js`): `mobile` object exposes all methods via `ipcRenderer.invoke()`. Event channels `mobile-log-line` and `mobile-studio-output` are in both `electronAPI.on` and `flowstral.on` validChannels arrays.
+
+**Electron Bridge** (`src/lib/electron-bridge.ts`): `mobile` export matches all preload methods with browser fallback (`{ success: false, error: 'Not available in browser' }`). Event listeners via `onLogLine()` and `onStudioOutput()` use `api.on()`.
 
 ### State Management
 
-**Zustand Store:** `src/modules/mobile-testing/store/mobileTestingStore.ts`
+**Zustand Store:** `src/modules/mobile-testing/store/mobileTestingStore.ts` (with `persist` middleware → localStorage)
 
-Key state: `activeTab`, `isStudioRunning`, `maestroInstalled`, `nativeDevices`, `selectedPlatform`, `appBundleId`, `flows`, `folders`, `testRuns`, `studioOutput`
+Key state: `activeTab`, `isStudioRunning`, `maestroInstalled`, `nativeDevices`, `selectedPlatform`, `selectedDevice`, `appBundleId`, `flows`, `folders`, `testRuns`, `studioOutput`, `deepLinks`, `savedLocations`, `networkProfiles`, `activeNetworkProfile`, `currentLocation`, `pushNotificationPayload`
 
 ### Key Types
 
@@ -544,14 +606,21 @@ type FlowPriority = 'critical' | 'high' | 'medium' | 'low'
 type TestRunStatus = 'passed' | 'failed' | 'running' | 'skipped' | 'error'
 interface MobileTestFlow { id, name, description, yaml, app_bundle_id, platform, tags, priority, folder_id }
 interface MobileTestRun { id, flow_id, flow_name, platform, device, status, duration_ms, steps_total/passed/failed }
+interface DeepLinkConfig { id, name, url, platform, description }
+interface GeoLocation { id, name, latitude, longitude, altitude }
+interface NetworkProfile { id, name, download_kbps, upload_kbps, latency_ms, packet_loss }
 ```
 
 ### Integration
 
-- Uses `electron-bridge` for native device communication
+- Uses `electron-bridge` → Electron IPC → `MaestroRunner` for all native device communication
 - Maestro CLI for iOS/Android test execution
 - YAML-based test flow definitions
-- Device logs via logcat (Android) / syslog (iOS)
+- Device logs via logcat (Android) / syslog (iOS) streamed in real-time
+- Element hierarchy via `uiautomator dump` XML parsed with `DOMParser` into `ElementNode` tree
+- Deep links via `adb am start` / `xcrun simctl openurl`
+- Push notifications via `adb broadcast` / `xcrun simctl push`
+- All Advanced Tools (biometrics, geo, network, orientation, appearance, locale, font scale) wired to real device commands
 
 ---
 
@@ -683,19 +752,45 @@ REST, SOAP/WSDL, GraphQL, gRPC, Kafka, MQTT, WebSocket, AMQP (RabbitMQ)
 
 ## Component 6: Performance Testing
 
-> Load testing with virtual user simulation, protocol recording, and multiple load patterns.
+> Load testing with virtual user simulation, protocol recording, multiple load patterns, and server-side execution for high VU counts.
 
 ### Frontend
 
 | File | Size | Purpose |
 |------|------|---------|
-| `src/modules/performance/pages/Performance.tsx` | 89KB | Performance testing UI — scenarios, execution, results, charts |
+| `src/modules/performance/pages/Performance.tsx` | ~95KB | Performance testing UI — scenarios, execution, results, charts, server runner, HAR import |
+
+### Server-Side Execution (v3.11.6+)
+
+The Performance page has two execution modes:
+
+| Mode | VU Limit | How |
+|------|----------|-----|
+| **In-browser** (default) | 20 VUs | `fetch()` calls from the browser, concurrent virtual users simulated in JS |
+| **Server-side** ("Run on Server" toggle) | 10,000 VUs | Backend `PerformanceEngine` via REST API |
+
+**Server-side flow:**
+1. `POST /api/performance/scenarios` — Create scenario
+2. `POST /api/performance/scenarios/{id}/steps` — Add HTTP request steps
+3. `POST /api/performance/tests/run` — Start server-side test
+4. Poll `GET /api/performance/tests/{id}/status` every 2 seconds (cleanup on unmount via `useRef`)
+5. On completion, results added to test history
+
+**State:**
+- `useServerRunner` — toggle for server vs browser execution
+- `serverTestId` — active server test ID for polling
+- `serverPollRef` — `useRef` for interval cleanup on unmount
+- `testHistory` — persisted to `localStorage` key `flowstral-perf-history` (survives page refresh, max 50 entries)
+
+### HAR Import (v3.11.6+)
+
+HAR file import card in the Custom Config tab. Uploads via `POST /api/import/har` (FormData), extracts requests, and auto-sets the base URL from the first entry.
 
 ### Backend
 
 | File | Prefix | Endpoints | Purpose |
 |------|--------|-----------|---------|
-| `backend/app/routers/performance/performance_api.py` | `/performance` | 80 | Load testing engine, transaction analysis, metrics |
+| `backend/app/routers/performance/performance_api.py` | `/api/performance` | 80 | Load testing engine, scenarios, runs, transaction analysis, metrics |
 | `backend/app/routers/performance/protocol_recording_api.py` | `/api/protocol-recording` | 13 | HTTP traffic capture during browser sessions |
 | `backend/app/routers/performance/scale_api.py` | `/api/v2` | 8 | Paginated queries for 100K+ test cases |
 
@@ -725,10 +820,16 @@ REST, SOAP/WSDL, GraphQL, gRPC, Kafka, MQTT, WebSocket, AMQP (RabbitMQ)
 
 ### Key API Endpoints
 
-- `POST /performance/start` — Start load test
+- `POST /api/performance/scenarios` — Create load test scenario
+- `POST /api/performance/scenarios/{id}/steps` — Add HTTP request steps to scenario
+- `POST /api/performance/tests/run` — Start server-side load test (unlimited VUs)
+- `GET /api/performance/tests/{id}/status` — Poll test status
+- `GET /api/performance/tests/{id}/report` — Get test report
+- `POST /performance/start` — Start in-browser load test
 - `GET /performance/results/{id}` — Get test results
 - `POST /api/protocol-recording/start` — Start traffic capture
 - `POST /api/protocol-recording/stop` — Stop and export HAR
+- `POST /api/import/har` — Import HAR file
 - `POST /performance/generate-script` — Generate load test script
 
 ---
@@ -894,10 +995,14 @@ PostgreSQL (primary) with **in-memory fallback**:
 
 ### Electron Desktop
 
-- `flowstral-desktop/src/main/index.js` — Main process (1681 lines)
+- `flowstral-desktop/src/main/index.js` — Main process (~2100 lines), 20+ mobile IPC handlers, cross-browser recording support
+- `flowstral-desktop/src/main/lib/maestro-integration.js` — `MaestroRunner` class with 14 device methods (screenshots, logs, install, hierarchy, deep links, push, biometrics, geo, network, orientation, appearance, locale, font scale)
+- `flowstral-desktop/src/main/playwright-recorder.js` — Cross-browser recording (Chromium/Firefox/WebKit), `launchBrowserWithFallback()` with engine selection
+- `flowstral-desktop/src/main/webapp-preload.js` — `electronAPI` + `flowstral` context bridges; `mobile` object with 20+ methods; `validChannels` includes mobile streaming events
 - `embedded-browser.js` — BrowserView recorder
 - `test-executor.js` — Playwright test runner
 - `cloud-connector.js` — Cloud API sync
+- `src/lib/electron-bridge.ts` — Frontend API wrapper over Electron IPC; `mobile` export with 20+ methods matching preload; browser fallback for all methods
 - HashRouter for file:// protocol, BrowserRouter for web
 - Auto-detection: `window.electron || navigator.userAgent.includes('electron')`
 
