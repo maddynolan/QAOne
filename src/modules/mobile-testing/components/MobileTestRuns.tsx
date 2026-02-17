@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { useMobileTestingStore, computeTestRunStats } from '@/modules/mobile-testing/store/mobileTestingStore';
 import type { MobileTestRun, TestRunStatus } from '@/modules/mobile-testing/store/mobileTestingStore';
+import { mobile } from '@/lib/electron-bridge';
 import { toast } from 'sonner';
 import {
   Play,
@@ -64,8 +65,10 @@ export default function MobileTestRuns() {
 
   // Individual selectors to prevent re-render loops
   const testRuns = useMobileTestingStore(s => s.testRuns);
+  const flows = useMobileTestingStore(s => s.flows);
   const clearTestRuns = useMobileTestingStore(s => s.clearTestRuns);
   const deleteTestRun = useMobileTestingStore(s => s.deleteTestRun);
+  const addTestRun = useMobileTestingStore(s => s.addTestRun);
   const stats = useMemo(() => computeTestRunStats(testRuns), [testRuns]);
 
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -259,6 +262,40 @@ export default function MobileTestRuns() {
                       <Badge className={cn("text-[10px]", statusCfg.color)}>
                         {statusCfg.label}
                       </Badge>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const flow = flows.find(f => f.id === run.flow_id);
+                          if (!flow) { toast.error('Flow not found — cannot re-run'); return; }
+                          toast.info(`Re-running: ${flow.name}`);
+                          try {
+                            const result = await mobile.runNativeTest({
+                              yaml: flow.yaml,
+                              platform: flow.platform,
+                              appBundleId: flow.app_bundle_id,
+                              flowName: flow.name,
+                            });
+                            addTestRun({
+                              flow_id: flow.id,
+                              flow_name: flow.name,
+                              platform: flow.platform,
+                              device: run.device,
+                              status: result?.success ? 'passed' : 'failed',
+                              duration_ms: result?.duration_ms || 0,
+                              steps_total: result?.steps_total || 0,
+                              steps_passed: result?.steps_passed || 0,
+                              steps_failed: result?.steps_failed || 0,
+                              output: result?.output || '',
+                            });
+                          } catch (err: any) {
+                            toast.error(err.message || 'Re-run failed');
+                          }
+                        }}
+                        className={cn("p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-sky-500/20", isDark ? 'text-sky-400' : 'text-sky-500')}
+                        title="Re-run"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                      </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); deleteTestRun(run.id); }}
                         className={cn("p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20", isDark ? 'text-red-400' : 'text-red-500')}

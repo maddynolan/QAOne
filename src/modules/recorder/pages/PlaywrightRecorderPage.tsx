@@ -187,6 +187,7 @@ export default function PlaywrightRecorderPage() {
   
   // Mobile device emulation - 50+ devices
   const [selectedMobileDevice, setSelectedMobileDevice] = useState<string>('desktop');
+  const [selectedBrowser, setSelectedBrowser] = useState<'chromium' | 'firefox' | 'webkit'>('chromium');
   const [selectedNetwork, setSelectedNetwork] = useState<string>('none');
   
   // ============ RE-RECORD FROM BUILDER STATE ============
@@ -2059,19 +2060,20 @@ export default function PlaywrightRecorderPage() {
       const mobileDevice = isMobile ? selectedMobileDevice : null; // Use device ID directly (matches mobile-devices.js keys)
       const mobileNetwork = isMobile && selectedNetwork !== 'none' ? selectedNetwork : null;
       
-      if (electronAPI?.invoke && isMobile) {
-        // Use invoke API for mobile emulation (passes device settings to main process)
+      if (electronAPI?.invoke) {
+        // Use invoke API (passes device settings + browser type to main process)
         result = await electronAPI.invoke('playwright-recorder-start', {
           url,
           mobileDevice,
-          mobileNetwork
+          mobileNetwork,
+          browserType: selectedBrowser,
         });
       } else if (flowstral?.playwrightRecorder) {
         // Standard desktop recording or mobile via preload
         if (isMobile && flowstral.mobile?.setDevice) {
           await flowstral.mobile.setDevice(mobileDevice, mobileNetwork);
         }
-        result = await flowstral.playwrightRecorder.start(url, { captureNetwork });
+        result = await flowstral.playwrightRecorder.start(url, { captureNetwork, browserType: selectedBrowser });
       } else if (electronAPI?.startRecording) {
         await electronAPI.navigateEmbeddedBrowser?.(url);
         result = await electronAPI.startRecording({ captureNetwork });
@@ -2083,7 +2085,8 @@ export default function PlaywrightRecorderPage() {
         setCurrentUrl(url);
         const captureMsg = captureNetwork ? " (capturing network traffic)" : "";
         const mobileMsg = isMobile ? ` on ${getDeviceName(selectedMobileDevice)}` : "";
-        toast.success(`Recording started${mobileMsg}!${captureMsg}`);
+        const browserMsg = selectedBrowser !== 'chromium' ? ` [${selectedBrowser}]` : "";
+        toast.success(`Recording started${mobileMsg}${browserMsg}!${captureMsg}`);
       } else {
         toast.error(result?.error || "Failed to start");
       }
@@ -3085,6 +3088,8 @@ const handleExportToBuilder = async () => {
             setSelectedTestCase={setSelectedTestCase}
             setMode={setMode}
             setShowTestPicker={setShowTestPicker}
+            selectedBrowser={selectedBrowser}
+            setSelectedBrowser={setSelectedBrowser}
             mode={mode}
             stepLinks={stepLinks}
             stepAutomation={stepAutomation}

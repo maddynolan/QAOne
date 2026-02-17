@@ -148,6 +148,15 @@ export default function MobileTestStudio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlatform, maestroInstalled]);
 
+  // Listen for real-time Studio output from Electron IPC
+  useEffect(() => {
+    if (!inElectron) return;
+    const unsub = mobile.onStudioOutput?.((output: string) => {
+      addStudioOutput(output);
+    });
+    return () => { unsub?.(); };
+  }, [inElectron, addStudioOutput]);
+
   const handleStartStudio = async () => {
     if (!inElectron) {
       toast.error('Native app recording requires the desktop app');

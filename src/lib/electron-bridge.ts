@@ -488,6 +488,108 @@ export const mobile = {
     }
     return { running: false };
   },
+
+  // Device Lab: Screenshots
+  takeScreenshot: async (platform: 'ios' | 'android', deviceId?: string) => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-screenshot', { platform, deviceId });
+    return { success: false, error: 'Not available in browser' };
+  },
+
+  // Device Lab: Log capture
+  startLogs: async (platform: 'ios' | 'android', deviceId?: string, filter?: string) => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-start-logs', { platform, deviceId, filter });
+    return { success: false, error: 'Not available in browser' };
+  },
+  stopLogs: async () => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-stop-logs');
+    return { success: false, error: 'Not available in browser' };
+  },
+  onLogLine: (callback: (line: string) => void) => {
+    const api = getElectronAPI();
+    if (api) return api.on('mobile-log-line', callback);
+    return () => {};
+  },
+
+  // Device Lab: App management
+  installApp: async (appPath: string, platform: 'ios' | 'android', deviceId?: string) => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-install-app', { appPath, platform, deviceId });
+    return { success: false, error: 'Not available in browser' };
+  },
+  uninstallApp: async (bundleId: string, platform: 'ios' | 'android', deviceId?: string) => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-uninstall-app', { bundleId, platform, deviceId });
+    return { success: false, error: 'Not available in browser' };
+  },
+  browseForApp: async () => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-browse-app');
+    return { success: false, error: 'Not available in browser' };
+  },
+
+  // Inspector: Element hierarchy
+  getHierarchy: async (platform: 'ios' | 'android', deviceId?: string) => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-get-hierarchy', { platform, deviceId });
+    return { success: false, error: 'Not available in browser' };
+  },
+
+  // Studio output streaming
+  onStudioOutput: (callback: (output: string) => void) => {
+    const api = getElectronAPI();
+    if (api) return api.on('mobile-studio-output', callback);
+    return () => {};
+  },
+
+  // Advanced Tools
+  openDeepLink: async (platform: 'ios' | 'android', deviceId: string | undefined, url: string) => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-open-deep-link', { platform, deviceId, url });
+    return { success: false, error: 'Not available in browser' };
+  },
+  sendPush: async (platform: 'ios' | 'android', deviceId: string | undefined, payload: string, bundleId?: string) => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-send-push', { platform, deviceId, payload, bundleId });
+    return { success: false, error: 'Not available in browser' };
+  },
+  simulateBiometric: async (platform: 'ios' | 'android', deviceId: string | undefined, result: 'success' | 'failure') => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-simulate-biometric', { platform, deviceId, result });
+    return { success: false, error: 'Not available in browser' };
+  },
+  setGeoLocation: async (platform: 'ios' | 'android', deviceId: string | undefined, latitude: number, longitude: number) => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-set-geolocation', { platform, deviceId, latitude, longitude });
+    return { success: false, error: 'Not available in browser' };
+  },
+  setNetworkCondition: async (platform: 'ios' | 'android', deviceId: string | undefined, profile: any) => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-set-network', { platform, deviceId, profile });
+    return { success: false, error: 'Not available in browser' };
+  },
+  setOrientation: async (platform: 'ios' | 'android', deviceId: string | undefined, orientation: 'portrait' | 'landscape') => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-set-orientation', { platform, deviceId, orientation });
+    return { success: false, error: 'Not available in browser' };
+  },
+  setAppearance: async (platform: 'ios' | 'android', deviceId: string | undefined, mode: 'light' | 'dark') => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-set-appearance', { platform, deviceId, mode });
+    return { success: false, error: 'Not available in browser' };
+  },
+  setLocale: async (platform: 'ios' | 'android', deviceId: string | undefined, locale: string) => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-set-locale', { platform, deviceId, locale });
+    return { success: false, error: 'Not available in browser' };
+  },
+  setFontScale: async (platform: 'ios' | 'android', deviceId: string | undefined, scale: number) => {
+    const api = getElectronAPI();
+    if (api) return api.invoke('mobile-set-font-scale', { platform, deviceId, scale });
+    return { success: false, error: 'Not available in browser' };
+  },
 };
 
 // Export a single object for convenience

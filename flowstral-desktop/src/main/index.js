@@ -1018,25 +1018,28 @@ ipcMain.handle('playwright-recorder-start', async (event, arg) => {
     }
     
     // Handle both old (url-only string) and new (options object) call formats for backward compatibility
-    let actualUrl, device, network;
-    
+    let actualUrl, device, network, browserType;
+
     if (typeof arg === 'string') {
       // Old format: just a URL string
       actualUrl = arg;
       device = null;
       network = null;
+      browserType = 'chromium';
     } else if (arg && typeof arg === 'object') {
-      // New format: options object with url, mobileDevice, mobileNetwork
+      // New format: options object with url, mobileDevice, mobileNetwork, browserType
       actualUrl = arg.url;
       device = arg.mobileDevice;
       network = arg.mobileNetwork;
+      browserType = arg.browserType || 'chromium';
     } else {
       throw new Error('Invalid argument: expected URL string or options object');
     }
-    
+
     console.log('[PlaywrightRecorder] Starting with URL:', actualUrl);
     if (device) console.log('[PlaywrightRecorder] Mobile device:', device);
     if (network) console.log('[PlaywrightRecorder] Network:', network);
+    if (browserType !== 'chromium') console.log('[PlaywrightRecorder] Browser type:', browserType);
     
     if (!playwrightRecorder) {
       playwrightRecorder = new PlaywrightRecorder();
@@ -1057,8 +1060,8 @@ ipcMain.handle('playwright-recorder-start', async (event, arg) => {
       playwrightRecorder.setMobileNetwork(network);
     }
     
-    await playwrightRecorder.start(actualUrl);
-    
+    await playwrightRecorder.start(actualUrl, { browserType });
+
     // Include mobile config in status for UI display
     const mobileConfig = playwrightRecorder.getMobileConfig();
     sendToWebapp('recording-status', { 
@@ -1856,6 +1859,207 @@ ipcMain.handle('mobile-studio-status', async () => {
     };
   } catch (error) {
     return { success: false, running: false };
+  }
+});
+
+// ============================================================================
+// MOBILE DEVICE LAB IPC HANDLERS (screenshots, logs, app install, hierarchy)
+// ============================================================================
+
+// Store log capture process globally
+let mobileLogProcess = null;
+
+// Take device screenshot
+ipcMain.handle('mobile-screenshot', async (event, { platform, deviceId } = {}) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android', deviceId });
+    const result = await runner.takeScreenshot(deviceId);
+    if (!result.success) return result;
+    // Read file and return as base64 for display
+    const imageData = fs.readFileSync(result.path);
+    return { success: true, path: result.path, filename: result.filename, base64: imageData.toString('base64') };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Start device log capture (streaming)
+ipcMain.handle('mobile-start-logs', async (event, { platform, deviceId, filter } = {}) => {
+  try {
+    if (mobileLogProcess) { mobileLogProcess.kill(); mobileLogProcess = null; }
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android' });
+    mobileLogProcess = runner.startLogCapture(deviceId, filter);
+    mobileLogProcess.stdout.on('data', (data) => {
+      sendToWebapp('mobile-log-line', data.toString());
+    });
+    mobileLogProcess.stderr.on('data', (data) => {
+      sendToWebapp('mobile-log-line', data.toString());
+    });
+    mobileLogProcess.on('close', () => { mobileLogProcess = null; });
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Stop device log capture
+ipcMain.handle('mobile-stop-logs', async () => {
+  try {
+    if (mobileLogProcess) { mobileLogProcess.kill(); mobileLogProcess = null; }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Install app on device
+ipcMain.handle('mobile-install-app', async (event, { appPath, platform, deviceId } = {}) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android' });
+    return await runner.installApp(appPath, deviceId);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Uninstall app from device
+ipcMain.handle('mobile-uninstall-app', async (event, { bundleId, platform, deviceId } = {}) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android' });
+    return await runner.uninstallApp(bundleId, deviceId);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Browse for app file (file dialog)
+ipcMain.handle('mobile-browse-app', async () => {
+  try {
+    const { dialog } = require('electron');
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [{ name: 'Mobile Apps', extensions: ['apk', 'aab', 'ipa', 'app'] }]
+    });
+    if (result.canceled) return { success: false, canceled: true };
+    return { success: true, path: result.filePaths[0] };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Get element hierarchy for inspector
+ipcMain.handle('mobile-get-hierarchy', async (event, { platform, deviceId } = {}) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android' });
+    return await runner.getElementHierarchy(deviceId);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// ==== Mobile Advanced Tools IPC Handlers ====
+
+// Open deep link on device
+ipcMain.handle('mobile-open-deep-link', async (event, { platform, deviceId, url } = {}) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android' });
+    return await runner.openDeepLink(url, deviceId);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Send push notification to device
+ipcMain.handle('mobile-send-push', async (event, { platform, deviceId, payload, bundleId } = {}) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android' });
+    return await runner.sendPushNotification(payload, bundleId, deviceId);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Simulate biometric result
+ipcMain.handle('mobile-simulate-biometric', async (event, { platform, deviceId, result } = {}) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android' });
+    return await runner.simulateBiometric(result, deviceId);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Set device geolocation
+ipcMain.handle('mobile-set-geolocation', async (event, { platform, deviceId, latitude, longitude } = {}) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android' });
+    return await runner.setGeoLocation(latitude, longitude, deviceId);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Set network condition
+ipcMain.handle('mobile-set-network', async (event, { platform, deviceId, profile } = {}) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android' });
+    return await runner.setNetworkCondition(profile, deviceId);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Set device orientation
+ipcMain.handle('mobile-set-orientation', async (event, { platform, deviceId, orientation } = {}) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android' });
+    return await runner.setOrientation(orientation, deviceId);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Set device appearance (dark/light mode)
+ipcMain.handle('mobile-set-appearance', async (event, { platform, deviceId, mode } = {}) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android' });
+    return await runner.setAppearance(mode, deviceId);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Set device locale
+ipcMain.handle('mobile-set-locale', async (event, { platform, deviceId, locale } = {}) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android' });
+    return await runner.setLocale(locale, deviceId);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Set font scale
+ipcMain.handle('mobile-set-font-scale', async (event, { platform, deviceId, scale } = {}) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android' });
+    return await runner.setFontScale(scale, deviceId);
+  } catch (error) {
+    return { success: false, error: error.message };
   }
 });
 

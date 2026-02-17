@@ -50,6 +50,7 @@ import {
   Terminal,
   Image,
   Maximize2,
+  Play,
 } from 'lucide-react';
 
 export default function MobileDeviceLab() {
@@ -114,16 +115,20 @@ export default function MobileDeviceLab() {
     }
     setIsInstalling(true);
     try {
-      // This would call an actual IPC method in production
-      toast.success('App installation initiated');
-      addInstalledApp({
-        bundle_id: appBundleId || 'com.installed.app',
-        name: installPath.split(/[/\\]/).pop() || 'App',
-        version: '1.0.0',
-        platform: selectedPlatform,
-        installed_at: new Date().toISOString(),
-      });
-      setInstallPath('');
+      const result = await mobile.installApp(installPath, selectedPlatform, selectedDevice?.id || selectedDevice);
+      if (result.success) {
+        toast.success('App installed successfully');
+        addInstalledApp({
+          bundle_id: appBundleId || installPath.split(/[/\\]/).pop()?.replace(/\.\w+$/, '') || 'unknown',
+          name: installPath.split(/[/\\]/).pop() || 'App',
+          version: '1.0.0',
+          platform: selectedPlatform,
+          installed_at: new Date().toISOString(),
+        });
+        setInstallPath('');
+      } else {
+        toast.error(result.error || 'Failed to install app');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to install app');
     } finally {
@@ -134,9 +139,13 @@ export default function MobileDeviceLab() {
   const handleTakeScreenshot = async () => {
     setIsTakingScreenshot(true);
     try {
-      // In production, this calls the actual screenshot IPC
-      toast.success('Screenshot captured!');
-      setScreenshots(prev => [...prev, `screenshot_${Date.now()}.png`]);
+      const result = await mobile.takeScreenshot(selectedPlatform, selectedDevice?.id || selectedDevice);
+      if (result.success) {
+        toast.success('Screenshot captured!');
+        setScreenshots(prev => [...prev, result.base64 ? `data:image/png;base64,${result.base64}` : result.filename]);
+      } else {
+        toast.error(result.error || 'Failed to take screenshot');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to take screenshot');
     } finally {
@@ -144,26 +153,33 @@ export default function MobileDeviceLab() {
     }
   };
 
-  const handleStartLogs = () => {
+  const handleStartLogs = async () => {
     setIsCapturingLogs(true);
     setDeviceLogs([
-      `[${new Date().toLocaleTimeString()}] Log capture started for ${selectedDevice || 'device'}...`,
-      `[${new Date().toLocaleTimeString()}] Waiting for ${selectedPlatform === 'ios' ? 'syslog' : 'logcat'} output...`,
+      `[${new Date().toLocaleTimeString()}] Starting ${selectedPlatform === 'ios' ? 'syslog' : 'logcat'} capture...`,
     ]);
-    // In production, this would stream real device logs via IPC
-    const interval = setInterval(() => {
+
+    const result = await mobile.startLogs(selectedPlatform, selectedDevice?.id || selectedDevice);
+    if (!result.success) {
+      toast.error(result.error || 'Failed to start log capture');
+      setIsCapturingLogs(false);
+      return;
+    }
+
+    // Listen for streamed log lines from device
+    const unsub = mobile.onLogLine?.((line: string) => {
       setDeviceLogs(prev => {
-        if (prev.length > 500) return prev; // Cap logs
-        return [...prev, `[${new Date().toLocaleTimeString()}] Device log: ${selectedPlatform === 'ios' ? 'com.apple.system' : 'system_process'} - Activity resumed`];
+        if (prev.length > 2000) return [...prev.slice(-1000), line];
+        return [...prev, line];
       });
-    }, 3000);
-    // Store interval for cleanup
-    (window as any).__mobileLogInterval = interval;
+    });
+    (window as any).__mobileLogUnsub = unsub;
   };
 
-  const handleStopLogs = () => {
+  const handleStopLogs = async () => {
     setIsCapturingLogs(false);
-    clearInterval((window as any).__mobileLogInterval);
+    await mobile.stopLogs();
+    (window as any).__mobileLogUnsub?.();
     setDeviceLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Log capture stopped.`]);
   };
 
@@ -355,7 +371,10 @@ export default function MobileDeviceLab() {
                     placeholder={selectedPlatform === 'ios' ? '/path/to/MyApp.app' : '/path/to/app.apk'}
                     className="flex-1 text-xs"
                   />
-                  <Button size="sm" variant="outline" className="shrink-0">
+                  <Button size="sm" variant="outline" className="shrink-0" onClick={async () => {
+                    const result = await mobile.browseForApp();
+                    if (result?.success) setInstallPath(result.path);
+                  }}>
                     Browse
                   </Button>
                 </div>
@@ -519,10 +538,14 @@ export default function MobileDeviceLab() {
               {screenshots.map((ss, idx) => (
                 <div key={idx} className={cn("rounded-lg border overflow-hidden group relative", isDark ? 'border-gray-700' : 'border-gray-200')}>
                   <div className={cn("aspect-[9/16] flex items-center justify-center", isDark ? 'bg-gray-800' : 'bg-gray-100')}>
-                    <Image className={cn("w-8 h-8", isDark ? 'text-gray-600' : 'text-gray-300')} />
+                    {ss.startsWith('data:image') ? (
+                      <img src={ss} alt={`Screenshot ${idx + 1}`} className="w-full h-full object-contain" />
+                    ) : (
+                      <Image className={cn("w-8 h-8", isDark ? 'text-gray-600' : 'text-gray-300')} />
+                    )}
                   </div>
                   <div className={cn("p-2 text-[10px]", isDark ? 'text-gray-400' : 'text-gray-500')}>
-                    {ss}
+                    {ss.startsWith('data:image') ? `Screenshot ${idx + 1}` : ss}
                   </div>
                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                     <Button size="sm" variant="secondary" className="h-7 text-xs"><Maximize2 className="w-3 h-3 mr-1" /> View</Button>

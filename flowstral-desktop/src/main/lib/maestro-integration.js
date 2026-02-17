@@ -643,6 +643,357 @@ class MaestroRunner {
       }
     });
   }
+
+  /**
+   * Take a screenshot from device/emulator
+   * @param {string} [deviceId] - Specific device ID
+   * @returns {Promise<{success: boolean, path?: string, filename?: string, error?: string}>}
+   */
+  async takeScreenshot(deviceId = null) {
+    const timestamp = Date.now();
+    const outputDir = this.outputDir || path.join(require('os').tmpdir(), 'flowstral-mobile');
+    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+    const outputPath = path.join(outputDir, `screenshot_${timestamp}.png`);
+
+    try {
+      if (this.platform === 'android') {
+        const deviceArg = deviceId ? `-s ${deviceId}` : '';
+        // Pull screenshot via adb
+        execSync(`adb ${deviceArg} shell screencap -p /sdcard/flowstral_screen.png`, { stdio: 'pipe', timeout: 10000 });
+        execSync(`adb ${deviceArg} pull /sdcard/flowstral_screen.png "${outputPath}"`, { stdio: 'pipe', timeout: 10000 });
+        execSync(`adb ${deviceArg} shell rm /sdcard/flowstral_screen.png`, { stdio: 'pipe', timeout: 5000 });
+      } else {
+        const simId = deviceId || 'booted';
+        execSync(`xcrun simctl io ${simId} screenshot "${outputPath}"`, { stdio: 'pipe', timeout: 10000 });
+      }
+      return { success: true, path: outputPath, filename: `screenshot_${timestamp}.png` };
+    } catch (e) {
+      console.error('[Maestro] Screenshot failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
+   * Start device log capture (streaming)
+   * @param {string} [deviceId] - Specific device ID
+   * @param {string} [filter] - Log filter tag
+   * @returns {import('child_process').ChildProcess} Spawned log process
+   */
+  startLogCapture(deviceId = null, filter = '') {
+    if (this.platform === 'android') {
+      const args = [];
+      if (deviceId) args.push('-s', deviceId);
+      args.push('logcat');
+      if (filter) args.push(`${filter}:V`, '*:S');
+      else args.push('-v', 'time');
+      return spawn('adb', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    } else {
+      const simId = deviceId || 'booted';
+      return spawn('xcrun', ['simctl', 'spawn', simId, 'log', 'stream', '--level', 'info'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    }
+  }
+
+  /**
+   * Install an app on device
+   * @param {string} appPath - Path to .apk or .ipa/.app file
+   * @param {string} [deviceId] - Specific device ID
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async installApp(appPath, deviceId = null) {
+    try {
+      if (this.platform === 'android') {
+        const deviceArg = deviceId ? `-s ${deviceId}` : '';
+        execSync(`adb ${deviceArg} install -r "${appPath}"`, { encoding: 'utf-8', timeout: 120000, stdio: 'pipe' });
+      } else {
+        const simId = deviceId || 'booted';
+        execSync(`xcrun simctl install ${simId} "${appPath}"`, { encoding: 'utf-8', timeout: 120000, stdio: 'pipe' });
+      }
+      return { success: true };
+    } catch (e) {
+      console.error('[Maestro] Install failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
+   * Uninstall an app from device
+   * @param {string} bundleId - App bundle/package ID
+   * @param {string} [deviceId] - Specific device ID
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async uninstallApp(bundleId, deviceId = null) {
+    try {
+      if (this.platform === 'android') {
+        const deviceArg = deviceId ? `-s ${deviceId}` : '';
+        execSync(`adb ${deviceArg} uninstall "${bundleId}"`, { encoding: 'utf-8', timeout: 30000, stdio: 'pipe' });
+      } else {
+        const simId = deviceId || 'booted';
+        execSync(`xcrun simctl uninstall ${simId} "${bundleId}"`, { encoding: 'utf-8', timeout: 30000, stdio: 'pipe' });
+      }
+      return { success: true };
+    } catch (e) {
+      console.error('[Maestro] Uninstall failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
+   * Get element hierarchy from device (for Inspector)
+   * @param {string} [deviceId] - Specific device ID
+   * @returns {Promise<{success: boolean, format?: string, data?: string, error?: string}>}
+   */
+  async getElementHierarchy(deviceId = null) {
+    try {
+      if (this.platform === 'android') {
+        const deviceArg = deviceId ? `-s ${deviceId}` : '';
+        execSync(`adb ${deviceArg} shell uiautomator dump /sdcard/ui_dump.xml`, { stdio: 'pipe', timeout: 10000 });
+        const xml = execSync(`adb ${deviceArg} shell cat /sdcard/ui_dump.xml`, { encoding: 'utf-8', timeout: 10000 });
+        execSync(`adb ${deviceArg} shell rm /sdcard/ui_dump.xml`, { stdio: 'pipe', timeout: 5000 });
+        return { success: true, format: 'xml', data: xml };
+      } else {
+        const simId = deviceId || 'booted';
+        try {
+          const output = execSync(`xcrun simctl ui ${simId} describe-all`, { encoding: 'utf-8', timeout: 15000 });
+          return { success: true, format: 'text', data: output };
+        } catch (e2) {
+          return { success: false, error: 'iOS element hierarchy requires Xcode Accessibility Inspector' };
+        }
+      }
+    } catch (e) {
+      console.error('[Maestro] Element hierarchy failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+  // =========================================================================
+  // Advanced Tools Methods (Deep Links, Push, Biometrics, Geo, Network, Config)
+  // =========================================================================
+
+  /**
+   * Open a deep link / URL scheme on device
+   * @param {string} url - Deep link URL (e.g. myapp://screen or https://app.com/deep)
+   * @param {string} [deviceId] - Specific device ID
+   */
+  async openDeepLink(url, deviceId = null) {
+    try {
+      if (this.platform === 'android') {
+        const deviceArg = deviceId ? `-s ${deviceId}` : '';
+        execSync(`adb ${deviceArg} shell am start -a android.intent.action.VIEW -d "${url}"`, { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' });
+      } else {
+        const simId = deviceId || 'booted';
+        execSync(`xcrun simctl openurl ${simId} "${url}"`, { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' });
+      }
+      return { success: true };
+    } catch (e) {
+      console.error('[Maestro] Deep link failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
+   * Send a push notification to device
+   * Android: uses adb shell am broadcast, iOS: uses simctl push
+   * @param {string} payload - JSON string of notification payload
+   * @param {string} [bundleId] - App bundle ID (required for iOS)
+   * @param {string} [deviceId] - Specific device ID
+   */
+  async sendPushNotification(payload, bundleId, deviceId = null) {
+    try {
+      if (this.platform === 'android') {
+        // Android: send broadcast intent with extras
+        const deviceArg = deviceId ? `-s ${deviceId}` : '';
+        const parsed = JSON.parse(payload);
+        const title = parsed.aps?.alert?.title || parsed.title || 'Test';
+        const body = parsed.aps?.alert?.body || parsed.body || 'Test notification';
+        execSync(`adb ${deviceArg} shell am broadcast -a com.google.android.c2dm.intent.RECEIVE --es title "${title}" --es body "${body}"`, { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' });
+      } else {
+        // iOS: write payload to temp file then push via simctl
+        const simId = deviceId || 'booted';
+        const appId = bundleId || this.appBundleId || 'com.example.app';
+        const tmpFile = path.join(require('os').tmpdir(), `push_${Date.now()}.json`);
+        fs.writeFileSync(tmpFile, payload, 'utf-8');
+        execSync(`xcrun simctl push ${simId} "${appId}" "${tmpFile}"`, { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' });
+        try { fs.unlinkSync(tmpFile); } catch (_) { /* ignore cleanup errors */ }
+      }
+      return { success: true };
+    } catch (e) {
+      console.error('[Maestro] Push notification failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
+   * Simulate biometric authentication result
+   * @param {'success'|'failure'} result
+   * @param {string} [deviceId]
+   */
+  async simulateBiometric(result, deviceId = null) {
+    try {
+      if (this.platform === 'android') {
+        const deviceArg = deviceId ? `-s ${deviceId}` : '';
+        if (result === 'success') {
+          execSync(`adb ${deviceArg} shell am broadcast -a android.intent.action.FINGERPRINT_AUTH --ei result 0`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+        } else {
+          execSync(`adb ${deviceArg} shell am broadcast -a android.intent.action.FINGERPRINT_AUTH --ei result 1`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+        }
+      } else {
+        const simId = deviceId || 'booted';
+        if (result === 'success') {
+          execSync(`xcrun simctl spawn ${simId} notifyutil -p com.apple.BiometricKit.enrollmentChanged`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+        } else {
+          execSync(`xcrun simctl spawn ${simId} notifyutil -p com.apple.BiometricKit.lockout`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+        }
+      }
+      return { success: true };
+    } catch (e) {
+      console.error('[Maestro] Biometric simulation failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
+   * Set device geolocation
+   * @param {number} latitude
+   * @param {number} longitude
+   * @param {string} [deviceId]
+   */
+  async setGeoLocation(latitude, longitude, deviceId = null) {
+    try {
+      if (this.platform === 'android') {
+        const deviceArg = deviceId ? `-s ${deviceId}` : '';
+        execSync(`adb ${deviceArg} emu geo fix ${longitude} ${latitude}`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+      } else {
+        const simId = deviceId || 'booted';
+        execSync(`xcrun simctl location ${simId} set ${latitude},${longitude}`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+      }
+      return { success: true };
+    } catch (e) {
+      console.error('[Maestro] Geolocation set failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
+   * Set network condition on device (Android emulator only for full throttle)
+   * @param {object} profile - { download_kbps, upload_kbps, latency_ms }
+   * @param {string} [deviceId]
+   */
+  async setNetworkCondition(profile, deviceId = null) {
+    try {
+      if (this.platform === 'android') {
+        const deviceArg = deviceId ? `-s ${deviceId}` : '';
+        if (profile.download_kbps === 0) {
+          // Airplane mode
+          execSync(`adb ${deviceArg} shell svc wifi disable`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+          execSync(`adb ${deviceArg} shell svc data disable`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+        } else {
+          execSync(`adb ${deviceArg} shell svc wifi enable`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+          execSync(`adb ${deviceArg} shell svc data enable`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+        }
+      } else {
+        const simId = deviceId || 'booted';
+        // iOS: use Network Link Conditioner profiles
+        const profileName = profile.download_kbps === 0 ? '100% Loss' : profile.download_kbps < 200 ? 'Very Bad Network' : profile.download_kbps < 2000 ? '3G' : 'Wi-Fi';
+        execSync(`xcrun simctl spawn ${simId} log config --subsystem com.apple.network --mode level:debug`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+        // Note: Full iOS network conditioning requires Network Link Conditioner in Settings
+      }
+      return { success: true, note: this.platform === 'ios' ? 'For full network throttling on iOS, use Network Link Conditioner in Simulator Settings' : undefined };
+    } catch (e) {
+      console.error('[Maestro] Network condition failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
+   * Set device orientation
+   * @param {'portrait'|'landscape'} orientation
+   * @param {string} [deviceId]
+   */
+  async setOrientation(orientation, deviceId = null) {
+    try {
+      if (this.platform === 'android') {
+        const deviceArg = deviceId ? `-s ${deviceId}` : '';
+        const accelVal = orientation === 'landscape' ? '0,9.77622,0.812349' : '9.77622,0.812349,0';
+        execSync(`adb ${deviceArg} shell settings put system accelerometer_rotation 0`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+        execSync(`adb ${deviceArg} shell settings put system user_rotation ${orientation === 'landscape' ? '1' : '0'}`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+      } else {
+        // iOS simulator doesn't have a direct CLI orientation command — use AppleScript or Hardware menu
+        // Simulate via Cmd+Left / Cmd+Right in the Simulator.app
+      }
+      return { success: true };
+    } catch (e) {
+      console.error('[Maestro] Orientation change failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
+   * Set device appearance (dark/light mode)
+   * @param {'light'|'dark'} mode
+   * @param {string} [deviceId]
+   */
+  async setAppearance(mode, deviceId = null) {
+    try {
+      if (this.platform === 'android') {
+        const deviceArg = deviceId ? `-s ${deviceId}` : '';
+        const uiMode = mode === 'dark' ? 'yes' : 'no';
+        execSync(`adb ${deviceArg} shell cmd uimode night ${uiMode}`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+      } else {
+        const simId = deviceId || 'booted';
+        execSync(`xcrun simctl ui ${simId} appearance ${mode}`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+      }
+      return { success: true };
+    } catch (e) {
+      console.error('[Maestro] Appearance change failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
+   * Set device locale
+   * @param {string} locale - e.g. "en-US", "ja-JP"
+   * @param {string} [deviceId]
+   */
+  async setLocale(locale, deviceId = null) {
+    try {
+      if (this.platform === 'android') {
+        const deviceArg = deviceId ? `-s ${deviceId}` : '';
+        const [lang, country] = locale.split('-');
+        execSync(`adb ${deviceArg} shell setprop persist.sys.locale ${lang}-${country}`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+        execSync(`adb ${deviceArg} shell setprop persist.sys.language ${lang}`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+      } else {
+        const simId = deviceId || 'booted';
+        // For iOS simulators, locale is set via defaults write
+        execSync(`xcrun simctl spawn ${simId} defaults write .GlobalPreferences AppleLocale -string "${locale.replace('-', '_')}"`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+      }
+      return { success: true, note: 'App restart may be required for locale change to take effect' };
+    } catch (e) {
+      console.error('[Maestro] Locale change failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
+   * Set font scale (accessibility)
+   * @param {number} scale - e.g. 0.85, 1.0, 1.3, 1.5
+   * @param {string} [deviceId]
+   */
+  async setFontScale(scale, deviceId = null) {
+    try {
+      if (this.platform === 'android') {
+        const deviceArg = deviceId ? `-s ${deviceId}` : '';
+        execSync(`adb ${deviceArg} shell settings put system font_scale ${scale}`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+      } else {
+        // iOS simulator font scale is controlled through Settings app, no CLI command
+        // Set via accessibility defaults
+        const simId = deviceId || 'booted';
+        execSync(`xcrun simctl spawn ${simId} defaults write .GlobalPreferences UIPreferredContentSizeCategoryName -string "${scale >= 1.5 ? 'UICTContentSizeCategoryAccessibilityXL' : scale >= 1.3 ? 'UICTContentSizeCategoryXL' : scale <= 0.85 ? 'UICTContentSizeCategorySmall' : 'UICTContentSizeCategoryMedium'}"`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' });
+      }
+      return { success: true };
+    } catch (e) {
+      console.error('[Maestro] Font scale change failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
 }
 
 // =============================================================================

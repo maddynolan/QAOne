@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { useMobileTestingStore } from '@/modules/mobile-testing/store/mobileTestingStore';
 import type { ElementNode } from '@/modules/mobile-testing/store/mobileTestingStore';
+import { mobile } from '@/lib/electron-bridge';
 import { toast } from 'sonner';
 import {
   Search,
@@ -42,6 +43,37 @@ import {
   Maximize2,
   Info,
 } from 'lucide-react';
+
+/** Parse Android uiautomator XML dump into ElementNode tree */
+function parseXmlHierarchy(xmlString: string): ElementNode {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlString, 'text/xml');
+
+  let nodeIdx = 0;
+  const parseNode = (el: Element): ElementNode => {
+    const bounds = el.getAttribute('bounds') || '';
+    const match = bounds.match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
+    const resId = el.getAttribute('resource-id') || '';
+    nodeIdx++;
+    return {
+      id: `node_${nodeIdx}_${resId || el.tagName}`,
+      type: (el.getAttribute('class') || el.tagName).split('.').pop() || el.tagName,
+      text: el.getAttribute('text') || '',
+      resource_id: resId,
+      content_desc: el.getAttribute('content-desc') || '',
+      bounds: match
+        ? { x: +match[1], y: +match[2], width: +match[3] - +match[1], height: +match[4] - +match[2] }
+        : { x: 0, y: 0, width: 0, height: 0 },
+      clickable: el.getAttribute('clickable') === 'true',
+      visible: el.getAttribute('displayed') !== 'false',
+      attributes: Object.fromEntries(Array.from(el.attributes).map(a => [a.name, a.value])),
+      children: Array.from(el.children).map(c => parseNode(c as Element)),
+    };
+  };
+
+  const root = doc.querySelector('hierarchy') || doc.documentElement;
+  return parseNode(root);
+}
 
 // Sample element tree for demo
 const SAMPLE_TREE: ElementNode = {
@@ -164,12 +196,29 @@ export default function MobileInspector() {
 
   const handleRefresh = async () => {
     setIsLoading(true);
-    // In production, this would fetch the actual element hierarchy
-    setTimeout(() => {
+    try {
+      const platform = useMobileTestingStore.getState().selectedPlatform;
+      const device = useMobileTestingStore.getState().selectedDevice;
+      const result = await mobile.getHierarchy(platform, device?.id || device);
+      if (result.success && result.data) {
+        if (result.format === 'xml') {
+          const parsed = parseXmlHierarchy(result.data);
+          setElementTree(parsed);
+        } else {
+          // Non-XML format (iOS text) — fall back to sample
+          setElementTree(SAMPLE_TREE);
+        }
+        toast.success('Element tree refreshed from device');
+      } else {
+        toast.error(result.error || 'Failed to get element hierarchy');
+        setElementTree(SAMPLE_TREE);
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to refresh hierarchy');
       setElementTree(SAMPLE_TREE);
+    } finally {
       setIsLoading(false);
-      toast.success('Element tree refreshed');
-    }, 1000);
+    }
   };
 
   const handleStartInspecting = () => {

@@ -56,8 +56,32 @@ export default function Performance() {
     thinkTime: 1000,
   });
   const [systemMetrics, setSystemMetrics] = useState<any>(null);
-  const [testHistory, setTestHistory] = useState<any[]>([]);
+  const [testHistory, setTestHistory] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('flowstral-perf-history');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
   
+  // Server-side runner toggle (breaks 20 VU ceiling)
+  const [useServerRunner, setUseServerRunner] = useState(false);
+  const [serverTestId, setServerTestId] = useState<string | null>(null);
+  const serverPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Cleanup server poll on unmount
+  useEffect(() => {
+    return () => {
+      if (serverPollRef.current) clearInterval(serverPollRef.current);
+    };
+  }, []);
+
+  // Persist test history to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('flowstral-perf-history', JSON.stringify(testHistory.slice(0, 50)));
+    } catch { /* ignore quota errors */ }
+  }, [testHistory]);
+
   // Protocol capture state
   const [protocolCaptureEnabled, setProtocolCaptureEnabled] = useState(false);
   const [protocolRecording, setProtocolRecording] = useState<ProtocolRecording | null>(null);
@@ -380,15 +404,103 @@ export default function Performance() {
       ? recorderEndpoints
       : [{ method: "GET" as const, path: "/api/products", weight: 100 }];
     let virtualUsers = scenario?.virtualUsers ?? customConfig.virtualUsers;
+    const baseUrl = customConfig.baseUrl || ECOMMERCE_TEST_URL;
+
+    // Server-side execution path: no VU cap, uses backend PerformanceEngine
+    if (useServerRunner && virtualUsers > MAX_BROWSER_VUS) {
+      try {
+        setIsRunning(true);
+        const endpoints = scenario?.endpoints || defaultEndpoints;
+
+        // Step 1: Create scenario on backend
+        const createRes = await fetch(`${API_BASE_URL}/api/performance/scenarios`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: scenario?.name || `Load Test ${Date.now()}`,
+            description: `${virtualUsers} VUs, ${scenario?.duration || customConfig.duration}s`,
+          }),
+        });
+        const createData = await createRes.json();
+        const scenarioId = createData.scenario_id || createData.id;
+        if (!scenarioId) throw new Error('Failed to create scenario');
+
+        // Step 2: Add HTTP steps to scenario
+        for (const ep of endpoints) {
+          await fetch(`${API_BASE_URL}/api/performance/scenarios/${scenarioId}/steps`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'http_request',
+              config: { method: ep.method, url: `${baseUrl}${ep.path}`, weight: ep.weight },
+            }),
+          });
+        }
+
+        // Step 3: Run on server
+        const runRes = await fetch(`${API_BASE_URL}/api/performance/tests/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scenario_id: scenarioId,
+            virtual_users: virtualUsers,
+            duration_seconds: scenario?.duration || customConfig.duration,
+            ramp_up_seconds: scenario?.rampUp || customConfig.rampUp,
+            base_url: baseUrl,
+          }),
+        });
+        const runData = await runRes.json();
+        const testId = runData.test_id;
+        if (!testId) throw new Error('Failed to start server test');
+        setServerTestId(testId);
+        toast.success(`Server-side load test started (${virtualUsers} VUs) — Test ID: ${testId}`);
+
+        // Step 4: Poll for status
+        serverPollRef.current = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`${API_BASE_URL}/api/performance/tests/${testId}/status`);
+            const statusData = await statusRes.json();
+            const testStatus = statusData.test?.status || statusData.status;
+            if (testStatus === 'completed' || testStatus === 'error' || testStatus === 'failed') {
+              clearInterval(serverPollRef.current!);
+              serverPollRef.current = null;
+              setIsRunning(false);
+              setServerTestId(null);
+              if (testStatus === 'completed') {
+                toast.success('Server-side load test completed!');
+                // Add to history
+                setTestHistory(prev => [{
+                  id: testId,
+                  name: scenario?.name || 'Custom',
+                  virtualUsers,
+                  duration: scenario?.duration || customConfig.duration,
+                  status: 'completed',
+                  metrics: statusData.test?.metrics || statusData.metrics || {},
+                  timestamp: new Date().toISOString(),
+                }, ...prev].slice(0, 10));
+              } else {
+                toast.error(`Server test failed: ${statusData.test?.error || statusData.error || 'Unknown error'}`);
+              }
+            }
+          } catch { /* continue polling */ }
+        }, 2000);
+
+        return;
+      } catch (error: any) {
+        toast.error(`Server run failed: ${error.message}. Falling back to in-browser.`);
+        setIsRunning(false);
+        setServerTestId(null);
+      }
+    }
+
+    // In-browser execution path (capped at MAX_BROWSER_VUS)
     if (virtualUsers > MAX_BROWSER_VUS) {
-      toast.warning(`In-browser runner capped at ${MAX_BROWSER_VUS} VUs. Use Go runner or k6 for ${virtualUsers}+ VUs.`);
+      toast.warning(`In-browser runner capped at ${MAX_BROWSER_VUS} VUs. Enable "Run on Server" for ${virtualUsers}+ VUs.`);
       virtualUsers = MAX_BROWSER_VUS;
     }
     const config = scenario
       ? { ...scenario, virtualUsers: Math.min(scenario.virtualUsers, MAX_BROWSER_VUS) }
       : { virtualUsers, duration: customConfig.duration, rampUp: customConfig.rampUp, endpoints: defaultEndpoints };
-    
-    const baseUrl = customConfig.baseUrl || ECOMMERCE_TEST_URL;
     
     // Check if target is reachable (try /health then base URL)
     try {
@@ -1466,17 +1578,34 @@ export default function Performance() {
                 />
               </div>
 
+              {/* Server Runner Toggle */}
+              <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+                <Switch
+                  id="server-runner"
+                  checked={useServerRunner}
+                  onCheckedChange={setUseServerRunner}
+                />
+                <div>
+                  <Label htmlFor="server-runner" className="cursor-pointer font-medium">Run on Server</Label>
+                  <p className="text-xs text-muted-foreground">Unlimited VUs via backend PerformanceEngine (requires backend running)</p>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Virtual Users (browser max {MAX_BROWSER_VUS})</Label>
+                  <Label>Virtual Users {useServerRunner ? '(server — unlimited)' : `(browser max ${MAX_BROWSER_VUS})`}</Label>
                   <Input
                     type="number"
                     min={1}
-                    max={MAX_BROWSER_VUS}
-                    value={Math.min(customConfig.virtualUsers, MAX_BROWSER_VUS)}
-                    onChange={(e) => setCustomConfig({ ...customConfig, virtualUsers: Math.min(parseInt(e.target.value) || 10, MAX_BROWSER_VUS) })}
+                    max={useServerRunner ? 10000 : MAX_BROWSER_VUS}
+                    value={useServerRunner ? customConfig.virtualUsers : Math.min(customConfig.virtualUsers, MAX_BROWSER_VUS)}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 10;
+                      setCustomConfig({ ...customConfig, virtualUsers: useServerRunner ? val : Math.min(val, MAX_BROWSER_VUS) });
+                    }}
                   />
-                  <p className="text-xs text-muted-foreground">For more VUs use Go runner or k6 (Setup tab).</p>
+                  {!useServerRunner && <p className="text-xs text-muted-foreground">Enable "Run on Server" for more VUs.</p>}
+                  {useServerRunner && customConfig.virtualUsers > 100 && <p className="text-xs text-amber-500">High VU counts require a capable backend server.</p>}
                 </div>
                 <div className="space-y-2">
                   <Label>Duration (seconds)</Label>
@@ -1572,6 +1701,51 @@ export default function Performance() {
                 >
                   Full load test (Lighthouse → SRM → Run → Correlation → Lighthouse)
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* HAR Import */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><FileSpreadsheet className="w-5 h-5" /> Import HAR File</CardTitle>
+              <CardDescription>Import a HAR (HTTP Archive) file to create load test scenarios from captured traffic</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-3 items-center">
+                <Input
+                  type="file"
+                  accept=".har"
+                  className="flex-1"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const formData = new FormData();
+                      formData.append('file', file);
+                      const res = await fetch(`${API_BASE_URL}/api/import/har`, {
+                        method: 'POST',
+                        body: formData,
+                      });
+                      if (!res.ok) throw new Error(`Import failed: ${res.status}`);
+                      const data = await res.json();
+                      const entries = data.requests || data.entries || [];
+                      toast.success(`Imported ${entries.length} requests from HAR file`);
+                      if (entries.length > 0) {
+                        // Use first entry's URL as base URL
+                        try {
+                          const firstUrl = new URL(entries[0].url || entries[0].request?.url || '');
+                          setCustomConfig(prev => ({ ...prev, baseUrl: `${firstUrl.protocol}//${firstUrl.host}` }));
+                        } catch { /* ignore URL parse errors */ }
+                      }
+                    } catch (err: any) {
+                      toast.error(err.message || 'Failed to import HAR file');
+                    }
+                    // Reset input
+                    e.target.value = '';
+                  }}
+                />
+                <p className="text-xs text-muted-foreground shrink-0">Max 50MB</p>
               </div>
             </CardContent>
           </Card>

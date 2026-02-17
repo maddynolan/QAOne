@@ -57,6 +57,9 @@ interface RecordingControlsPanelProps {
   setSelectedTestCase: (tc: any) => void;
   setMode: (mode: string) => void;
   setShowTestPicker: (show: boolean) => void;
+  // Browser selection
+  selectedBrowser: 'chromium' | 'firefox' | 'webkit';
+  setSelectedBrowser: (browser: 'chromium' | 'firefox' | 'webkit') => void;
   // Linking status bar props
   mode: string;
   stepLinks: Record<number, any>;
@@ -98,6 +101,8 @@ export default function RecordingControlsPanel({
   setSelectedTestCase,
   setMode,
   setShowTestPicker,
+  selectedBrowser,
+  setSelectedBrowser,
   mode,
   stepLinks,
   stepAutomation,
@@ -156,6 +161,19 @@ export default function RecordingControlsPanel({
                 </SelectContent>
               </Select>
             )}
+
+            {/* Browser Engine Selector */}
+            <Select value={selectedBrowser} onValueChange={(v) => setSelectedBrowser(v as 'chromium' | 'firefox' | 'webkit')}>
+              <SelectTrigger className="h-8 w-[140px] text-xs">
+                <Globe className="h-3.5 w-3.5 mr-1.5" />
+                <SelectValue placeholder="Browser" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="chromium" className="text-xs">Chromium</SelectItem>
+                <SelectItem value="firefox" className="text-xs">Firefox</SelectItem>
+                <SelectItem value="webkit" className="text-xs">WebKit (Safari)</SelectItem>
+              </SelectContent>
+            </Select>
 
             {selectedMobileDevice !== 'desktop' && (
               <Badge variant="outline" className="h-8 px-2 text-[10px] bg-sky-500/10 text-sky-500 border-sky-500/30">

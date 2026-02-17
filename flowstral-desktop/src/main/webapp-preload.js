@@ -173,6 +173,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'goal-agent-progress',
       'goal-agent-complete',
       'goal-agent-error',
+      // Mobile device lab events
+      'mobile-log-line',
+      'mobile-studio-output',
     ];
     
     if (validChannels.includes(channel)) {
@@ -335,6 +338,26 @@ contextBridge.exposeInMainWorld('flowstral', {
     startStudio: (deviceId) => ipcRenderer.invoke('mobile-start-studio', { deviceId }),
     stopStudio: () => ipcRenderer.invoke('mobile-stop-studio'),
     getStudioStatus: () => ipcRenderer.invoke('mobile-studio-status'),
+
+    // Device Lab - Screenshots, logs, app management, inspector
+    takeScreenshot: (platform, deviceId) => ipcRenderer.invoke('mobile-screenshot', { platform, deviceId }),
+    startLogs: (platform, deviceId, filter) => ipcRenderer.invoke('mobile-start-logs', { platform, deviceId, filter }),
+    stopLogs: () => ipcRenderer.invoke('mobile-stop-logs'),
+    installApp: (appPath, platform, deviceId) => ipcRenderer.invoke('mobile-install-app', { appPath, platform, deviceId }),
+    uninstallApp: (bundleId, platform, deviceId) => ipcRenderer.invoke('mobile-uninstall-app', { bundleId, platform, deviceId }),
+    browseForApp: () => ipcRenderer.invoke('mobile-browse-app'),
+    getHierarchy: (platform, deviceId) => ipcRenderer.invoke('mobile-get-hierarchy', { platform, deviceId }),
+
+    // Advanced Tools
+    openDeepLink: (platform, deviceId, url) => ipcRenderer.invoke('mobile-open-deep-link', { platform, deviceId, url }),
+    sendPush: (platform, deviceId, payload, bundleId) => ipcRenderer.invoke('mobile-send-push', { platform, deviceId, payload, bundleId }),
+    simulateBiometric: (platform, deviceId, result) => ipcRenderer.invoke('mobile-simulate-biometric', { platform, deviceId, result }),
+    setGeoLocation: (platform, deviceId, latitude, longitude) => ipcRenderer.invoke('mobile-set-geolocation', { platform, deviceId, latitude, longitude }),
+    setNetworkCondition: (platform, deviceId, profile) => ipcRenderer.invoke('mobile-set-network', { platform, deviceId, profile }),
+    setOrientation: (platform, deviceId, orientation) => ipcRenderer.invoke('mobile-set-orientation', { platform, deviceId, orientation }),
+    setAppearance: (platform, deviceId, mode) => ipcRenderer.invoke('mobile-set-appearance', { platform, deviceId, mode }),
+    setLocale: (platform, deviceId, locale) => ipcRenderer.invoke('mobile-set-locale', { platform, deviceId, locale }),
+    setFontScale: (platform, deviceId, scale) => ipcRenderer.invoke('mobile-set-font-scale', { platform, deviceId, scale }),
   },
   
   // Network Capture API (ported from browser extension)
@@ -384,6 +407,9 @@ contextBridge.exposeInMainWorld('flowstral', {
       'mobile-native-test-step',
       'mobile-native-test-progress',
       'mobile-native-test-error',
+      // Mobile device lab events
+      'mobile-log-line',
+      'mobile-studio-output',
       // Network capture events
       'network-request-start',
       'network-request-complete',

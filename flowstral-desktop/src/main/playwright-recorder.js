@@ -8,7 +8,8 @@
  * NO COMPROMISES - must match browser extension exactly.
  */
 
-const { chromium } = require('playwright');
+const playwright = require('playwright');
+const { chromium, firefox, webkit } = playwright;
 const path = require('path');
 const fs = require('fs');
 const { EventEmitter } = require('events');
@@ -134,36 +135,40 @@ const { getRecorderScript } = require('./recorder-injected-script');
 // BROWSER LAUNCH HELPER - Tries Playwright browsers, then system Chrome/Edge
 // Required because packaged app may not have Playwright browsers bundled
 // ============================================================
-async function launchBrowserWithFallback(launchOptions, userDataDir = null) {
-  const channels = [null, 'chrome', 'msedge', 'chromium'];
+async function launchBrowserWithFallback(launchOptions, userDataDir = null, browserType = 'chromium') {
+  // Select the browser engine based on browserType
+  const browserEngine = browserType === 'firefox' ? firefox : browserType === 'webkit' ? webkit : chromium;
+  // Only chromium supports channel variants (chrome, msedge); others use null channel
+  const channels = browserType === 'chromium' ? [null, 'chrome', 'msedge', 'chromium'] : [null];
   let lastError = null;
-  
+
   for (const channel of channels) {
     try {
       const opts = { ...launchOptions };
       if (channel) {
-        console.log(`[PlaywrightRecorder] Trying to launch with channel: ${channel}`);
+        console.log(`[PlaywrightRecorder] Trying to launch ${browserType} with channel: ${channel}`);
         opts.channel = channel;
       }
-      
+
       let context;
-      if (userDataDir) {
-        context = await chromium.launchPersistentContext(userDataDir, opts);
+      if (userDataDir && browserType === 'chromium') {
+        // Persistent context only supported well on Chromium
+        context = await browserEngine.launchPersistentContext(userDataDir, opts);
       } else {
-        const browser = await chromium.launch(opts);
+        const browser = await browserEngine.launch(opts);
         context = await browser.newContext(launchOptions);
         context._browser = browser;
       }
-      
-      console.log(`[PlaywrightRecorder] Successfully launched browser${channel ? ` with channel: ${channel}` : ''}`);
+
+      console.log(`[PlaywrightRecorder] Successfully launched ${browserType}${channel ? ` with channel: ${channel}` : ''}`);
       return context;
     } catch (error) {
       lastError = error;
-      console.log(`[PlaywrightRecorder] Failed to launch${channel ? ` with channel ${channel}` : ''}: ${error.message}`);
+      console.log(`[PlaywrightRecorder] Failed to launch ${browserType}${channel ? ` with channel ${channel}` : ''}: ${error.message}`);
     }
   }
-  
-  throw new Error(`Failed to launch browser. Please install Chrome or Edge. Last error: ${lastError?.message}`);
+
+  throw new Error(`Failed to launch ${browserType} browser. Last error: ${lastError?.message}`);
 }
 
 class PlaywrightRecorder extends EventEmitter {
@@ -395,12 +400,13 @@ class PlaywrightRecorder extends EventEmitter {
   /**
    * Launch browser and start recording
    */
-  async start(url) {
+  async start(url, options = {}) {
     if (this.browser) {
       await this.stop();
     }
 
-    console.log('[PlaywrightRecorder] Starting browser...');
+    const browserType = options.browserType || 'chromium';
+    console.log(`[PlaywrightRecorder] Starting ${browserType} browser...`);
     
     // Use persistent browser context to maintain login sessions (avoid OTP prompts)
     const { app } = require('electron');
@@ -452,13 +458,15 @@ class PlaywrightRecorder extends EventEmitter {
     // Launch browser with PERSISTENT context (keeps cookies, localStorage, auth)
     // MOBILE SUPPORT: Merges mobile options when configured, otherwise uses desktop defaults
     // Uses fallback to system Chrome/Edge if Playwright browsers not available
+    // CROSS-BROWSER: browserType can be 'chromium', 'firefox', or 'webkit'
     this.context = await launchBrowserWithFallback({
       headless: false,
       // Mobile: use device viewport, Desktop: full window
       viewport: isMobile ? mobileOptions.viewport : null,
       // Mobile: use device user agent, Desktop: Chrome UA
       userAgent: isMobile ? mobileOptions.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-      args: stealthArgs,
+      // Chromium-only args (Firefox/WebKit ignore these)
+      ...(browserType === 'chromium' && { args: stealthArgs }),
       // Mobile-specific options
       ...(isMobile && {
         deviceScaleFactor: mobileOptions.deviceScaleFactor,
@@ -469,7 +477,7 @@ class PlaywrightRecorder extends EventEmitter {
       }),
       // Ignore HTTPS errors for dev environments
       ignoreHTTPSErrors: true,
-    }, userDataDir);
+    }, userDataDir, browserType);
     
     // ═══════════════════════════════════════════════════════════════════
     // STEALTH SCRIPT: Patch navigator.webdriver and other detection vectors
