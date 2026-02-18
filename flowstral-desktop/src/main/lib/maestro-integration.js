@@ -258,6 +258,26 @@ function commandToYaml(cmd) {
 // =============================================================================
 
 class MaestroRunner {
+  /**
+   * Get augmented PATH that includes common Maestro install locations
+   * @returns {object} env object with augmented PATH
+   */
+  static getAugmentedEnv() {
+    const os = require('os');
+    const homeDir = os.homedir();
+    const extraPaths = [
+      path.join(homeDir, '.maestro', 'bin'),
+      path.join(homeDir, 'AppData', 'Local', 'maestro', 'bin'),
+      '/usr/local/bin',
+      '/opt/homebrew/bin',
+    ];
+    const sep = process.platform === 'win32' ? ';' : ':';
+    return {
+      ...process.env,
+      PATH: extraPaths.join(sep) + sep + (process.env.PATH || '')
+    };
+  }
+
   constructor(options = {}) {
     this.platform = options.platform || 'android';
     this.appId = options.appId || null;
@@ -295,16 +315,28 @@ class MaestroRunner {
         return resolve({ success: true, url: 'http://localhost:9999', alreadyRunning: true });
       }
       
+      // Pre-flight check: is Maestro installed?
+      if (!MaestroRunner.isInstalled()) {
+        const installCmd = process.platform === 'win32'
+          ? 'iwr -useb https://get.maestro.mobile.dev | iex'
+          : 'curl -Ls "https://get.maestro.mobile.dev" | bash';
+        return reject(new Error(
+          `Maestro CLI is not installed or not found in PATH.\n\nInstall it by running:\n${installCmd}\n\nThen restart the app.`
+        ));
+      }
+
       const args = ['studio'];
       if (deviceId || this.deviceId) {
         args.push('--device', deviceId || this.deviceId);
       }
-      
+
       console.log(`[Maestro] Starting Studio: maestro ${args.join(' ')}`);
-      
+
       this.studioProcess = spawn('maestro', args, {
         stdio: ['ignore', 'pipe', 'pipe'],
-        detached: false
+        detached: false,
+        shell: true,
+        env: MaestroRunner.getAugmentedEnv()
       });
       
       let started = false;
@@ -387,7 +419,12 @@ class MaestroRunner {
    */
   static isInstalled() {
     try {
-      execSync('maestro --version', { stdio: 'pipe' });
+      execSync('maestro --version', {
+        stdio: 'pipe',
+        shell: true,
+        env: MaestroRunner.getAugmentedEnv(),
+        timeout: 10000
+      });
       return true;
     } catch (e) {
       return false;
@@ -400,7 +437,12 @@ class MaestroRunner {
    */
   static getVersion() {
     try {
-      return execSync('maestro --version', { encoding: 'utf-8' }).trim();
+      return execSync('maestro --version', {
+        encoding: 'utf-8',
+        shell: true,
+        env: MaestroRunner.getAugmentedEnv(),
+        timeout: 10000
+      }).trim();
     } catch (e) {
       return null;
     }
@@ -483,7 +525,9 @@ class MaestroRunner {
       
       const startTime = Date.now();
       const process = spawn('maestro', args, {
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: true,
+        env: MaestroRunner.getAugmentedEnv()
       });
       
       let stdout = '';

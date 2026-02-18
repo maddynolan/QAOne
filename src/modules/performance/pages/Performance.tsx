@@ -68,6 +68,20 @@ export default function Performance() {
   const [serverTestId, setServerTestId] = useState<string | null>(null);
   const serverPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Workload model selector (6 models matching backend workload_models.py)
+  const [workloadModel, setWorkloadModel] = useState<string>('constant_vus');
+  const [rampingStages, setRampingStages] = useState<{duration: number; target: number}[]>([
+    { duration: 10, target: 10 },
+    { duration: 30, target: 50 },
+    { duration: 10, target: 0 },
+  ]);
+
+  // SLA/Threshold management
+  const [thresholds, setThresholds] = useState<{metric: string; operator: string; value: number}[]>([
+    { metric: 'p95_response_time', operator: '<', value: 500 },
+  ]);
+  const [thresholdResults, setThresholdResults] = useState<{metric: string; passed: boolean; actual: number}[]>([]);
+
   // Cleanup server poll on unmount
   useEffect(() => {
     return () => {
@@ -776,6 +790,37 @@ export default function Performance() {
       setCurrentTest(completedTest);
       setTestHistory(prev => [completedTest, ...prev.slice(0, 9)]);
       toast.success(`Load test completed! ${completedTest.metrics.totalRequests} requests made.`);
+
+      // Evaluate SLA thresholds against results
+      if (thresholds.length > 0 && completedTest.metrics) {
+        const m = completedTest.metrics;
+        const metricValues: Record<string, number> = {
+          p95_response_time: m.p95ResponseTime || m.avgResponseTime * 1.5 || 0,
+          p99_response_time: m.p99ResponseTime || m.avgResponseTime * 2 || 0,
+          avg_response_time: m.avgResponseTime || 0,
+          error_rate: m.errorRate || 0,
+          throughput: m.throughput || (m.totalRequests / (customConfig.duration || 60)),
+        };
+        const results = thresholds.map(t => {
+          const actual = metricValues[t.metric] || 0;
+          let passed = false;
+          switch (t.operator) {
+            case '<': passed = actual < t.value; break;
+            case '>': passed = actual > t.value; break;
+            case '<=': passed = actual <= t.value; break;
+            case '>=': passed = actual >= t.value; break;
+          }
+          return { metric: t.metric, passed, actual };
+        });
+        setThresholdResults(results);
+        const allPassed = results.every(r => r.passed);
+        if (allPassed) {
+          toast.success('All SLA thresholds passed!');
+        } else {
+          const failed = results.filter(r => !r.passed);
+          toast.error(`${failed.length} SLA threshold(s) failed`);
+        }
+      }
     }
   };
 
@@ -1636,6 +1681,137 @@ export default function Performance() {
                 </div>
               </div>
 
+              {/* Workload Model Selector */}
+              <div className="space-y-3 p-4 rounded-lg border bg-muted/20">
+                <div className="flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-primary" />
+                  <Label className="font-semibold">Workload Model</Label>
+                </div>
+                <Select value={workloadModel} onValueChange={setWorkloadModel}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="constant_vus">Constant VUs — Fixed user count</SelectItem>
+                    <SelectItem value="ramping_vus">Ramping VUs — Gradual increase/decrease</SelectItem>
+                    <SelectItem value="constant_arrival_rate">Constant Arrival Rate — Fixed req/s</SelectItem>
+                    <SelectItem value="ramping_arrival_rate">Ramping Arrival Rate — Variable req/s</SelectItem>
+                    <SelectItem value="shared_iterations">Shared Iterations — Fixed total iterations</SelectItem>
+                    <SelectItem value="per_vu_iterations">Per-VU Iterations — Each VU runs N times</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Stages editor for ramping models */}
+                {(workloadModel === 'ramping_vus' || workloadModel === 'ramping_arrival_rate') && (
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Stages (duration in seconds, target VUs/{workloadModel === 'ramping_arrival_rate' ? 'req/s' : 'VUs'})</Label>
+                    {rampingStages.map((stage, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <Input type="number" min={1} value={stage.duration}
+                          onChange={(e) => {
+                            const newStages = [...rampingStages];
+                            newStages[i] = { ...stage, duration: parseInt(e.target.value) || 1 };
+                            setRampingStages(newStages);
+                          }}
+                          className="w-24" placeholder="Duration" />
+                        <span className="text-xs text-muted-foreground">s →</span>
+                        <Input type="number" min={0} value={stage.target}
+                          onChange={(e) => {
+                            const newStages = [...rampingStages];
+                            newStages[i] = { ...stage, target: parseInt(e.target.value) || 0 };
+                            setRampingStages(newStages);
+                          }}
+                          className="w-24" placeholder="Target" />
+                        <span className="text-xs text-muted-foreground">{workloadModel === 'ramping_arrival_rate' ? 'req/s' : 'VUs'}</span>
+                        <Button variant="ghost" size="sm" className="h-7 px-1.5 text-destructive"
+                          onClick={() => setRampingStages(rampingStages.filter((_, j) => j !== i))}
+                          disabled={rampingStages.length <= 1}>×</Button>
+                      </div>
+                    ))}
+                    <Button variant="outline" size="sm" className="text-xs"
+                      onClick={() => setRampingStages([...rampingStages, { duration: 10, target: rampingStages[rampingStages.length - 1]?.target || 10 }])}>
+                      + Add Stage
+                    </Button>
+                    {/* Visual preview of load shape */}
+                    <div className="flex items-end gap-0.5 h-12 mt-2">
+                      {rampingStages.map((stage, i) => {
+                        const maxTarget = Math.max(...rampingStages.map(s => s.target), 1);
+                        const totalDuration = rampingStages.reduce((sum, s) => sum + s.duration, 0);
+                        const heightPct = Math.max(4, (stage.target / maxTarget) * 100);
+                        const widthPct = Math.max(8, (stage.duration / totalDuration) * 100);
+                        return (
+                          <div key={i} className="bg-primary/60 rounded-t-sm transition-all" title={`${stage.duration}s → ${stage.target}`}
+                            style={{ height: `${heightPct}%`, width: `${widthPct}%`, minWidth: '8px' }} />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* SLA / Thresholds */}
+              <div className="space-y-3 p-4 rounded-lg border bg-muted/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Target className="h-4 w-4 text-primary" />
+                    <Label className="font-semibold">SLA Thresholds</Label>
+                  </div>
+                  <Button variant="outline" size="sm" className="text-xs h-7"
+                    onClick={() => setThresholds([...thresholds, { metric: 'p95_response_time', operator: '<', value: 500 }])}>
+                    + Add
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Define pass/fail criteria. Thresholds are evaluated after test completion.</p>
+                {thresholds.map((t, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Select value={t.metric} onValueChange={(v) => {
+                      const nt = [...thresholds]; nt[i] = { ...t, metric: v }; setThresholds(nt);
+                    }}>
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="p95_response_time">P95 Response Time</SelectItem>
+                        <SelectItem value="p99_response_time">P99 Response Time</SelectItem>
+                        <SelectItem value="avg_response_time">Avg Response Time</SelectItem>
+                        <SelectItem value="error_rate">Error Rate</SelectItem>
+                        <SelectItem value="throughput">Throughput</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={t.operator} onValueChange={(v) => {
+                      const nt = [...thresholds]; nt[i] = { ...t, operator: v }; setThresholds(nt);
+                    }}>
+                      <SelectTrigger className="w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="<">&lt;</SelectItem>
+                        <SelectItem value=">">&gt;</SelectItem>
+                        <SelectItem value="<=">&le;</SelectItem>
+                        <SelectItem value=">=">&ge;</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input type="number" value={t.value} className="w-24"
+                      onChange={(e) => {
+                        const nt = [...thresholds]; nt[i] = { ...t, value: parseFloat(e.target.value) || 0 }; setThresholds(nt);
+                      }} />
+                    <span className="text-xs text-muted-foreground w-12">
+                      {t.metric.includes('response_time') ? 'ms' : t.metric === 'error_rate' ? '%' : 'req/s'}
+                    </span>
+                    {/* Show pass/fail result after test */}
+                    {thresholdResults.find(r => r.metric === t.metric) && (
+                      <Badge variant={thresholdResults.find(r => r.metric === t.metric)?.passed ? 'default' : 'destructive'} className="text-[10px]">
+                        {thresholdResults.find(r => r.metric === t.metric)?.passed ? '✓ Pass' : '✗ Fail'}
+                        {' '}({thresholdResults.find(r => r.metric === t.metric)?.actual?.toFixed(1)})
+                      </Badge>
+                    )}
+                    <Button variant="ghost" size="sm" className="h-7 px-1.5 text-destructive"
+                      onClick={() => setThresholds(thresholds.filter((_, j) => j !== i))}
+                      disabled={thresholds.length <= 1}>×</Button>
+                  </div>
+                ))}
+              </div>
+
               <div className="flex flex-col gap-2">
                 <Button onClick={() => runLoadTest()} disabled={isRunning} className="w-full">
                   {isRunning ? (
@@ -1821,6 +1997,44 @@ export default function Performance() {
                         <Badge variant={test.status === "completed" ? "default" : "secondary"}>
                           {test.status}
                         </Badge>
+                        <Button variant="outline" size="sm" className="ml-2 h-7 text-xs"
+                          onClick={async () => {
+                            try {
+                              toast.info('Generating report...');
+                              const res = await fetch(`${API_BASE_URL}/api/performance/report/generate`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  test_id: test.testId,
+                                  metrics: test.metrics,
+                                  config: { virtualUsers: test.config?.virtualUsers || customConfig.virtualUsers, duration: test.config?.duration || customConfig.duration },
+                                  format: 'html'
+                                }),
+                              });
+                              if (res.ok) {
+                                const blob = await res.blob();
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url; a.download = `perf-report-${test.testId || index}.html`;
+                                a.click(); URL.revokeObjectURL(url);
+                                toast.success('Report downloaded!');
+                              } else {
+                                // Fallback: generate client-side summary
+                                const report = `Performance Test Report\n${'='.repeat(40)}\nTest: ${test.testId}\nDate: ${test.completedAt || 'N/A'}\nRequests: ${test.metrics?.totalRequests || 0}\nAvg Response Time: ${test.metrics?.avgResponseTime?.toFixed(0) || 0}ms\nP95 Response Time: ${test.metrics?.p95ResponseTime?.toFixed(0) || 'N/A'}ms\nError Rate: ${test.metrics?.errorRate?.toFixed(2) || 0}%\nThroughput: ${test.metrics?.throughput?.toFixed(2) || 'N/A'} req/s`;
+                                const blob = new Blob([report], { type: 'text/plain' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url; a.download = `perf-report-${test.testId || index}.txt`;
+                                a.click(); URL.revokeObjectURL(url);
+                                toast.success('Report downloaded (text fallback)');
+                              }
+                            } catch {
+                              toast.error('Failed to generate report');
+                            }
+                          }}>
+                          <FileText className="h-3 w-3 mr-1" />
+                          Report
+                        </Button>
                       </div>
                     </div>
                   </CardContent>

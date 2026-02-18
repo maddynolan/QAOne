@@ -91,6 +91,7 @@ import { escapeForPython, generateAssertionCode, generateAPICode, generateDBCode
 import { generateAutomationCode } from '../lib/automation-code-generator';
 import StepCard from '../components/StepCard';
 import StepEditor from '../components/StepEditor';
+import TestResultsPanel from '../components/TestResultsPanel';
 
 
 // ============================================================================
@@ -1974,13 +1975,164 @@ export default function UnifiedWorkflowEditor() {
         preconditions: [], // Clear preconditions since we're inlining them
       };
       
-      // In Electron, use local Playwright execution for better performance
+      // In Electron, use FAST PATH via playwrightRecorder.runTest() (same engine as Record tab)
+      // This uses SimplePlayback (Playwright-native) which is 3-10x faster than TestExecutor
       if (isElectron()) {
+        const flowstralApi = (window as any).flowstral;
+        const electronApi = (window as any).electronAPI;
+
+        if (flowstralApi?.playwrightRecorder?.runTest) {
+          console.log('[Run Test] ⚡ Using FAST PATH: playwrightRecorder.runTest() (SimplePlayback)');
+          toast.info('Running test (fast playback)...');
+
+          // Convert Build tab TestStep[] to Record tab normalized action format
+          const normalizedSteps = allSteps.filter(s => s.enabled).map((step, idx) => {
+            // Extract URL from navigate steps
+            const urlValue = step.type === 'navigate' ? (step.url || step.value || '') : '';
+            // Build selector text from target, name, or selector
+            const labelText = step.target || step.name || '';
+            // Get the best available selector
+            const selectorStr = step.selectorObj?.optimizedSelector || step.selectorObj?.playwright || step.selectorObj?.selector || step.selector || '';
+
+            // Map Build tab step types to Record tab qwords
+            const typeMap: Record<string, string> = {
+              'click': 'click', 'input': 'fill', 'navigate': 'goto', 'select': 'selectOption',
+              'hover': 'hover', 'assert': 'assert', 'wait': 'wait', 'scroll': 'scroll',
+              'keyboard': 'keyboard', 'screenshot': 'screenshot', 'manual_step': 'click',
+              'drag_drop': 'dragAndDrop', 'file_upload': 'setInputFiles', 'double_click': 'dblclick',
+              'right_click': 'click', 'clear': 'clear', 'check': 'check', 'uncheck': 'uncheck',
+            };
+            const qword = typeMap[step.type] || step.type || 'click';
+
+            return {
+              id: step.id,
+              qword,
+              args: qword === 'goto' ? [urlValue] : qword === 'fill' ? [labelText, step.value || ''] : [labelText],
+              description: step.name || step.description || `${step.type} ${labelText}`,
+              timestamp: Date.now(),
+              type: step.type,
+              value: step.value,
+              selector: selectorStr,
+              selectorObj: {
+                ...(step.selectorObj || {}),
+                text: labelText,
+                selector: selectorStr,
+                playwright: step.selectorObj?.playwright || selectorStr,
+                fallbacks: step.selectorObj?.fallbacks || (selectorStr ? [{ playwright: selectorStr, selector: selectorStr }] : []),
+              },
+            };
+          });
+
+          // Extract URL from first navigate step for the playback URL
+          const firstNavStep = normalizedSteps.find(s => s.qword === 'goto' && s.args[0]);
+          const playbackUrl = firstNavStep?.args[0] || '';
+
+          // Subscribe to real-time IPC events for live progress
+          const stepStartUnsub = electronApi?.on?.('playwright-test-step-start', ({ index, step }: any) => {
+            setExecutionResult(prev => ({
+              ...prev,
+              currentStep: index,
+              logs: [...prev.logs, `▶ Step ${index + 1}: ${step?.description || step?.qword || 'running'}`]
+            }));
+          });
+
+          const stepCompleteUnsub = electronApi?.on?.('playwright-test-step-complete', ({ index, result: stepResult }: any) => {
+            const statusEmoji = stepResult?.success ? '✅' : '❌';
+            const healedNote = stepResult?.healed ? ' 🔧 (healed)' : '';
+            setExecutionResult(prev => ({
+              ...prev,
+              results: [...prev.results, {
+                stepId: allSteps[index]?.id,
+                status: stepResult?.success ? 'passed' : 'failed',
+                error: stepResult?.error || undefined,
+                healed: stepResult?.healed || false,
+                workingSelector: stepResult?.workingSelector || undefined,
+              }],
+              logs: [...prev.logs, `${statusEmoji} Step ${index + 1}: ${stepResult?.success ? 'passed' : 'failed'}${stepResult?.error ? ' - ' + stepResult.error : ''}${healedNote}`]
+            }));
+          });
+
+          try {
+            const result = await flowstralApi.playwrightRecorder.runTest({
+              steps: normalizedSteps,
+              url: playbackUrl,
+              freshBrowser: true,
+              keepBrowserOpenOnFailure: keepBrowserOpenOnFailure,
+              slowMo: 200, // 1x speed
+              highlight: true,
+              useSimplePlayback: true, // V2 fast playback (same as Record tab)
+            });
+
+            // Cleanup subscriptions
+            if (stepStartUnsub) stepStartUnsub();
+            if (stepCompleteUnsub) stepCompleteUnsub();
+
+            const passed = result?.success || result?.status === 'passed';
+            const duration = result?.duration || result?.totalDuration || 0;
+
+            // Build step results from the response
+            const stepResults = result?.stepResults || result?.results || [];
+            const mappedResults = allSteps.filter(s => s.enabled).map((step, idx) => {
+              const sr = stepResults[idx];
+              return {
+                stepId: step.id,
+                status: sr ? (sr.success ? 'passed' : 'failed') : (passed ? 'passed' : (idx >= (result?.failedStep || 999) ? 'failed' : 'passed')),
+                error: sr?.error || undefined,
+                healed: sr?.healed || false,
+                workingSelector: sr?.workingSelector || undefined,
+              };
+            });
+
+            setExecutionResult(prev => ({
+              ...prev,
+              status: passed ? 'passed' : 'failed',
+              results: mappedResults.length > 0 ? mappedResults : prev.results,
+              logs: [...prev.logs, `\n${passed ? '✅ TEST PASSED' : '❌ TEST FAILED'} (${duration}ms)`]
+            }));
+
+            setIsRunning(false);
+
+            if (passed) {
+              toast.success('Test passed!');
+              setFailureState(null);
+              setBrowserKeptOpen(false);
+            } else {
+              toast.error(`Test failed: ${result?.error || 'See logs for details'}`);
+
+              // Track failure state for repair wizard
+              const failedIdx = result?.failedStep ?? result?.failedStepIndex;
+              if (failedIdx !== undefined && failedIdx !== null) {
+                const failedStepData = testCase.steps[failedIdx];
+                if (failedStepData) {
+                  setFailureState({
+                    stepIndex: failedIdx,
+                    step: failedStepData,
+                    error: result?.error || 'Unknown error',
+                    screenshot: result?.screenshot || null,
+                    url: result?.url || null,
+                    similarElements: result?.similarElements || [],
+                  });
+                  setBrowserKeptOpen(keepBrowserOpenOnFailure && result?.browserKeptOpen);
+                }
+              }
+            }
+
+            return;
+          } catch (fastPathError: any) {
+            // Cleanup subscriptions on error
+            if (stepStartUnsub) stepStartUnsub();
+            if (stepCompleteUnsub) stepCompleteUnsub();
+            console.warn('[Run Test] Fast path failed, falling back to TestExecutor:', fastPathError.message);
+            // Fall through to TestExecutor fallback below
+          }
+        }
+
+        // Fallback to TestExecutor (slower but works when recorder isn't available)
         const api = (window as any).electronAPI;
         if (api?.testRunner) {
-          console.log('[Run Test] Using Electron local execution');
+          console.log('[Run Test] Using Electron TestExecutor (fallback)');
           toast.info('Running test locally...');
-          
+
           // Subscribe to step events
           const stepStartUnsub = api.on('test-step-start', ({ index, step }: { index: number; step: any }) => {
             setExecutionResult(prev => ({
@@ -1989,7 +2141,7 @@ export default function UnifiedWorkflowEditor() {
               logs: [...prev.logs, `▶ Step ${index + 1}: ${step.name || step.type}`]
             }));
           });
-          
+
           const stepCompleteUnsub = api.on('test-step-complete', ({ index, step, result }: { index: number; step: any; result: any }) => {
             const statusEmoji = result.status === 'passed' ? '✅' : result.status === 'failed' ? '❌' : '⏭️';
             setExecutionResult(prev => ({
@@ -1998,30 +2150,28 @@ export default function UnifiedWorkflowEditor() {
               logs: [...prev.logs, `${statusEmoji} Step ${index + 1}: ${result.status}${result.error ? ' - ' + result.error : ''}`]
             }));
           });
-          
+
           const result = await api.testRunner.executeTest(mergedTestCase);
-          
+
           // Cleanup subscriptions
           if (stepStartUnsub) stepStartUnsub();
           if (stepCompleteUnsub) stepCompleteUnsub();
-          
+
           setExecutionResult(prev => ({
             ...prev,
             status: result.status,
             logs: [...prev.logs, `\n${result.status === 'passed' ? 'TEST PASSED' : 'TEST FAILED'} (${result.duration}ms)`]
           }));
-          
+
           setIsRunning(false);
-          
+
           if (result.status === 'passed') {
             toast.success('Test passed!');
-            // Clear failure state on success
             setFailureState(null);
             setBrowserKeptOpen(false);
           } else {
             toast.error(`Test failed: ${result.error || 'See logs for details'}`);
-            
-            // Track failure state for repair wizard (Electron execution)
+
             if (result.failedStep !== undefined && result.failedStep !== null) {
               const failedStepIdx = typeof result.failedStep === 'number' ? result.failedStep : parseInt(result.failedStep);
               const failedStepData = testCase.steps[failedStepIdx];
@@ -2038,7 +2188,7 @@ export default function UnifiedWorkflowEditor() {
               }
             }
           }
-          
+
           return;
         }
       }
@@ -3127,81 +3277,27 @@ export default function UnifiedWorkflowEditor() {
                 })}
               </div>
 
-              {/* Execution Status & Results */}
+              {/* Execution Status Indicator (full results shown in bottom panel) */}
               {executionResult.status !== 'idle' && (
-                <div className={`mt-4 p-3 rounded-lg border ${
-                  executionResult.status === 'passed' ? 'bg-green-50 border-green-200' :
-                  executionResult.status === 'failed' ? 'bg-red-50 border-red-200' :
-                  'bg-blue-50 border-blue-200'
+                <div className={`mt-4 p-2 rounded-lg border text-center ${
+                  executionResult.status === 'passed' ? 'bg-green-50 border-green-200 dark:bg-green-500/10 dark:border-green-500/30' :
+                  executionResult.status === 'failed' ? 'bg-red-50 border-red-200 dark:bg-red-500/10 dark:border-red-500/30' :
+                  'bg-blue-50 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/30'
                 }`}>
-                  <div className="flex items-center gap-2 text-sm font-medium mb-2">
-                    {executionResult.status === 'running' && <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />}
-                    {executionResult.status === 'passed' && <CheckCircle className="h-4 w-4 text-green-600" />}
-                    {executionResult.status === 'failed' && <AlertCircle className="h-4 w-4 text-red-600" />}
-                    <span className={
-                      executionResult.status === 'passed' ? 'text-green-700' :
-                      executionResult.status === 'failed' ? 'text-red-700' :
-                      'text-blue-700'
-                    }>
+                  <div className="flex items-center justify-center gap-1.5">
+                    {executionResult.status === 'running' && <RefreshCw className="h-3.5 w-3.5 animate-spin text-blue-600 dark:text-blue-400" />}
+                    {executionResult.status === 'passed' && <CheckCircle className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />}
+                    {executionResult.status === 'failed' && <AlertCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />}
+                    <span className={`text-xs font-medium ${
+                      executionResult.status === 'passed' ? 'text-green-700 dark:text-green-400' :
+                      executionResult.status === 'failed' ? 'text-red-700 dark:text-red-400' :
+                      'text-blue-700 dark:text-blue-400'
+                    }`}>
                       {executionResult.status === 'running' ? 'Running...' :
                        executionResult.status === 'passed' ? 'Passed' : 'Failed'}
                     </span>
                   </div>
-                  {executionResult.status === 'failed' && executionResult.currentStep && (
-                    <div className="space-y-2 mb-3">
-                      <div className="text-xs text-red-600">
-                        Failed at step {executionResult.currentStep}: {testCase.steps[executionResult.currentStep - 1]?.name || 'Unknown'}
-                      </div>
-                      {/* Repair Actions for Failed Step */}
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs border-purple-300 text-purple-600 hover:bg-purple-50"
-                          onClick={() => openRepairWizard(executionResult.currentStep - 1)}
-                        >
-                          <Wand2 className="h-3 w-3 mr-1" />
-                          Fix Step
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs border-blue-300 text-blue-600 hover:bg-blue-50"
-                          onClick={() => openQuickRerecord(executionResult.currentStep - 1)}
-                        >
-                          <Crosshair className="h-3 w-3 mr-1" />
-                          Quick Re-record
-                        </Button>
-                        {browserKeptOpen && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs border-green-300 text-green-600 hover:bg-green-50"
-                            onClick={() => handleResumeFromHere({ skipFailedStep: true })}
-                          >
-                            <SkipForward className="h-3 w-3 mr-1" />
-                            Skip & Continue
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {executionResult.logs.length > 0 && (
-                    <details className="text-xs">
-                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                        View logs ({executionResult.logs.filter(l => l.trim()).length} lines)
-                      </summary>
-                      <div className="mt-2 max-h-32 overflow-auto bg-slate-900 text-slate-100 p-2 rounded font-mono text-[10px]">
-                        {executionResult.logs.slice(-20).map((line, i) => (
-                          <div key={i} className={
-                            line.includes('FAILED') || line.includes('Error') ? 'text-red-400' :
-                            line.includes('PASSED') || line.includes('✓') ? 'text-green-400' :
-                            ''
-                          }>{line}</div>
-                        ))}
-                      </div>
-                    </details>
-                  )}
+                  <div className="text-[10px] text-muted-foreground mt-0.5">See results below ↓</div>
                 </div>
               )}
 
@@ -3407,6 +3503,18 @@ export default function UnifiedWorkflowEditor() {
                 </div>
               </div>
             )}
+
+            {/* Test Results Panel - Full-width at bottom of main content */}
+            <TestResultsPanel
+              executionResult={executionResult}
+              steps={testCase.steps}
+              isRunning={isRunning}
+              browserKeptOpen={browserKeptOpen}
+              onFixStep={(idx) => openRepairWizard(idx)}
+              onRerecordStep={(idx) => openQuickRerecord(idx)}
+              onSkipAndContinue={() => handleResumeFromHere({ skipFailedStep: true })}
+              onClose={() => setExecutionResult({ status: 'idle', currentStep: 0, results: [], logs: [] })}
+            />
           </main>
 
           {/* Right Panel: Step Editor OR Protocol Panel */}

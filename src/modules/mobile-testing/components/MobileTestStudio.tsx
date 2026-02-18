@@ -176,8 +176,15 @@ export default function MobileTestStudio() {
         toast.error(result.error || 'Failed to start Studio');
       }
     } catch (error: any) {
-      addStudioOutput(`Error: ${error.message}`);
-      toast.error(error.message || 'Failed to start Studio');
+      const errorMsg = error.message || 'Failed to start Studio';
+      addStudioOutput(`Error: ${errorMsg}`);
+      // Detect "not installed" or "ENOENT" errors and update maestroInstalled state
+      if (/not installed|ENOENT|not found|not recognized/i.test(errorMsg)) {
+        setMaestroInstalled(false);
+        toast.error('Maestro CLI is not installed. See instructions below to install it.');
+      } else {
+        toast.error(errorMsg);
+      }
     } finally {
       setStartingStudio(false);
     }

@@ -229,11 +229,49 @@ export default function VisualTestingPage() {
   const [showCompareDialog, setShowCompareDialog] = useState(false);
   const [showResultDialog, setShowResultDialog] = useState(false);
   const [showCaptureDialog, setShowCaptureDialog] = useState(false);
-  
+
   // Upload state
   const [uploadTestName, setUploadTestName] = useState('');
   const [uploadImage, setUploadImage] = useState<File | null>(null);
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
+
+  // Multi-viewport capture presets
+  const VIEWPORT_PRESETS = [
+    { name: 'Mobile', width: 375, height: 812, checked: false },
+    { name: 'Tablet', width: 768, height: 1024, checked: false },
+    { name: 'Laptop', width: 1366, height: 768, checked: false },
+    { name: 'Desktop', width: 1920, height: 1080, checked: true },
+  ];
+  const [selectedViewports, setSelectedViewports] = useState<{name: string; width: number; height: number; checked: boolean}[]>(VIEWPORT_PRESETS);
+
+  // Approval workflow state (localStorage backed)
+  const [approvedDiffs, setApprovedDiffs] = useState<Record<string, 'accepted' | 'rejected'>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('flowstral-visual-approvals') || '{}');
+    } catch { return {}; }
+  });
+
+  // Batch URL testing
+  const [batchTestUrls, setBatchTestUrls] = useState('');
+  const [batchTestResults, setBatchTestResults] = useState<{url: string; status: string; diffPct?: number; testName?: string}[]>([]);
+  const [isBatchTesting, setIsBatchTesting] = useState(false);
+
+  // Comparison history (localStorage backed)
+  const [comparisonHistory, setComparisonHistory] = useState<{testName: string; passed: boolean; diffPct: number; mode: string; timestamp: string}[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('flowstral-visual-history') || '[]');
+    } catch { return []; }
+  });
+
+  // Persist approval state
+  useEffect(() => {
+    try { localStorage.setItem('flowstral-visual-approvals', JSON.stringify(approvedDiffs)); } catch {}
+  }, [approvedDiffs]);
+
+  // Persist comparison history
+  useEffect(() => {
+    try { localStorage.setItem('flowstral-visual-history', JSON.stringify(comparisonHistory.slice(0, 50))); } catch {}
+  }, [comparisonHistory]);
 
   // Load baselines on mount
   useEffect(() => {
@@ -296,6 +334,16 @@ export default function VisualTestingPage() {
       setComparisonResult(response.data.result);
       setShowResultDialog(true);
       loadDiffs(); // Refresh diff list
+
+      // Track in comparison history
+      const histEntry = {
+        testName: 'manual_comparison',
+        passed: response.data.result?.passed ?? false,
+        diffPct: response.data.result?.diff_percentage ?? 0,
+        mode: compareMode,
+        timestamp: new Date().toISOString(),
+      };
+      setComparisonHistory(prev => [histEntry, ...prev].slice(0, 50));
     } catch (error: any) {
       console.error('Error comparing images:', error);
       toast.error(error.response?.data?.detail || 'Comparison failed');
@@ -376,21 +424,45 @@ export default function VisualTestingPage() {
       return;
     }
 
+    const viewportsToCapture = selectedViewports.filter(v => v.checked);
+    if (viewportsToCapture.length === 0) {
+      toast.error('Select at least one viewport');
+      return;
+    }
+
     try {
       setIsCapturing(true);
-      const response = await axios.post(`${API_BASE}/capture`, 
-        new URLSearchParams({
-          url: captureUrl,
-          test_name: captureTestName,
-          full_page: 'true',
-          viewport_width: '1920',
-          viewport_height: '1080',
-          save_as_baseline: 'true'
-        }),
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-      );
 
-      toast.success('Screenshot captured and saved as baseline');
+      // Capture for each selected viewport
+      let capturedCount = 0;
+      for (const vp of viewportsToCapture) {
+        const testName = viewportsToCapture.length > 1
+          ? `${captureTestName}_${vp.name.toLowerCase()}`
+          : captureTestName;
+
+        try {
+          await axios.post(`${API_BASE}/capture`,
+            new URLSearchParams({
+              url: captureUrl,
+              test_name: testName,
+              full_page: 'true',
+              viewport_width: String(vp.width),
+              viewport_height: String(vp.height),
+              save_as_baseline: 'true'
+            }),
+            { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+          );
+          capturedCount++;
+        } catch (err) {
+          console.error(`Failed to capture ${vp.name} viewport:`, err);
+        }
+      }
+
+      if (capturedCount > 0) {
+        toast.success(`${capturedCount} screenshot(s) captured and saved as baseline(s)`);
+      } else {
+        toast.error('Failed to capture any screenshots');
+      }
       setShowCaptureDialog(false);
       setCaptureUrl('');
       setCaptureTestName('');
@@ -939,6 +1011,108 @@ export default function VisualTestingPage() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Batch URL Testing */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Layers className="w-5 h-5" />
+                  Batch URL Testing
+                </CardTitle>
+                <CardDescription>
+                  Capture screenshots for multiple URLs and compare against baselines in bulk
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label className="mb-2 block">URLs (one per line)</Label>
+                  <textarea
+                    className="w-full h-32 rounded-md border border-border bg-muted px-3 py-2 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder={"https://example.com\nhttps://example.com/about\nhttps://example.com/contact"}
+                    value={batchTestUrls}
+                    onChange={(e) => setBatchTestUrls(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={async () => {
+                      const urls = batchTestUrls.split('\n').map(u => u.trim()).filter(u => u.startsWith('http'));
+                      if (urls.length === 0) { toast.error('Enter at least one URL'); return; }
+                      setIsBatchTesting(true);
+                      setBatchTestResults([]);
+                      const results: typeof batchTestResults = [];
+                      for (const url of urls) {
+                        const testName = url.replace(/https?:\/\//, '').replace(/[^a-zA-Z0-9]/g, '-').slice(0, 60);
+                        try {
+                          // Capture screenshot
+                          await axios.post(`${API_BASE}/capture`, { url, test_name: testName, viewport_width: 1920, viewport_height: 1080 });
+                          // Compare against baseline
+                          try {
+                            const cmpRes = await axios.post(`${API_BASE}/compare-by-name`, { test_name: testName, mode: comparisonMode, threshold });
+                            results.push({ url, status: cmpRes.data.passed ? 'passed' : 'failed', diffPct: cmpRes.data.diff_percentage, testName });
+                          } catch {
+                            results.push({ url, status: 'new-baseline', testName });
+                          }
+                        } catch {
+                          results.push({ url, status: 'error', testName });
+                        }
+                        setBatchTestResults([...results]);
+                      }
+                      setIsBatchTesting(false);
+                      const passed = results.filter(r => r.status === 'passed').length;
+                      const failed = results.filter(r => r.status === 'failed').length;
+                      toast.success(`Batch complete: ${passed} passed, ${failed} failed, ${results.length - passed - failed} other`);
+                    }}
+                    disabled={isBatchTesting || !batchTestUrls.trim()}
+                  >
+                    {isBatchTesting ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Testing...</> : <><Layers className="w-4 h-4 mr-2" /> Run Batch Test</>}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {batchTestUrls.split('\n').filter(u => u.trim().startsWith('http')).length} URL(s) queued
+                  </span>
+                </div>
+
+                {batchTestResults.length > 0 && (
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium">URL</th>
+                          <th className="text-left px-3 py-2 font-medium w-28">Status</th>
+                          <th className="text-left px-3 py-2 font-medium w-24">Diff %</th>
+                          <th className="text-left px-3 py-2 font-medium w-32">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {batchTestResults.map((r, i) => (
+                          <tr key={i} className="border-t border-border">
+                            <td className="px-3 py-2 font-mono text-xs truncate max-w-[300px]" title={r.url}>{r.url}</td>
+                            <td className="px-3 py-2">
+                              {r.status === 'passed' && <Badge className="bg-green-500/20 text-green-600 border-green-500/30"><CheckCircle className="w-3 h-3 mr-1" /> Pass</Badge>}
+                              {r.status === 'failed' && <Badge className="bg-red-500/20 text-red-600 border-red-500/30"><AlertCircle className="w-3 h-3 mr-1" /> Fail</Badge>}
+                              {r.status === 'new-baseline' && <Badge className="bg-blue-500/20 text-blue-600 border-blue-500/30"><Plus className="w-3 h-3 mr-1" /> New</Badge>}
+                              {r.status === 'error' && <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30"><AlertCircle className="w-3 h-3 mr-1" /> Error</Badge>}
+                            </td>
+                            <td className="px-3 py-2 text-xs">{r.diffPct !== undefined ? `${r.diffPct.toFixed(2)}%` : '—'}</td>
+                            <td className="px-3 py-2">
+                              {r.testName && (
+                                <Button size="sm" variant="ghost" className="h-6 text-[11px]"
+                                  onClick={() => {
+                                    setCompareTestName(r.testName || '');
+                                    setActiveTab('compare');
+                                  }}>
+                                  View Details
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Baselines Tab */}
@@ -1064,8 +1238,34 @@ export default function VisualTestingPage() {
           <TabsContent value="diffs" className="space-y-6">
             <Card className="">
               <CardHeader>
-                <CardTitle className="">Recent Diff Images</CardTitle>
-                <CardDescription>Visual diffs from recent comparisons</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="">Recent Diff Images</CardTitle>
+                    <CardDescription>Review, approve, or reject visual diffs</CardDescription>
+                  </div>
+                  {diffs.length > 0 && (
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" className="text-green-600 border-green-300 hover:bg-green-50 dark:border-green-700 dark:hover:bg-green-900/20"
+                        onClick={() => {
+                          const newApprovals = { ...approvedDiffs };
+                          diffs.forEach(d => { newApprovals[d.filename] = 'accepted'; });
+                          setApprovedDiffs(newApprovals);
+                          toast.success('All diffs accepted');
+                        }}>
+                        <Check className="w-3 h-3 mr-1" /> Accept All
+                      </Button>
+                      <Button size="sm" variant="outline" className="text-red-600 border-red-300 hover:bg-red-50 dark:border-red-700 dark:hover:bg-red-900/20"
+                        onClick={() => {
+                          const newApprovals = { ...approvedDiffs };
+                          diffs.forEach(d => { newApprovals[d.filename] = 'rejected'; });
+                          setApprovedDiffs(newApprovals);
+                          toast.success('All diffs rejected');
+                        }}>
+                        <X className="w-3 h-3 mr-1" /> Reject All
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 {diffs.length === 0 ? (
@@ -1076,46 +1276,96 @@ export default function VisualTestingPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {diffs.map(diff => (
-                      <div 
-                        key={diff.filename}
-                        className="flex items-center justify-between p-4 bg-card rounded-lg border border-border/50"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="w-16 h-12 bg-muted rounded flex items-center justify-center">
-                            <FileImage className="w-6 h-6 text-muted-foreground" />
+                    {diffs.map(diff => {
+                      const approval = approvedDiffs[diff.filename];
+                      return (
+                        <div
+                          key={diff.filename}
+                          className={`flex items-center justify-between p-4 rounded-lg border ${
+                            approval === 'accepted' ? 'border-green-500/30 bg-green-500/5' :
+                            approval === 'rejected' ? 'border-red-500/30 bg-red-500/5' :
+                            'border-border/50 bg-card'
+                          }`}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-16 h-12 bg-muted rounded flex items-center justify-center">
+                              <FileImage className="w-6 h-6 text-muted-foreground" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">{diff.filename}</p>
+                                {approval === 'accepted' && <Badge variant="default" className="bg-green-500 text-xs">Accepted</Badge>}
+                                {approval === 'rejected' && <Badge variant="destructive" className="text-xs">Rejected</Badge>}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {formatFileSize(diff.size)} • {formatDate(diff.created_at)}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium ">{diff.filename}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatFileSize(diff.size)} • {formatDate(diff.created_at)}
-                            </p>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" className="border-border"
+                              onClick={() => window.open(`${API_BASE}/diffs/${diff.filename}`, '_blank')}>
+                              <Eye className="w-4 h-4 mr-1" /> View
+                            </Button>
+                            <Button size="sm" variant={approval === 'accepted' ? 'default' : 'outline'}
+                              className={approval === 'accepted' ? 'bg-green-600 hover:bg-green-500' : 'text-green-600 border-green-300 hover:bg-green-50 dark:border-green-700'}
+                              onClick={async () => {
+                                setApprovedDiffs(prev => ({ ...prev, [diff.filename]: 'accepted' }));
+                                // Try to update baseline from the actual image
+                                try {
+                                  const testName = diff.filename.replace(/^diff_/, '').replace(/\.png$/, '').replace(/_\d+$/, '');
+                                  await axios.post(`${API_BASE}/baselines`, { test_name: testName, image: null, update_from_diff: diff.filename });
+                                  toast.success('Accepted as new baseline');
+                                } catch {
+                                  toast.success('Marked as accepted');
+                                }
+                              }}>
+                              <Check className="w-3 h-3 mr-1" /> Accept
+                            </Button>
+                            <Button size="sm" variant={approval === 'rejected' ? 'destructive' : 'outline'}
+                              className={approval !== 'rejected' ? 'text-red-600 border-red-300 hover:bg-red-50 dark:border-red-700' : ''}
+                              onClick={() => {
+                                setApprovedDiffs(prev => ({ ...prev, [diff.filename]: 'rejected' }));
+                                toast.info('Diff rejected');
+                              }}>
+                              <X className="w-3 h-3 mr-1" /> Reject
+                            </Button>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            className="border-border text-foreground"
-                            onClick={() => window.open(`${API_BASE}/diffs/${diff.filename}`, '_blank')}
-                          >
-                            <Eye className="w-4 h-4 mr-1" />
-                            View
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            className="border-border text-foreground"
-                          >
-                            <Download className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
             </Card>
+
+            {/* Comparison History */}
+            {comparisonHistory.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Comparison History</CardTitle>
+                    <Button variant="ghost" size="sm" className="text-xs text-destructive"
+                      onClick={() => { setComparisonHistory([]); localStorage.removeItem('flowstral-visual-history'); }}>
+                      Clear
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {/* Pass/Fail trend bar */}
+                  <div className="flex items-end gap-0.5 h-8 mb-4">
+                    {comparisonHistory.slice(0, 30).reverse().map((h, i) => (
+                      <div key={i} className={`flex-1 rounded-t-sm min-w-[4px] h-full ${h.passed ? 'bg-green-500' : 'bg-red-500'}`}
+                        title={`${h.testName}: ${h.passed ? 'Pass' : 'Fail'} (${h.diffPct?.toFixed(1)}%)`} />
+                    ))}
+                  </div>
+                  <div className="flex gap-4 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500" /> {comparisonHistory.filter(h => h.passed).length} passed</span>
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500" /> {comparisonHistory.filter(h => !h.passed).length} failed</span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
 
@@ -1216,26 +1466,55 @@ export default function VisualTestingPage() {
             
             <div>
               <Label className="text-foreground">Test Name</Label>
-              <Input 
+              <Input
                 value={captureTestName}
                 onChange={(e) => setCaptureTestName(e.target.value)}
                 placeholder="e.g., example_homepage"
                 className="bg-muted border-border  mt-2"
               />
             </div>
+
+            {/* Viewport Selector */}
+            <div>
+              <Label className="text-foreground mb-2 block">Viewports</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {selectedViewports.map((vp, i) => (
+                  <label key={vp.name} className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-colors ${
+                    vp.checked ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/40'
+                  }`}>
+                    <input type="checkbox" checked={vp.checked}
+                      onChange={(e) => {
+                        const nv = [...selectedViewports];
+                        nv[i] = { ...vp, checked: e.target.checked };
+                        setSelectedViewports(nv);
+                      }}
+                      className="rounded border-border" />
+                    <div>
+                      <span className="text-sm font-medium">{vp.name}</span>
+                      <span className="text-xs text-muted-foreground ml-1">({vp.width}x{vp.height})</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              {selectedViewports.filter(v => v.checked).length > 1 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Multiple viewports: baselines named as {captureTestName || 'test'}_mobile, {captureTestName || 'test'}_desktop, etc.
+                </p>
+              )}
+            </div>
           </div>
-          
+
           <DialogFooter>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setShowCaptureDialog(false)}
               className="border-border text-foreground"
             >
               Cancel
             </Button>
-            <Button 
+            <Button
               onClick={handleCaptureScreenshot}
-              disabled={!captureUrl || !captureTestName || isCapturing}
+              disabled={!captureUrl || !captureTestName || isCapturing || selectedViewports.filter(v => v.checked).length === 0}
               className="bg-primary hover:bg-primary/90"
             >
               {isCapturing ? (
@@ -1243,7 +1522,7 @@ export default function VisualTestingPage() {
               ) : (
                 <Target className="w-4 h-4 mr-2" />
               )}
-              {isCapturing ? 'Capturing...' : 'Capture & Save'}
+              {isCapturing ? 'Capturing...' : `Capture ${selectedViewports.filter(v => v.checked).length > 1 ? `(${selectedViewports.filter(v => v.checked).length} viewports)` : '& Save'}`}
             </Button>
           </DialogFooter>
         </DialogContent>
