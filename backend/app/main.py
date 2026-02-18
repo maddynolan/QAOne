@@ -1,4 +1,4 @@
-# Flowstral Backend v3.4.0
+# Flowstral Backend v3.12.2
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
