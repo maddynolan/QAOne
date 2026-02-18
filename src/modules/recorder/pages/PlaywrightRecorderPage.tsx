@@ -3166,15 +3166,15 @@ const handleExportToBuilder = async () => {
                     </Badge>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="sftools" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400">
+                <TabsTrigger value="sftools" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
                   <Cloud className="h-3 w-3 mr-1" />
                   SF Tools
                 </TabsTrigger>
-                <TabsTrigger value="sfcontext" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">
+                <TabsTrigger value="sfcontext" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
                   <Target className="h-3 w-3 mr-1" />
                   SF Context
                 </TabsTrigger>
-                <TabsTrigger value="a11y" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">
+                <TabsTrigger value="a11y" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
                   <Accessibility className="h-3 w-3 mr-1" />
                   A11y
                   {a11yIssues.length > 0 && a11yIssues.reduce((acc, p) => acc + p.summary.total, 0) > 0 && (
@@ -3190,10 +3190,10 @@ const handleExportToBuilder = async () => {
                 </TabsTrigger>
                 {/* Automate Tab - Only when automating existing test */}
                 {mode === 'existing' && selectedTestCase && (
-                  <TabsTrigger value="automate" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">
+                  <TabsTrigger value="automate" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
                     <Link2 className="h-3 w-3 mr-1" />
                     Automate
-                    <Badge className="ml-1 h-4 bg-purple-500/30 text-purple-400 text-[9px] px-1">
+                    <Badge className="ml-1 h-4 bg-primary/30 text-primary text-[9px] px-1">
                       {Object.keys(stepLinks).length || Object.keys(stepAutomation).length}/{selectedTestCase.steps?.length || 0}
                     </Badge>
                   </TabsTrigger>

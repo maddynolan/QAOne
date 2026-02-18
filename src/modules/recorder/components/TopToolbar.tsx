@@ -1,5 +1,5 @@
 /**
- * TopToolbar - Run/Export/AI toolbar at the top of the recorder page.
+ * TopToolbar - Run/Export toolbar at the top of the recorder page.
  *
  * Extracted from PlaywrightRecorderPage.tsx to reduce file size.
  */
@@ -7,8 +7,8 @@
 import React from "react";
 import {
   Play, Download, Settings, Code,
-  ChevronDown, Sparkles, Layers, Bug,
-  Activity, Zap, Bot, Network,
+  ChevronDown, Layers, Bug,
+  Activity, Zap,
   RotateCcw, Eye, Scan, Gauge,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -58,9 +58,6 @@ export default function TopToolbar({
   setShowRunMenu,
   handleRunTest,
   handleExportToBuilder,
-  setShowAIGenerator,
-  setShowAIExplorer,
-  setShowAIFlowExplorer,
   handleQuickApiTest,
   handleQuickLoadTest,
   captureForApiTest,
@@ -102,7 +99,7 @@ export default function TopToolbar({
           <PopoverTrigger asChild>
             <Button
               size="sm"
-              className="h-8 px-4 text-xs bg-emerald-600 hover:bg-emerald-700"
+              className="h-8 px-4 text-xs bg-primary hover:bg-primary/90"
               disabled={actions.length === 0}
             >
               <Play className="h-3.5 w-3.5 mr-1.5 fill-current" />
@@ -113,9 +110,9 @@ export default function TopToolbar({
           <PopoverContent align="end" className="w-64 p-1">
             <button
               onClick={() => handleRunTest(false, false)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-emerald-500/20 text-left transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-primary/10 text-left transition-colors"
             >
-              <Play className="h-4 w-4 text-emerald-400" />
+              <Play className="h-4 w-4 text-primary" />
               <div>
                 <div className="font-medium">Run</div>
                 <div className="text-[10px] text-muted-foreground">Execute with saved state</div>
@@ -123,9 +120,9 @@ export default function TopToolbar({
             </button>
             <button
               onClick={() => handleRunTest(false, true)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-cyan-500/20 text-left transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-primary/10 text-left transition-colors"
             >
-              <RotateCcw className="h-4 w-4 text-cyan-400" />
+              <RotateCcw className="h-4 w-4 text-primary" />
               <div>
                 <div className="font-medium">Fresh Run</div>
                 <div className="text-[10px] text-muted-foreground">Clean browser, no cache</div>
@@ -133,9 +130,9 @@ export default function TopToolbar({
             </button>
             <button
               onClick={() => handleRunTest(true, false)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-amber-500/20 text-left transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-amber-500/10 text-left transition-colors"
             >
-              <Bug className="h-4 w-4 text-amber-400" />
+              <Bug className="h-4 w-4 text-amber-500" />
               <div>
                 <div className="font-medium">Debug</div>
                 <div className="text-[10px] text-muted-foreground">Pause, edit, step-by-step</div>
@@ -148,7 +145,7 @@ export default function TopToolbar({
             {/* Playback Speed Selector */}
             <div className="px-3 py-2">
               <div className="flex items-center gap-2 mb-1.5">
-                <Gauge className="h-4 w-4 text-purple-400" />
+                <Gauge className="h-4 w-4 text-muted-foreground" />
                 <span className="font-medium text-xs">Playback Speed</span>
               </div>
               <div className="flex gap-1">
@@ -159,7 +156,7 @@ export default function TopToolbar({
                     className={cn(
                       "flex-1 px-2 py-1 text-[10px] rounded transition-colors",
                       playbackSpeed === speed
-                        ? "bg-purple-500/30 text-purple-300 border border-purple-500/50"
+                        ? "bg-primary/20 text-primary border border-primary/30"
                         : "bg-secondary/50 hover:bg-secondary text-muted-foreground"
                     )}
                   >
@@ -175,7 +172,7 @@ export default function TopToolbar({
               onClick={() => setHighlightElements(!highlightElements)}
             >
               <div className="flex items-center gap-2">
-                <Scan className="h-4 w-4 text-yellow-400" />
+                <Scan className="h-4 w-4 text-muted-foreground" />
                 <div>
                   <div className="font-medium text-xs">Highlight Elements</div>
                   <div className="text-[10px] text-muted-foreground">Visual indicator during run</div>
@@ -194,7 +191,7 @@ export default function TopToolbar({
               onClick={() => setKeepBrowserOpenOnFailure(!keepBrowserOpenOnFailure)}
             >
               <div className="flex items-center gap-2">
-                <Eye className="h-4 w-4 text-blue-400" />
+                <Eye className="h-4 w-4 text-muted-foreground" />
                 <div>
                   <div className="font-medium text-xs">Keep Browser Open</div>
                   <div className="text-[10px] text-muted-foreground">On failure, for debugging</div>
@@ -217,49 +214,13 @@ export default function TopToolbar({
           <Layers className="h-3.5 w-3.5 mr-1.5" />
           Builder
         </Button>
-        {/* AI Test Generator */}
-        <Button
-          onClick={() => setShowAIGenerator(true)}
-          size="sm"
-          className="h-8 px-3 text-xs bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700"
-          disabled={!isRecording}
-          title="AI-powered test generation"
-        >
-          <Bot className="h-3.5 w-3.5 mr-1" />
-          AI
-        </Button>
-        {/* AI Explorer Agent */}
-        <Button
-          onClick={() => {
-            console.log('[Explorer] Button clicked, isRecording:', isRecording);
-            setShowAIExplorer(true);
-          }}
-          size="sm"
-          className="h-8 px-3 text-xs bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-          title="AI Agent: Autonomous exploration and test discovery"
-        >
-          <Sparkles className="h-3.5 w-3.5 mr-1" />
-          Explorer
-        </Button>
-        {/* AI Flow Explorer */}
-        <Button
-          onClick={() => {
-            console.log('[FlowExplorer] Button clicked');
-            setShowAIFlowExplorer(true);
-          }}
-          size="sm"
-          className="h-8 px-3 text-xs bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700"
-          title="AI Flow Explorer: Discover ALL flows, pages, and hidden elements"
-        >
-          <Network className="h-3.5 w-3.5 mr-1" />
-          Flow Map
-        </Button>
         {/* Quick API Test */}
         {captureForApiTest && !isRecording && actions.length > 0 && (
           <Button
             onClick={handleQuickApiTest}
             size="sm"
-            className="h-8 px-3 text-xs bg-violet-600 hover:bg-violet-700"
+            variant="outline"
+            className="h-8 px-3 text-xs"
             title={capturedNetworkRequests.length > 0
               ? `Test ${capturedNetworkRequests.length} captured requests in API tab`
               : "Open API tab to test recorded endpoints"
@@ -274,7 +235,8 @@ export default function TopToolbar({
           <Button
             onClick={handleQuickLoadTest}
             size="sm"
-            className="h-8 px-3 text-xs bg-orange-600 hover:bg-orange-700"
+            variant="outline"
+            className="h-8 px-3 text-xs"
             title={capturedNetworkRequests.length > 0
               ? `Load test ${capturedNetworkRequests.length} captured requests in Perf tab`
               : "Open Perf tab to load test recorded endpoints"
@@ -289,7 +251,7 @@ export default function TopToolbar({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 px-2 text-xs border-violet-500/50 text-violet-400 hover:bg-violet-500/20"
+              className="h-8 px-2 text-xs"
               onClick={exportCapturedAsPostman}
               title="Download captured requests as Postman Collection"
             >
@@ -299,7 +261,7 @@ export default function TopToolbar({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 px-2 text-xs border-amber-500/50 text-amber-400 hover:bg-amber-500/20"
+              className="h-8 px-2 text-xs"
               onClick={exportCapturedAsHAR}
               title="Download captured requests as HAR"
             >
@@ -309,11 +271,11 @@ export default function TopToolbar({
           </>
         )}
         <Select onValueChange={handleExport}>
-          <SelectTrigger className="h-8 w-[100px] text-xs border-white/20 bg-transparent">
+          <SelectTrigger className="h-8 w-[100px] text-xs bg-transparent">
             <Download className="h-3.5 w-3.5 mr-1" />
             <SelectValue placeholder="Export" />
           </SelectTrigger>
-          <SelectContent className="bg-secondary border-border">
+          <SelectContent>
             <SelectItem value="playwright" className="text-xs">Playwright</SelectItem>
             <SelectItem value="cypress" className="text-xs">Cypress</SelectItem>
             <SelectItem value="selenium" className="text-xs">Selenium</SelectItem>

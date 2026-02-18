@@ -21,12 +21,8 @@ import {
   Bell,
   User,
   ChevronDown,
-  LayoutDashboard,
-  BarChart3,
-  Plug,
   Sun,
   Moon,
-  Shield,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -127,25 +123,11 @@ const mainNavItems: NavItem[] = [
     plugin: 'visual',
   },
   {
-    id: 'code-alchemy',
-    label: 'Alchemy',
-    path: '/code-alchemy',
-    description: 'Import repos as test cases',
-    plugin: 'alchemy',
-  },
-  {
     id: 'salesforce',
     label: 'SF',
     path: '/salesforce',
     description: 'Salesforce tools',
     plugin: 'salesforce',
-  },
-  {
-    id: 'flowpilot',
-    label: 'Flowpilot',
-    path: '/flowpilot',
-    description: 'Goal-based AI testing',
-    plugin: 'flowpilot',
   },
 ];
 
@@ -263,9 +245,6 @@ function Header() {
 
   // More menu items - additional features not in main nav
   const moreMenuItems = [
-    { label: 'Secrets Vault', path: '/secrets', icon: Shield, plugin: 'secrets' as const },
-    { label: 'Integrations', path: '/integrations', icon: Plug, plugin: 'integrations' as const },
-    { divider: true },
     { label: 'Settings', path: '/settings', icon: Settings, plugin: null }, // Always available
   ];
 

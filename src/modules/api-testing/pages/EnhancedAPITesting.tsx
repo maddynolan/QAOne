@@ -1738,7 +1738,7 @@ export default function EnhancedAPITesting() {
             <Send className="w-4 h-4 mr-1" />
             Builder
           </TabsTrigger>
-          <TabsTrigger value="chains" className="flex-1 min-w-0 data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-500 text-muted-foreground">
+          <TabsTrigger value="chains" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <Link2 className="w-4 h-4 mr-1" />
             Chains
           </TabsTrigger>

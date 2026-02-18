@@ -158,8 +158,20 @@ function getWebappUrl() {
 // Track if we're showing license page
 let showingLicensePage = false;
 
+// Get titlebar colors based on system theme
+function getTitleBarColors() {
+  const { nativeTheme } = require('electron');
+  const isDark = nativeTheme.shouldUseDarkColors;
+  return {
+    color: isDark ? '#0a0a0f' : '#f8f9fc',
+    symbolColor: isDark ? '#e5e7eb' : '#374151',
+    backgroundColor: isDark ? '#0a0a0f' : '#f8f9fc'
+  };
+}
+
 // Create main window - may show license page first
 function createWindow() {
+  const theme = getTitleBarColors();
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -174,11 +186,11 @@ function createWindow() {
     },
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#0a0a0f',
-      symbolColor: '#ffffff',
+      color: theme.color,
+      symbolColor: theme.symbolColor,
       height: 40
     },
-    backgroundColor: '#0a0a0f'
+    backgroundColor: theme.backgroundColor
   });
 
   // Initially load a simple loading screen while we check license
@@ -210,6 +222,7 @@ function loadWebapp() {
     const oldWindow = mainWindow;
     
     // Create new window with webapp-preload.js
+    const webappTheme = getTitleBarColors();
     mainWindow = new BrowserWindow({
       width: 1400,
       height: 900,
@@ -224,8 +237,8 @@ function loadWebapp() {
       },
       titleBarStyle: 'hidden',
       titleBarOverlay: {
-        color: '#0a0a0f',
-        symbolColor: '#ffffff',
+        color: webappTheme.color,
+        symbolColor: webappTheme.symbolColor,
         height: 32
       },
       show: false // Don't show until ready
@@ -3914,6 +3927,16 @@ app.whenReady().then(async () => {
   createWindow();
   await initializeServices();
   createTray();
+
+  // Update titlebar when system theme changes
+  const { nativeTheme } = require('electron');
+  nativeTheme.on('updated', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const theme = getTitleBarColors();
+      mainWindow.setTitleBarOverlay({ color: theme.color, symbolColor: theme.symbolColor });
+      mainWindow.setBackgroundColor(theme.backgroundColor);
+    }
+  });
   
   // Register diagnostics IPC handlers for remote support
   registerDiagnosticsIPC(ipcMain);
