@@ -613,6 +613,8 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
 
     try {
       // Use the backend proxy endpoint to avoid CORS issues
+      // buildUrl() already includes query params in the URL string,
+      // so we do NOT pass them separately in `query` to avoid double-appending.
       const proxyResponse = await fetch(`${API_BASE_URL}/api/v2/testing/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -630,9 +632,6 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   body: request.bodyType !== "none" && request.body.trim()
                     ? tryParseJSON(sentBody)
                     : undefined,
-                  query: Object.fromEntries(
-                    request.params.filter(p => p.enabled && p.key.trim()).map(p => [p.key, p.value])
-                  ),
                 },
                 expected_status: (() => {
                   const statusAssertion = assertions.find(a => a.type === "status_code");
