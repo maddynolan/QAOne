@@ -483,24 +483,21 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
   // Check for unresolved variables in URL
   const unresolvedVars = request.url ? hasUnresolvedVariables(request.url) : [];
 
-  // --- Live URL preview with query params appended ---
-  const previewUrl = useMemo(() => {
-    let url = request.url.trim();
-    if (!url) return "";
-    // Strip any existing query string from the base URL (params table is source of truth)
-    const [baseUrl] = url.split("?");
+  // --- Compute the display URL (base + query params from table) ---
+  const displayUrl = useMemo(() => {
+    const base = request.url.trim();
+    if (!base) return "";
     const enabledParams = request.params.filter(p => p.enabled && p.key.trim());
     if (enabledParams.length > 0) {
       const qs = enabledParams.map(p => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`).join("&");
-      return `${baseUrl}?${qs}`;
+      return `${base}?${qs}`;
     }
-    return baseUrl;
+    return base;
   }, [request.url, request.params]);
 
   // --- Two-way sync: parse query params from URL into params table ---
-  const syncingUrlRef = useRef(false);
+  // When user types in URL field, split into base URL + params
   const handleUrlChange = useCallback((newUrl: string) => {
-    syncingUrlRef.current = true;
     const qIdx = newUrl.indexOf("?");
     if (qIdx >= 0) {
       const baseUrl = newUrl.slice(0, qIdx);
@@ -528,7 +525,6 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
     } else {
       setRequest(prev => ({ ...prev, url: newUrl }));
     }
-    syncingUrlRef.current = false;
   }, []);
 
   // --- Check if current response is valid JSON ---
@@ -1167,7 +1163,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
               <Input
                 className={`w-full font-mono text-sm h-10 ${unresolvedVars.length > 0 ? "border-amber-400 pr-20" : ""}`}
                 placeholder="https://api.example.com/endpoint  or  {{base_url}}/api/users"
-                value={request.url}
+                value={displayUrl}
                 onChange={e => handleUrlChange(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") handleSend(); }}
               />
@@ -1180,14 +1176,6 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded">
                   vars resolved
                 </span>
-              )}
-              {/* Live URL preview showing base + query params */}
-              {previewUrl && previewUrl !== request.url && request.params.some(p => p.enabled && p.key.trim()) && (
-                <div className="absolute left-0 top-full mt-0.5 z-10 w-full">
-                  <div className="bg-muted/90 backdrop-blur-sm border border-border rounded-b px-2 py-1 text-[10px] font-mono text-muted-foreground truncate">
-                    {previewUrl}
-                  </div>
-                </div>
               )}
             </div>
 
