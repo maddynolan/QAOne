@@ -635,9 +635,9 @@ export default function LicenseAdminPage() {
               No licenses found. Generate your first license above.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 text-left">
+            <div className="overflow-auto">
+              <table className="min-w-max w-full">
+                <thead className="bg-gray-50 text-left sticky top-0 z-10">
                   <tr>
                     <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">License Key</th>
                     <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Type</th>

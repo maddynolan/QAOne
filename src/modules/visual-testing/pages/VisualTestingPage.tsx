@@ -1073,9 +1073,9 @@ export default function VisualTestingPage() {
                 </div>
 
                 {batchTestResults.length > 0 && (
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted">
+                  <div className="border rounded-lg overflow-auto max-h-[400px]">
+                    <table className="min-w-max w-full text-sm">
+                      <thead className="bg-muted sticky top-0 z-10">
                         <tr>
                           <th className="text-left px-3 py-2 font-medium">URL</th>
                           <th className="text-left px-3 py-2 font-medium w-28">Status</th>

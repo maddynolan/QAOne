@@ -370,8 +370,8 @@ export function SalesforceReportRunner({ isConnected }: SalesforceReportRunnerPr
             ) : reportResult ? (
               <div className="overflow-auto max-h-[500px] rounded-lg border border-border">
                 {reportResult.hasDetailRows ? (
-                  <table className="w-full text-sm">
-                    <thead className="bg-secondary sticky top-0">
+                  <table className="min-w-max text-sm">
+                    <thead className="bg-secondary sticky top-0 z-10">
                       <tr>
                         {reportResult.columns.map((col, idx) => (
                           <th key={idx} className="px-4 py-2 text-left text-slate-300 font-medium whitespace-nowrap">

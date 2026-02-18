@@ -1089,12 +1089,12 @@ export function SalesforceToolsPage() {
                     </CardHeader>
                     <CardContent className="p-0">
                       <div className="overflow-auto max-h-[400px]">
-                        <table className="w-full text-sm">
-                          <thead className="bg-secondary sticky top-0">
+                        <table className="min-w-max text-sm">
+                          <thead className="bg-secondary sticky top-0 z-10">
                             <tr>
-                              <th className="px-4 py-2 text-left text-muted-foreground font-medium w-12">#</th>
+                              <th className="px-4 py-2 text-left text-muted-foreground font-medium w-12 whitespace-nowrap">#</th>
                               {queryColumns.map(col => (
-                                <th key={col} className="px-4 py-2 text-left text-foreground font-medium">
+                                <th key={col} className="px-4 py-2 text-left text-foreground font-medium whitespace-nowrap">
                                   {col}
                                 </th>
                               ))}
@@ -1103,10 +1103,10 @@ export function SalesforceToolsPage() {
                           <tbody>
                             {queryResults.map((record, idx) => (
                               <tr key={idx} className="border-t border-border hover:bg-secondary/50">
-                                <td className="px-4 py-2 text-muted-foreground">{idx + 1}</td>
+                                <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">{idx + 1}</td>
                                 {queryColumns.map(col => (
-                                  <td key={col} className="px-4 py-2 text-foreground">
-                                    {typeof record[col] === 'object' 
+                                  <td key={col} className="px-4 py-2 text-foreground whitespace-nowrap max-w-[300px] truncate" title={typeof record[col] === 'object' ? JSON.stringify(record[col]) : String(record[col] ?? '')}>
+                                    {typeof record[col] === 'object'
                                       ? JSON.stringify(record[col])
                                       : String(record[col] ?? '')}
                                   </td>
@@ -1499,13 +1499,13 @@ export function SalesforceToolsPage() {
 
                           {/* Fields Table */}
                           <div className="overflow-auto max-h-[500px] rounded-lg border border-border">
-                            <table className="w-full text-sm">
-                              <thead className="bg-secondary sticky top-0">
+                            <table className="min-w-max text-sm">
+                              <thead className="bg-secondary sticky top-0 z-10">
                                 <tr>
-                                  <th className="px-4 py-2 text-left text-foreground">Field</th>
-                                  <th className="px-4 py-2 text-left text-foreground">API Name</th>
-                                  <th className="px-4 py-2 text-left text-foreground">Type</th>
-                                  <th className="px-4 py-2 text-left text-foreground">Properties</th>
+                                  <th className="px-4 py-2 text-left text-foreground whitespace-nowrap">Field</th>
+                                  <th className="px-4 py-2 text-left text-foreground whitespace-nowrap">API Name</th>
+                                  <th className="px-4 py-2 text-left text-foreground whitespace-nowrap">Type</th>
+                                  <th className="px-4 py-2 text-left text-foreground whitespace-nowrap">Properties</th>
                                 </tr>
                               </thead>
                               <tbody>

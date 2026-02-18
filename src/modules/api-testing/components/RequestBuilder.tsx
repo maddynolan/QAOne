@@ -2129,16 +2129,16 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
             <TabsContent value="assertions" className="p-4 mt-0">
               <AssertionsPanel assertions={assertions} onChange={setAssertions} results={assertionResults.length > 0 ? assertionResults : undefined} currentResponseBody={response?.body} />
               {assertionResults.length > 0 && (
-                <div className="mt-3 overflow-x-auto">
-                  <table className="w-full text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50">
-                        <th className="text-left p-1.5 font-medium text-muted-foreground w-8">#</th>
-                        <th className="text-left p-1.5 font-medium text-muted-foreground w-6">Status</th>
-                        <th className="text-left p-1.5 font-medium text-muted-foreground">Type</th>
-                        <th className="text-left p-1.5 font-medium text-muted-foreground">Path</th>
-                        <th className="text-left p-1.5 font-medium text-muted-foreground">Expected</th>
-                        <th className="text-left p-1.5 font-medium text-muted-foreground">Actual</th>
+                <div className="mt-3 overflow-auto max-h-[300px] border rounded-lg">
+                  <table className="min-w-max w-full text-xs border-collapse">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="border-b border-border bg-muted/90 backdrop-blur-sm">
+                        <th className="text-left p-1.5 font-medium text-muted-foreground w-8 whitespace-nowrap">#</th>
+                        <th className="text-left p-1.5 font-medium text-muted-foreground w-6 whitespace-nowrap">Status</th>
+                        <th className="text-left p-1.5 font-medium text-muted-foreground whitespace-nowrap">Type</th>
+                        <th className="text-left p-1.5 font-medium text-muted-foreground whitespace-nowrap">Path</th>
+                        <th className="text-left p-1.5 font-medium text-muted-foreground whitespace-nowrap">Expected</th>
+                        <th className="text-left p-1.5 font-medium text-muted-foreground whitespace-nowrap">Actual</th>
                       </tr>
                     </thead>
                     <tbody>

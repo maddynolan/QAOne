@@ -105,8 +105,8 @@ export function TestRunResultsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden bg-popover border-border">
-        <DialogHeader className="border-b border-gray-200 dark:border-gray-800 pb-4">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col bg-popover border-border">
+        <DialogHeader className="border-b border-gray-200 dark:border-gray-800 pb-4 flex-shrink-0">
           <DialogTitle className="flex items-center gap-3 text-white">
             <div className={cn(
               "p-2 rounded-lg",
@@ -130,7 +130,7 @@ export function TestRunResultsDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="overflow-y-auto max-h-[60vh] py-4 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto py-4 space-y-4">
           {/* Summary Stats */}
           <div className="grid grid-cols-4 gap-3">
             <div className="bg-secondary rounded-lg p-3 text-center">

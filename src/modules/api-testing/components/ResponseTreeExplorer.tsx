@@ -535,7 +535,7 @@ export default function ResponseTreeExplorer({
               try {
                 const parsed = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
                 if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === "object" && parsed[0] !== null && !Array.isArray(parsed[0])) {
-                  // Top-level array of objects
+                  // Top-level array of objects — union ALL keys from every item
                   const colSet = new Set<string>();
                   parsed.forEach((item: any) => { if (item && typeof item === "object") Object.keys(item).forEach(k => colSet.add(k)); });
                   gridData = { items: parsed, columns: [...colSet], basePath: "$" };
@@ -558,131 +558,142 @@ export default function ResponseTreeExplorer({
                 return (
                   <div>
                     {arrayKey && (
-                      <div className="px-2 py-1 text-[10px] text-muted-foreground border-b bg-muted/40">
-                        Showing <span className="font-mono font-medium">{arrayKey}</span> array ({items.length} items)
+                      <div className="px-2 py-1 text-[10px] text-muted-foreground border-b bg-muted/40 sticky top-0 z-20">
+                        Showing <span className="font-mono font-medium">{arrayKey}</span> array ({items.length} items) &middot; {columns.length} columns
                       </div>
                     )}
-                    <table className="w-full text-xs">
-                      <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10">
-                        <tr className="border-b">
-                          <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-8">#</th>
-                          {columns.map(col => (
-                            <th key={col} className="text-left py-1.5 px-2 font-medium text-muted-foreground">
-                              <span className="font-mono">{col}</span>
-                            </th>
-                          ))}
-                          <th className="text-center py-1.5 px-2 font-medium text-muted-foreground w-10">Assert</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((item, idx) => (
-                          <tr key={idx} className="border-b border-border/30 hover:bg-muted/40">
-                            <td className="py-1 px-2 text-muted-foreground font-mono">{idx}</td>
-                            {columns.map(col => {
-                              const val = item?.[col];
-                              const type = getType(val);
-                              const cellPath = `${basePath}[${idx}].${col}`;
-                              const asserted = hasAssertion(cellPath);
-                              return (
-                                <td
-                                  key={col}
-                                  className={`py-1 px-2 font-mono truncate max-w-[180px] cursor-pointer hover:bg-primary/5 ${asserted ? "bg-green-500/5" : ""}`}
-                                  title={`${cellPath} = ${typeof val === "object" ? JSON.stringify(val) : String(val ?? "null")}`}
-                                  onClick={() => {
-                                    const node: TreeNode = { key: col, path: cellPath, value: val, type, depth: 2 };
-                                    createAssertionFromNode(node);
-                                  }}
-                                >
-                                  <span className={getTypeColor(type)}>
-                                    {val === null || val === undefined ? <span className="text-gray-400">null</span>
-                                      : typeof val === "object" ? (Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).length}}`)
-                                      : typeof val === "string" ? (val.length > 40 ? `"${val.slice(0, 40)}..."` : `"${val}"`)
-                                      : String(val)}
-                                  </span>
-                                  {asserted && <CheckCircle2 className="w-2.5 h-2.5 text-green-500 inline ml-1" />}
-                                </td>
-                              );
-                            })}
-                            <td className="py-1 px-2 text-center">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-5 w-5 p-0 text-primary hover:text-primary"
-                                onClick={() => {
-                                  // Assert entire row (all fields of this item)
-                                  columns.forEach(col => {
-                                    const val = item?.[col];
-                                    if (val === undefined) return;
-                                    const type = getType(val);
-                                    const cellPath = `${basePath}[${idx}].${col}`;
-                                    if (!hasAssertion(cellPath)) {
+                    <div className="overflow-x-auto">
+                      <table className="min-w-max text-xs border-collapse">
+                        <thead className="sticky top-0 bg-muted/95 backdrop-blur-sm z-10">
+                          <tr className="border-b">
+                            <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-10 whitespace-nowrap">#</th>
+                            {columns.map(col => (
+                              <th key={col} className="text-left py-1.5 px-3 font-medium text-muted-foreground whitespace-nowrap">
+                                <span className="font-mono">{col}</span>
+                              </th>
+                            ))}
+                            <th className="text-center py-1.5 px-2 font-medium text-muted-foreground w-12 whitespace-nowrap sticky right-0 bg-muted/95">Assert</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((item, idx) => (
+                            <tr key={idx} className="border-b border-border/30 hover:bg-muted/40">
+                              <td className="py-1 px-2 text-muted-foreground font-mono whitespace-nowrap">{idx}</td>
+                              {columns.map(col => {
+                                const hasKey = item && typeof item === "object" && col in item;
+                                const val = item?.[col];
+                                const type = getType(val);
+                                const cellPath = `${basePath}[${idx}].${col}`;
+                                const asserted = hasAssertion(cellPath);
+                                return (
+                                  <td
+                                    key={col}
+                                    className={`py-1 px-3 font-mono whitespace-nowrap max-w-[320px] cursor-pointer hover:bg-primary/5 ${asserted ? "bg-green-500/5" : ""} ${!hasKey ? "bg-muted/30" : ""}`}
+                                    title={hasKey ? `${cellPath} = ${typeof val === "object" ? JSON.stringify(val) : String(val ?? "null")}` : `${col}: field not present in this item`}
+                                    onClick={() => {
+                                      if (!hasKey) return; // Don't create assertion for missing fields
                                       const node: TreeNode = { key: col, path: cellPath, value: val, type, depth: 2 };
                                       createAssertionFromNode(node);
-                                    }
-                                  });
-                                }}
-                                title={`Assert all fields of item [${idx}]`}
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                                    }}
+                                  >
+                                    {!hasKey ? (
+                                      <span className="text-muted-foreground/40 italic">—</span>
+                                    ) : (
+                                      <span className={`${getTypeColor(type)} truncate inline-block max-w-[300px]`}>
+                                        {val === null ? <span className="text-gray-400">null</span>
+                                          : val === undefined ? <span className="text-gray-400">undefined</span>
+                                          : typeof val === "object" ? (Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).length}}`)
+                                          : typeof val === "string" ? (val.length > 60 ? `"${val.slice(0, 60)}..."` : `"${val}"`)
+                                          : String(val)}
+                                      </span>
+                                    )}
+                                    {asserted && <CheckCircle2 className="w-2.5 h-2.5 text-green-500 inline ml-1" />}
+                                  </td>
+                                );
+                              })}
+                              <td className="py-1 px-2 text-center sticky right-0 bg-background/80">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-5 w-5 p-0 text-primary hover:text-primary"
+                                  onClick={() => {
+                                    // Assert entire row (all fields of this item that exist)
+                                    columns.forEach(col => {
+                                      if (!(item && typeof item === "object" && col in item)) return;
+                                      const val = item?.[col];
+                                      const type = getType(val);
+                                      const cellPath = `${basePath}[${idx}].${col}`;
+                                      if (!hasAssertion(cellPath)) {
+                                        const node: TreeNode = { key: col, path: cellPath, value: val, type, depth: 2 };
+                                        createAssertionFromNode(node);
+                                      }
+                                    });
+                                  }}
+                                  title={`Assert all fields of item [${idx}]`}
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 );
               }
 
               // Fallback: leaf-node flat table (for non-array or non-uniform responses)
               return allNodes.length > 0 ? (
-                <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10">
-                    <tr className="border-b">
-                      <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-8"></th>
-                      <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Field</th>
-                      <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-16">Type</th>
-                      <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Value</th>
-                      <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-[200px]">JSONPath</th>
-                      <th className="text-center py-1.5 px-2 font-medium text-muted-foreground w-10">Assert</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allNodes.filter(n => !n.children).map((node) => {
-                      const alreadyAsserted = hasAssertion(node.path);
-                      return (
-                        <tr key={node.path} className={`border-b border-border/30 hover:bg-muted/40 ${alreadyAsserted ? "bg-green-500/5" : ""}`}>
-                          <td className="py-1 px-2">
-                            <span className={getTypeColor(node.type)}>{getTypeIcon(node.type)}</span>
-                          </td>
-                          <td className="py-1 px-2 font-mono font-medium truncate max-w-[150px]" title={node.key}>
-                            {node.key}
-                          </td>
-                          <td className="py-1 px-2">
-                            <span className={`${getTypeColor(node.type)} font-mono`}>{node.type}</span>
-                          </td>
-                          <td className="py-1 px-2 font-mono truncate max-w-[200px]" title={String(node.value)}>
-                            <span className={getTypeColor(node.type)}>{formatValue(node.value, node.type)}</span>
-                          </td>
-                          <td className="py-1 px-2 font-mono text-muted-foreground text-[10px] truncate max-w-[200px]" title={node.path}>
-                            {node.path}
-                          </td>
-                          <td className="py-1 px-2 text-center">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className={`h-5 w-5 p-0 ${alreadyAsserted ? "text-green-500" : "text-primary hover:text-primary"}`}
-                              onClick={() => createAssertionFromNode(node)}
-                              title={alreadyAsserted ? "Add another assertion" : `Assert ${node.key} = ${formatValue(node.value, node.type)}`}
-                            >
-                              {alreadyAsserted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="min-w-max text-xs border-collapse">
+                    <thead className="sticky top-0 bg-muted/95 backdrop-blur-sm z-10">
+                      <tr className="border-b">
+                        <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-8"></th>
+                        <th className="text-left py-1.5 px-2 font-medium text-muted-foreground whitespace-nowrap">Field</th>
+                        <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-16 whitespace-nowrap">Type</th>
+                        <th className="text-left py-1.5 px-2 font-medium text-muted-foreground whitespace-nowrap">Value</th>
+                        <th className="text-left py-1.5 px-2 font-medium text-muted-foreground whitespace-nowrap">JSONPath</th>
+                        <th className="text-center py-1.5 px-2 font-medium text-muted-foreground w-10 whitespace-nowrap">Assert</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allNodes.filter(n => !n.children).map((node) => {
+                        const alreadyAsserted = hasAssertion(node.path);
+                        return (
+                          <tr key={node.path} className={`border-b border-border/30 hover:bg-muted/40 ${alreadyAsserted ? "bg-green-500/5" : ""}`}>
+                            <td className="py-1 px-2">
+                              <span className={getTypeColor(node.type)}>{getTypeIcon(node.type)}</span>
+                            </td>
+                            <td className="py-1 px-2 font-mono font-medium whitespace-nowrap" title={node.key}>
+                              {node.key}
+                            </td>
+                            <td className="py-1 px-2">
+                              <span className={`${getTypeColor(node.type)} font-mono`}>{node.type}</span>
+                            </td>
+                            <td className="py-1 px-2 font-mono max-w-[400px]" title={String(node.value)}>
+                              <span className={`${getTypeColor(node.type)} truncate inline-block max-w-[380px]`}>{formatValue(node.value, node.type)}</span>
+                            </td>
+                            <td className="py-1 px-2 font-mono text-muted-foreground text-[10px] whitespace-nowrap" title={node.path}>
+                              {node.path}
+                            </td>
+                            <td className="py-1 px-2 text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className={`h-5 w-5 p-0 ${alreadyAsserted ? "text-green-500" : "text-primary hover:text-primary"}`}
+                                onClick={() => createAssertionFromNode(node)}
+                                title={alreadyAsserted ? "Add another assertion" : `Assert ${node.key} = ${formatValue(node.value, node.type)}`}
+                              >
+                                {alreadyAsserted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-8">
                   <AlertCircle className="w-8 h-8 mb-2 opacity-30" />

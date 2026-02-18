@@ -630,8 +630,8 @@ function TablesSection() {
         </div>
 
         {/* Table */}
-        <div className="border rounded-lg overflow-hidden">
-          <table className="w-full" data-testid="orders-table">
+        <div className="border rounded-lg overflow-auto">
+          <table className="min-w-max w-full" data-testid="orders-table">
             <thead className="bg-slate-100 dark:bg-slate-800">
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-semibold">Order ID</th>

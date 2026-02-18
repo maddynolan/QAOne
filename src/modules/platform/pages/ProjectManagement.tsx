@@ -654,17 +654,17 @@ export default function ProjectManagement() {
             
             <TabsContent value="list">
               <Card>
-                <CardContent className="p-0">
-                  <table className="w-full">
-                    <thead>
+                <CardContent className="p-0 overflow-auto">
+                  <table className="min-w-max w-full">
+                    <thead className="sticky top-0 z-10 bg-background">
                       <tr className="border-b bg-muted/50">
-                        <th className="text-left p-3 font-medium">Key</th>
-                        <th className="text-left p-3 font-medium">Title</th>
-                        <th className="text-left p-3 font-medium">Type</th>
-                        <th className="text-left p-3 font-medium">Priority</th>
-                        <th className="text-left p-3 font-medium">Status</th>
-                        <th className="text-left p-3 font-medium">Assignee</th>
-                        <th className="text-center p-3 font-medium">Links</th>
+                        <th className="text-left p-3 font-medium whitespace-nowrap">Key</th>
+                        <th className="text-left p-3 font-medium whitespace-nowrap">Title</th>
+                        <th className="text-left p-3 font-medium whitespace-nowrap">Type</th>
+                        <th className="text-left p-3 font-medium whitespace-nowrap">Priority</th>
+                        <th className="text-left p-3 font-medium whitespace-nowrap">Status</th>
+                        <th className="text-left p-3 font-medium whitespace-nowrap">Assignee</th>
+                        <th className="text-center p-3 font-medium whitespace-nowrap">Links</th>
                       </tr>
                     </thead>
                     <tbody>
