@@ -56,6 +56,7 @@ import {
   formatResponseBody,
   getStatusColor,
 } from "../lib/request-builder-utils";
+import { setBuilderDirtyState, clearBuilderDirtyState } from "../store/apiTestingStore";
 
 interface SavedRequest {
   id: string;
@@ -157,6 +158,73 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
       }
     }
   }, [initialRequest]);
+
+  // Auto-save tracking: write current form state to module-level ref so the
+  // store can auto-save it when the user switches to a different request.
+  // Also persists to localStorage so state survives app close/reopen.
+  const editingId = (initialRequest as any)?.editingTestCaseId;
+  useEffect(() => {
+    if (editingId) {
+      const dirtyState = {
+        requestId: editingId,
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body: request.body,
+        bodyType: request.bodyType,
+        assertions: assertions,
+        authType: request.authType,
+        authToken: request.authToken,
+      };
+      setBuilderDirtyState(dirtyState);
+      // Persist to localStorage for app restart survival
+      try {
+        localStorage.setItem('api_builder_active_state', JSON.stringify(dirtyState));
+      } catch { /* ignore quota errors */ }
+    }
+  }, [editingId, request.method, request.url, request.headers, request.body, request.bodyType, request.authType, request.authToken, assertions]);
+
+  // Save dirty state on page unload (app close) so changes survive restart.
+  // Uses a ref to avoid re-registering the listener on every keystroke.
+  const unloadSaveRef = useRef<() => void>(() => {});
+  unloadSaveRef.current = () => {
+    if (editingId && request.url) {
+      try {
+        // Dynamic import not needed — useApiTestingStore is already imported
+        // via setBuilderDirtyState. Use the store reference directly.
+        const store = (window as any).__apiTestingStore?.getState?.();
+        if (!store) return;
+        const collId = store.active_collection_id;
+        if (collId) {
+          const coll = store.collections[collId];
+          const idx = coll?.requests?.findIndex((r: any) => r.id === editingId);
+          if (idx !== undefined && idx !== -1) {
+            const pathOnly = request.url.replace(/^https?:\/\/[^/]+/, '') || '/';
+            Object.assign(coll.requests[idx], {
+              method: request.method,
+              url: request.url,
+              path: pathOnly,
+              headers: request.headers,
+              body: request.body || '',
+              assertions: assertions || [],
+            });
+            coll.updated_at = new Date().toISOString();
+            // Trigger persist middleware to save to localStorage synchronously
+            (window as any).__apiTestingStore.setState({ collections: { ...store.collections } });
+          }
+        }
+      } catch { /* best effort */ }
+    }
+  };
+  useEffect(() => {
+    const handler = () => unloadSaveRef.current();
+    window.addEventListener('beforeunload', handler);
+    return () => {
+      window.removeEventListener('beforeunload', handler);
+      clearBuilderDirtyState();
+    };
+  }, []);
+
   const [savedRequests, setSavedRequests] = useState<SavedRequest[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("api_saved_requests") || "[]");
@@ -1115,8 +1183,46 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setShowSaveInput(!showSaveInput)}
-              title="Save request"
+              onClick={() => {
+                // If editing an existing request, save in-place (no name prompt)
+                if (editingId && onAddToTestSuite) {
+                  const url = buildUrl();
+                  const pathOnly = url ? (url.replace(/^https?:\/\/[^/]+/, "") || "/") : "/";
+                  onAddToTestSuite({
+                    test_case_id: editingId,
+                    editingTestCaseId: editingId,
+                    title: (initialRequest as any)?.title || `${request.method} ${pathOnly}`,
+                    description: `Custom test: ${request.method} ${url}`,
+                    method: request.method,
+                    path: pathOnly,
+                    endpoint: pathOnly,
+                    fullUrl: url,
+                    expected_status: (() => {
+                      const sa = assertions.find(a => a.type === "status_code");
+                      if (sa) return parseInt(String(sa.expected), 10) || 200;
+                      return request.method === "POST" ? 201 : 200;
+                    })(),
+                    test_type: "functional",
+                    tags: ["functional", "builder", "custom"],
+                    request: {
+                      headers: buildHeaders(),
+                      body: request.bodyType !== "none" && request.body.trim()
+                        ? (() => { try { return JSON.parse(request.body); } catch { return request.body; } })()
+                        : undefined,
+                      query: Object.fromEntries(
+                        request.params.filter(p => p.enabled && p.key.trim()).map(p => [p.key, p.value])
+                      ),
+                    },
+                    assertions: assertions.map(a => ({
+                      type: a.type, operator: a.operator, expected: a.expected, path: a.path, schema: a.schema,
+                    })),
+                  });
+                  toast({ title: "Saved", description: "Request saved to collection." });
+                } else {
+                  setShowSaveInput(!showSaveInput);
+                }
+              }}
+              title={editingId ? "Save changes" : "Save request"}
             >
               <Save className="w-4 h-4" />
             </Button>

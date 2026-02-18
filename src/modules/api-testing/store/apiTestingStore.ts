@@ -50,6 +50,38 @@ export {
 } from './api-testing-selectors';
 
 // ============================================================================
+// BUILDER AUTO-SAVE: Module-level state (not in Zustand to avoid re-renders)
+// RequestBuilder writes here on every change; openRequestInBuilder reads
+// to auto-save before switching to a different request.
+// ============================================================================
+let _builderDirtyState: {
+  requestId: string;
+  method: string;
+  url: string;
+  headers: Array<{ key: string; value: string; enabled: boolean }>;
+  body: string;
+  bodyType: string;
+  assertions: any[];
+  authType?: string;
+  authToken?: string;
+  authUsername?: string;
+  authPassword?: string;
+  authApiKeyName?: string;
+  authApiKeyValue?: string;
+  authApiKeyLocation?: string;
+} | null = null;
+
+/** Called by RequestBuilder on every form change to keep track of the current state */
+export function setBuilderDirtyState(state: typeof _builderDirtyState) {
+  _builderDirtyState = state;
+}
+
+/** Clear the dirty state (e.g., when builder unmounts) */
+export function clearBuilderDirtyState() {
+  _builderDirtyState = null;
+}
+
+// ============================================================================
 // STORE IMPLEMENTATION
 // ============================================================================
 
@@ -688,6 +720,35 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
             const coll = get().collections[collId];
             const request = coll?.requests.find(r => r.id === requestId);
             if (!request) return;
+
+            // Auto-save current builder state before switching to a different request
+            if (_builderDirtyState && _builderDirtyState.requestId !== requestId) {
+              const prevId = _builderDirtyState.requestId;
+              const prevExists = coll?.requests.some(r => r.id === prevId);
+              if (prevExists) {
+                const ds = _builderDirtyState;
+                const pathOnly = ds.url ? (ds.url.replace(/^https?:\/\/[^/]+/, '') || '/') : '/';
+                set((s) => {
+                  const c = s.collections[collId];
+                  if (!c) return;
+                  const idx = c.requests.findIndex(r => r.id === prevId);
+                  if (idx !== -1) {
+                    Object.assign(c.requests[idx], {
+                      method: ds.method,
+                      url: ds.url,
+                      path: pathOnly,
+                      headers: ds.headers,
+                      body: ds.body || '',
+                      assertions: ds.assertions || [],
+                      updated_at: nowISO(),
+                    });
+                    c.updated_at = nowISO();
+                  }
+                });
+                get()._debouncedSaveCollection(collId);
+              }
+              _builderDirtyState = null;
+            }
 
             // Use the stored URL directly — prefer request.url (full URL with base) over request.path
             const storedUrl = request.url || request.path || '/';
@@ -1520,4 +1581,9 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
     { name: 'ApiTestingStore' }
   )
 );
+
+// Expose store reference on window for beforeunload save handler in RequestBuilder
+if (typeof window !== 'undefined') {
+  (window as any).__apiTestingStore = useApiTestingStore;
+}
 

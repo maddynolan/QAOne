@@ -309,20 +309,23 @@ const FolderNode = memo(({
   const [localRenameName, setLocalRenameName] = React.useState(folder.name);
   const localRenameRef = React.useRef<HTMLInputElement>(null);
   const hasSubmittedRef = React.useRef(false);
-  const renameReadyRef = React.useRef(false);
+  // Track mount-time so we can ignore blurs that happen too soon (e.g. dropdown closing)
+  const mountTimeRef = React.useRef(0);
+  const prevIsRenamingRef = React.useRef(false);
 
-  // Focus the rename input when this folder enters rename mode
+  // Focus the rename input ONLY when transitioning into rename mode
   React.useEffect(() => {
-    if (isRenaming) {
+    const justEnteredRename = isRenaming && !prevIsRenamingRef.current;
+    prevIsRenamingRef.current = isRenaming;
+    if (justEnteredRename) {
       setLocalRenameName(folder.name);
       hasSubmittedRef.current = false;
-      renameReadyRef.current = false;
-      // Delay focus and mark ready — prevents dropdown-close blur from auto-submitting
+      mountTimeRef.current = Date.now();
+      // Delay focus slightly to let dropdown close animations finish
       setTimeout(() => {
         localRenameRef.current?.focus();
         localRenameRef.current?.select();
-        renameReadyRef.current = true;
-      }, 100);
+      }, 60);
     }
   }, [isRenaming, folder.name]);
 
@@ -362,15 +365,16 @@ const FolderNode = memo(({
                 }
               }}
               onBlur={() => {
-                // Guard: skip if Enter/Escape already handled the submit
-                // Also skip early blurs from dropdown-close before input is ready
+                // Capture the elapsed time at blur-fire moment (not inside setTimeout)
+                const elapsed = Date.now() - mountTimeRef.current;
                 setTimeout(() => {
                   if (hasSubmittedRef.current) return;
-                  if (!renameReadyRef.current) return; // dropdown closing caused premature blur
+                  // Ignore blurs that happen within 250ms of mount (dropdown-close, etc.)
+                  if (elapsed < 250) return;
                   hasSubmittedRef.current = true;
                   if (localRenameName.trim()) onRenameSubmit?.(folder.id, localRenameName.trim());
                   else onCancelRename?.();
-                }, 200);
+                }, 150);
               }}
               className="h-6 text-xs flex-1"
               placeholder="Folder name"
@@ -1030,6 +1034,33 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
     return collection.folders.filter(f => !f.parent_folder_id)
       .sort((a, b) => a.sort_order - b.sort_order);
   }, [collection]);
+
+  // Stable references for arrays passed to FolderNode — prevents memo() defeat.
+  // useActiveCollection returns a new object when updated_at changes (e.g., rename),
+  // even though the actual requests/folders arrays haven't changed structurally.
+  // We use refs to keep the old array reference when contents haven't changed.
+  const stableRequestsRef = useRef<ApiRequest[]>([]);
+  const stableFoldersRef = useRef<ApiFolder[]>([]);
+
+  const currentRequests = collection?.requests || [];
+  const currentFolders = collection?.folders || [];
+
+  // Only update the ref if the array actually changed structurally
+  if (
+    currentRequests.length !== stableRequestsRef.current.length ||
+    currentRequests.some((r, i) => r.id !== stableRequestsRef.current[i]?.id || r.name !== stableRequestsRef.current[i]?.name || r.folder_id !== stableRequestsRef.current[i]?.folder_id || r.sort_order !== stableRequestsRef.current[i]?.sort_order)
+  ) {
+    stableRequestsRef.current = currentRequests;
+  }
+  if (
+    currentFolders.length !== stableFoldersRef.current.length ||
+    currentFolders.some((f, i) => f.id !== stableFoldersRef.current[i]?.id || f.name !== stableFoldersRef.current[i]?.name || f.parent_folder_id !== stableFoldersRef.current[i]?.parent_folder_id || f.sort_order !== stableFoldersRef.current[i]?.sort_order)
+  ) {
+    stableFoldersRef.current = currentFolders;
+  }
+
+  const stableRequests = stableRequestsRef.current;
+  const stableFolders = stableFoldersRef.current;
   
   // Callbacks
   const handleRequestClick = useCallback((requestId: string) => {
@@ -1184,7 +1215,11 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
 
   const handleFolderRenameSubmit = useCallback((folderId: string, newName: string) => {
     renameFolder(folderId, newName);
-    setRenamingFolderId(null);
+    // Defer clearing rename mode so the store update with new name renders
+    // before FolderNode exits rename mode (prevents blink-back-to-old-name)
+    requestAnimationFrame(() => {
+      setRenamingFolderId(null);
+    });
   }, [renameFolder]);
 
   const handleCancelRename = useCallback(() => {
@@ -1406,8 +1441,8 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                           <FolderNode
                             key={folder.id}
                             folder={folder}
-                            requests={collection.requests}
-                            allFolders={collection.folders}
+                            requests={stableRequests}
+                            allFolders={stableFolders}
                             selectedRequestId={sidebar.selected_request_id}
                             expandedFolders={sidebar.expanded_folders}
                             lastResultMap={lastResultMap}
