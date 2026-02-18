@@ -60,6 +60,7 @@ import {
   TeamAvatar, QuickFilters, TeamPanel, ColumnCustomizer,
   KanbanColumn, CreateIssueModal, IssueDetailModal,
 } from '../components/project-management';
+import { API_BASE_URL } from '@/lib/api-config';
 
 // ==================== MAIN COMPONENT ====================
 
@@ -94,8 +95,8 @@ export default function ProjectManagement() {
 
 
   // API Base URL
-  const API_BASE = 'http://localhost:8000/api/projects';
-  const GHERKIN_API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const API_BASE = `${API_BASE_URL}/api/projects`;
+  const GHERKIN_API = API_BASE_URL;
 
   // Load issues from backend
   const loadIssues = async () => {
@@ -209,7 +210,7 @@ export default function ProjectManagement() {
     const reqStored = JSON.parse(localStorage.getItem('requirements') || '[]');
     let allReqs = reqStored;
     try {
-      const reqRes = await fetch('http://localhost:8000/requirements');
+      const reqRes = await fetch(`${API_BASE_URL}/requirements`);
       if (reqRes.ok) {
         const data = await reqRes.json();
         const apiReqs = (data.requirements || []).map((r: any) => ({
@@ -231,7 +232,7 @@ export default function ProjectManagement() {
     const tcStored = JSON.parse(localStorage.getItem('test_cases') || '[]');
     let allTcs = tcStored;
     try {
-      const tcRes = await fetch('http://localhost:8000/test-cases');
+      const tcRes = await fetch(`${API_BASE_URL}/test-cases`);
       if (tcRes.ok) {
         const data = await tcRes.json();
         const apiTcs = (data.testCases || []).map((t: any) => ({
@@ -250,7 +251,7 @@ export default function ProjectManagement() {
     const defStored = JSON.parse(localStorage.getItem('defects') || '[]');
     let allDefs = defStored;
     try {
-      const defRes = await fetch('http://localhost:8000/defects');
+      const defRes = await fetch(`${API_BASE_URL}/defects`);
       if (defRes.ok) {
         const data = await defRes.json();
         const apiDefs = (data.defects || []).map((d: any) => ({

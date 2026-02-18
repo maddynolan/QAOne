@@ -63,6 +63,7 @@ import { SalesforceUATesting } from '@/modules/salesforce/components/SalesforceU
 import { SalesforceTestOrchestrator } from '@/modules/salesforce/components/SalesforceTestOrchestrator';
 import { AddOrgDialog, type OrgFormState } from '@/modules/salesforce/components/AddOrgDialog';
 import { ORG_COLORS } from '@/modules/salesforce/constants/salesforce-constants';
+import { API_BASE_URL } from '@/lib/api-config';
 
 // ============================================================================
 // MAIN COMPONENT
@@ -163,7 +164,7 @@ export function SalesforceToolsPage() {
   // Sync frontend state with backend connection
   const syncWithBackend = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/salesforce/status');
+      const response = await fetch(`${API_BASE_URL}/api/salesforce/status`);
       if (!response.ok) return;
       
       const status = await response.json();

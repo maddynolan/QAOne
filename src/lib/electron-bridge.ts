@@ -142,7 +142,7 @@ export const config = {
     }
     // Browser fallback - use localStorage
     return {
-      serverUrl: localStorage.getItem('serverUrl') || 'http://localhost:8000',
+      serverUrl: localStorage.getItem('serverUrl') || 'https://qaone-production.up.railway.app',
       mode: 'browser',
       preferences: JSON.parse(localStorage.getItem('preferences') || '{}')
     };

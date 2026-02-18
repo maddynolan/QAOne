@@ -41,8 +41,7 @@ import {
 } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_BASE_URL as API_BASE } from '@/lib/api-config';
 
 // ==================== TYPES ====================
 

@@ -31,8 +31,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/lib/utils';
-
-const API_BASE = 'http://localhost:8000';
+import { API_BASE_URL as API_BASE } from '@/lib/api-config';
 
 // Types
 interface TestCasePreview {

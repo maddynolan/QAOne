@@ -32,6 +32,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { API_BASE_URL } from '@/lib/api-config';
 
 // Standard severity and priority definitions following industry standards
 const SEVERITY_OPTIONS = [
@@ -331,7 +332,7 @@ export default function TestCaseExecution() {
       
       // 5. Try backend API as additional source
       try {
-        const response = await fetch(`http://localhost:8000/test-cases`);
+        const response = await fetch(`${API_BASE_URL}/test-cases`);
         if (response.ok) {
           const backendCases = await response.json();
           const cases = Array.isArray(backendCases) ? backendCases : [];

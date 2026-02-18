@@ -47,8 +47,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import type { VirtualUser, TestStep, FlowstralSession, LoadTestConfig, LoadTestMetrics, FailedRequest } from '../types/virtual-user-types';
 import { LOAD_PATTERNS, USER_PERSONAS, QUICK_START_SCENARIOS, INITIAL_METRICS } from '../constants/virtual-user-constants';
 import { formatTime, formatBytes, convertFlowstralToSteps, getVerdict } from '../lib/virtual-user-utils';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { API_BASE_URL } from '@/lib/api-config';
 
 export default function VirtualUserGenerator() {
   const { toast } = useToast();
@@ -1052,7 +1051,7 @@ export default function VirtualUserGenerator() {
                       <SelectContent>
                         <SelectItem value="http://localhost:8002">E-commerce Demo</SelectItem>
                         <SelectItem value="http://localhost:3000">Test Website</SelectItem>
-                        <SelectItem value="http://localhost:8000">Backend API</SelectItem>
+                        <SelectItem value={API_BASE_URL}>Backend API</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

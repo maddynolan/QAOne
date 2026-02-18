@@ -76,6 +76,11 @@ const store = new Store({
   }
 });
 
+// Helper: get the backend API base URL from the store (never hardcode localhost)
+function getBackendUrl() {
+  return store.get('serverUrl') || 'https://qaone-production.up.railway.app';
+}
+
 // Global references
 let mainWindow = null;
 let webappView = null;  // BrowserView for React webapp
@@ -2364,7 +2369,7 @@ ipcMain.handle('ai-explorer-start', async (event, options = {}) => {
       console.log('[AIExplorer IPC] Fetching API key from backend...');
       try {
         const axios = require('axios');
-        const response = await axios.get('http://127.0.0.1:8000/api/ai/vision/config/internal-key');
+        const response = await axios.get(`${getBackendUrl()}/api/ai/vision/config/internal-key`);
         if (response.data && response.data.key) {
           actualApiKey = response.data.key;
           console.log('[AIExplorer IPC] Got API key from backend');
@@ -2384,7 +2389,7 @@ ipcMain.handle('ai-explorer-start', async (event, options = {}) => {
     
     if (!actualApiKey) {
       console.log('[AIExplorer IPC] No API key');
-      return { success: false, error: 'OpenAI API key not found. Make sure the backend is running at localhost:8000 with OPENAI_API_KEY configured.' };
+      return { success: false, error: `OpenAI API key not found. Make sure the backend is running at ${getBackendUrl()} with OPENAI_API_KEY configured.` };
     }
     
     if (!playwrightRecorder || !playwrightRecorder.page) {
@@ -2492,7 +2497,7 @@ ipcMain.handle('flow-explorer-start', async (event, options = {}) => {
       console.log('[FlowExplorer IPC] Fetching API key from backend...');
       try {
         const axios = require('axios');
-        const response = await axios.get('http://127.0.0.1:8000/api/ai/vision/config/internal-key');
+        const response = await axios.get(`${getBackendUrl()}/api/ai/vision/config/internal-key`);
         if (response.data && response.data.key) {
           actualApiKey = response.data.key;
           console.log('[FlowExplorer IPC] Got API key from backend');
@@ -2570,7 +2575,7 @@ ipcMain.handle('flow-explorer-automate-manual', async (event, options = {}) => {
     if (actualApiKey === '***env***' || !actualApiKey) {
       try {
         const axios = require('axios');
-        const response = await axios.get('http://127.0.0.1:8000/api/ai/vision/config/internal-key');
+        const response = await axios.get(`${getBackendUrl()}/api/ai/vision/config/internal-key`);
         if (response.data && response.data.key) actualApiKey = response.data.key;
         else if (process.env.OPENAI_API_KEY) actualApiKey = process.env.OPENAI_API_KEY;
       } catch { actualApiKey = process.env.OPENAI_API_KEY || ''; }
@@ -2624,7 +2629,7 @@ ipcMain.handle('goal-agent-execute', async (event, options = {}) => {
     if (actualApiKey === '***env***' || !actualApiKey) {
       try {
         const axios = require('axios');
-        const response = await axios.get('http://127.0.0.1:8000/api/ai/vision/config/internal-key');
+        const response = await axios.get(`${getBackendUrl()}/api/ai/vision/config/internal-key`);
         if (response.data && response.data.key) actualApiKey = response.data.key;
         else if (process.env.OPENAI_API_KEY) actualApiKey = process.env.OPENAI_API_KEY;
       } catch { actualApiKey = process.env.OPENAI_API_KEY || ''; }

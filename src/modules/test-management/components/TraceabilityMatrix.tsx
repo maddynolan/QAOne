@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ExternalLink, GitBranch, Bug, TestTube, CheckCircle, XCircle, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { API_BASE_URL } from '@/lib/api-config';
 
 interface TraceabilityMatrixProps {
   testRun?: any;
@@ -20,7 +21,7 @@ export function TraceabilityMatrix({ testRun }: TraceabilityMatrixProps) {
 
   const loadTraceability = async () => {
     try {
-      const response = await fetch("http://localhost:8000/traceability");
+      const response = await fetch(`${API_BASE_URL}/traceability`);
       if (response.ok) {
         const data = await response.json();
         setTraceability(data.traceability || []);

@@ -31,6 +31,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { dataStorageService } from "@/lib/data-storage";
 import { toast } from "sonner";
 import { TraceabilityMatrix } from "@/modules/test-management/components/TraceabilityMatrix";
+import { API_BASE_URL } from '@/lib/api-config';
 
 export default function TestRunDetail() {
   const { id } = useParams<{ id: string }>();
@@ -103,7 +104,7 @@ export default function TestRunDetail() {
 
   const loadComments = async (runId: string, caseId?: string, stepId?: string) => {
     try {
-      let url = `http://localhost:8000/test-runs/${runId}/comments`;
+      let url = `${API_BASE_URL}/test-runs/${runId}/comments`;
       if (stepId) {
         url += `?step_id=${stepId}`;
       } else if (caseId) {
@@ -125,7 +126,7 @@ export default function TestRunDetail() {
     if (!commentText.trim()) return;
     
     try {
-      const response = await fetch(`http://localhost:8000/test-runs/${runId}/comments`, {
+      const response = await fetch(`${API_BASE_URL}/test-runs/${runId}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comment: commentText, case_id: caseId, step_id: stepId })
@@ -150,7 +151,7 @@ export default function TestRunDetail() {
     
     try {
       setIsLoading(true);
-      const response = await fetch(`http://localhost:8000/test-runs/${testRun.id}/start`, {
+      const response = await fetch(`${API_BASE_URL}/test-runs/${testRun.id}/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" }
       });
@@ -202,7 +203,7 @@ export default function TestRunDetail() {
     try {
       console.log(`Marking step ${stepId} as ${status} for run ${testRun.id}`);
       
-      const response = await fetch(`http://localhost:8000/test-runs/${testRun.id}/steps/${stepId}/mark`, {
+      const response = await fetch(`${API_BASE_URL}/test-runs/${testRun.id}/steps/${stepId}/mark`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, error: error || "" })
@@ -235,8 +236,8 @@ export default function TestRunDetail() {
         const base64data = (reader.result as string).split(',')[1];
         
         const endpoint = isGlobal 
-          ? `http://localhost:8000/test-runs/${testRun.id}/screenshot`
-          : `http://localhost:8000/test-runs/${testRun.id}/steps/${stepId}/screenshot`;
+          ? `${API_BASE_URL}/test-runs/${testRun.id}/screenshot`
+          : `${API_BASE_URL}/test-runs/${testRun.id}/steps/${stepId}/screenshot`;
         
         const response = await fetch(endpoint, {
           method: "POST",
@@ -265,8 +266,8 @@ export default function TestRunDetail() {
     
     try {
       const endpoint = stepId
-        ? `http://localhost:8000/test-runs/${testRun.id}/steps/${stepId}/link-defect`
-        : `http://localhost:8000/test-runs/${testRun.id}/link-defect`;
+        ? `${API_BASE_URL}/test-runs/${testRun.id}/steps/${stepId}/link-defect`
+        : `${API_BASE_URL}/test-runs/${testRun.id}/link-defect`;
       
       const response = await fetch(endpoint, {
         method: "POST",
@@ -359,7 +360,7 @@ export default function TestRunDetail() {
 
     try {
       const caseIds = Array.from(selectedTestCases);
-      const response = await fetch(`http://localhost:8000/test-runs/${testRun.id}/execute-selected`, {
+      const response = await fetch(`${API_BASE_URL}/test-runs/${testRun.id}/execute-selected`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ case_ids: caseIds })
@@ -832,7 +833,7 @@ export default function TestRunDetail() {
                                   } else {
                                     // Create step result manually
                                     try {
-                                      const response = await fetch(`http://localhost:8000/test-runs/${testRun.id}/steps/initialize`, {
+                                      const response = await fetch(`${API_BASE_URL}/test-runs/${testRun.id}/steps/initialize`, {
                                         method: "POST",
                                         headers: { "Content-Type": "application/json" },
                                         body: JSON.stringify({

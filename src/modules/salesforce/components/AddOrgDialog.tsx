@@ -11,6 +11,7 @@ import { Check, ExternalLink, Key, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { salesforceApi, SalesforceCredentials } from '@/modules/salesforce/lib/salesforce-api';
 import { ORG_COLORS } from '@/modules/salesforce/constants/salesforce-constants';
+import { API_BASE_URL } from '@/lib/api-config';
 
 export interface OrgFormState extends SalesforceCredentials {
   name: string;
@@ -74,7 +75,7 @@ export function AddOrgDialog({
         domain = 'login';
       }
 
-      const response = await fetch(`http://localhost:8000/api/salesforce/oauth/start?domain=${domain}`);
+      const response = await fetch(`${API_BASE_URL}/api/salesforce/oauth/start?domain=${domain}`);
       const data = await response.json();
 
       if (data.auth_url) {
@@ -109,7 +110,7 @@ export function AddOrgDialog({
           }
 
           try {
-            const statusRes = await fetch(`http://localhost:8000/api/salesforce/oauth/status/${data.state}`);
+            const statusRes = await fetch(`${API_BASE_URL}/api/salesforce/oauth/status/${data.state}`);
             const status = await statusRes.json();
 
             if (status.status === 'completed') {

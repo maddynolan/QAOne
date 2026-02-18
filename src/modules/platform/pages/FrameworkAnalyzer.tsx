@@ -27,6 +27,7 @@ import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import { API_BASE_URL as API_BASE } from '@/lib/api-config';
 
 interface AnalysisResult {
   status: string; // "success" or "error"
@@ -65,8 +66,6 @@ interface GeneratedOutput {
   content?: string;
   format?: string;
 }
-
-const API_BASE = 'http://localhost:8000';
 
 export default function FrameworkAnalyzer() {
   // Input state
