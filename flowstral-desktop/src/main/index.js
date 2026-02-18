@@ -158,14 +158,14 @@ function getWebappUrl() {
 // Track if we're showing license page
 let showingLicensePage = false;
 
-// Get titlebar colors based on system theme
-function getTitleBarColors() {
-  const { nativeTheme } = require('electron');
-  const isDark = nativeTheme.shouldUseDarkColors;
+// Get titlebar colors — defaults to light; webapp can override via 'set-titlebar-theme' IPC
+let _appThemeIsDark = false; // Tracks the webapp's own theme (not system theme)
+function getTitleBarColors(isDark) {
+  if (isDark === undefined) isDark = _appThemeIsDark;
   return {
-    color: isDark ? '#0a0a0f' : '#f8f9fc',
+    color: isDark ? '#0f172a' : '#ffffff',
     symbolColor: isDark ? '#e5e7eb' : '#374151',
-    backgroundColor: isDark ? '#0a0a0f' : '#f8f9fc'
+    backgroundColor: isDark ? '#0f172a' : '#ffffff'
   };
 }
 
@@ -3928,16 +3928,31 @@ app.whenReady().then(async () => {
   await initializeServices();
   createTray();
 
-  // Update titlebar when system theme changes
+  // Allow webapp to set titlebar theme (light/dark) via IPC
+  ipcMain.handle('set-titlebar-theme', (event, isDark) => {
+    _appThemeIsDark = !!isDark;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const theme = getTitleBarColors(isDark);
+      try {
+        mainWindow.setTitleBarOverlay({ color: theme.color, symbolColor: theme.symbolColor });
+        mainWindow.setBackgroundColor(theme.backgroundColor);
+      } catch (e) { /* titleBarOverlay not supported on all platforms */ }
+    }
+    return { success: true };
+  });
+
+  // Update titlebar when system theme changes (fallback if webapp doesn't send IPC)
   const { nativeTheme } = require('electron');
   nativeTheme.on('updated', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       const theme = getTitleBarColors();
-      mainWindow.setTitleBarOverlay({ color: theme.color, symbolColor: theme.symbolColor });
-      mainWindow.setBackgroundColor(theme.backgroundColor);
+      try {
+        mainWindow.setTitleBarOverlay({ color: theme.color, symbolColor: theme.symbolColor });
+        mainWindow.setBackgroundColor(theme.backgroundColor);
+      } catch (e) { /* ignore */ }
     }
   });
-  
+
   // Register diagnostics IPC handlers for remote support
   registerDiagnosticsIPC(ipcMain);
   console.log('[App] Diagnostics collector initialized');

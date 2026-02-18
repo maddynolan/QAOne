@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCurrentView: () => ipcRenderer.invoke('get-current-view'),
   focusWebapp: () => ipcRenderer.invoke('focus-webapp'),
   
+  // Theme — tell Electron titlebar about light/dark mode
+  setTitlebarTheme: (isDark) => ipcRenderer.invoke('set-titlebar-theme', isDark),
+
   // Configuration
   getConfig: () => ipcRenderer.invoke('get-config'),
   setConfig: (config) => ipcRenderer.invoke('set-config', config),

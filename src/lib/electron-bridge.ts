@@ -161,6 +161,18 @@ export const config = {
 };
 
 /**
+ * Titlebar theme sync — tell Electron about webapp light/dark mode
+ */
+export const setTitlebarTheme = async (isDark: boolean) => {
+  const api = getElectronAPI();
+  if (api?.setTitlebarTheme) {
+    return api.setTitlebarTheme(isDark);
+  }
+  // Browser fallback — no-op
+  return { success: true };
+};
+
+/**
  * Event subscription helper
  */
 export const subscribe = (channel: string, callback: (...args: any[]) => void): (() => void) => {

@@ -9,6 +9,7 @@
  */
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { setTitlebarTheme } from '@/lib/electron-bridge';
 
 type Theme = 'light' | 'dark';
 
@@ -46,6 +47,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     
     // Persist to localStorage
     localStorage.setItem(THEME_STORAGE_KEY, theme);
+
+    // Sync Electron titlebar color with webapp theme
+    setTitlebarTheme(theme === 'dark').catch(() => {});
   }, [theme]);
 
   const setTheme = (newTheme: Theme) => {

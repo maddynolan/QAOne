@@ -263,7 +263,10 @@ class MaestroRunner {
     this.appId = options.appId || null;
     this.deviceId = options.deviceId || null;
     this.timeout = options.timeout || 60000;
-    this.outputDir = options.outputDir || path.join(process.cwd(), '.maestro-output');
+    // Use app userData dir (writable) instead of process.cwd() (may be C:\Program Files)
+    const { app } = require('electron');
+    const userDataDir = app?.getPath?.('userData') || require('os').tmpdir();
+    this.outputDir = options.outputDir || path.join(userDataDir, '.maestro-output');
     this.debug = options.debug || false;
     this.studioProcess = null;
     
