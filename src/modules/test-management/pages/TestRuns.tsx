@@ -246,7 +246,7 @@ export default function TestRuns() {
           <Button 
             onClick={createNewTestRun}
             disabled={isLoading}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+            className="bg-primary hover:bg-primary/90"
           >
             <Plus className="h-4 w-4 mr-2" />
             Create Test Run
@@ -345,7 +345,7 @@ export default function TestRuns() {
                         onClick={() => executeTestRun(run.id)}
                         disabled={isLoading}
                         size="sm"
-                        className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                        className="bg-primary hover:bg-primary/90"
                       >
                         <Play className="h-3 w-3 mr-1" />
                         {isLoading ? "Executing..." : "Execute"}

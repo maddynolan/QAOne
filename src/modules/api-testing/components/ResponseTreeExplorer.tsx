@@ -525,70 +525,177 @@ export default function ResponseTreeExplorer({
         </div>
       )}
 
-      {/* Table View - Flat tabular view of all leaf fields for easy assertion building */}
+      {/* Table View - Data grid for arrays, flat leaf table for objects */}
       {viewMode === "table" && (
         <div className="relative">
           <ScrollArea className="border rounded-lg bg-muted/20" style={{ height: `${panelHeight}px` }}>
-            {allNodes.length > 0 ? (
-              <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10">
-                  <tr className="border-b">
-                    <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-8"></th>
-                    <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Field</th>
-                    <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-16">Type</th>
-                    <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Value</th>
-                    <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-[200px]">JSONPath</th>
-                    <th className="text-center py-1.5 px-2 font-medium text-muted-foreground w-10">Assert</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allNodes.filter(n => !n.children).map((node) => {
-                    const alreadyAsserted = hasAssertion(node.path);
-                    return (
-                      <tr key={node.path} className={`border-b border-border/30 hover:bg-muted/40 ${alreadyAsserted ? "bg-green-500/5" : ""}`}>
-                        <td className="py-1 px-2">
-                          <span className={getTypeColor(node.type)}>{getTypeIcon(node.type)}</span>
-                        </td>
-                        <td className="py-1 px-2 font-mono font-medium truncate max-w-[150px]" title={node.key}>
-                          {node.key}
-                        </td>
-                        <td className="py-1 px-2">
-                          <span className={`${getTypeColor(node.type)} font-mono`}>{node.type}</span>
-                        </td>
-                        <td className="py-1 px-2 font-mono truncate max-w-[200px]" title={String(node.value)}>
-                          <span className={getTypeColor(node.type)}>{formatValue(node.value, node.type)}</span>
-                        </td>
-                        <td className="py-1 px-2 font-mono text-muted-foreground text-[10px] truncate max-w-[200px]" title={node.path}>
-                          {node.path}
-                        </td>
-                        <td className="py-1 px-2 text-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className={`h-5 w-5 p-0 ${alreadyAsserted ? "text-green-500" : "text-primary hover:text-primary"}`}
-                            onClick={() => createAssertionFromNode(node)}
-                            title={alreadyAsserted ? "Add another assertion" : `Assert ${node.key} = ${formatValue(node.value, node.type)}`}
-                          >
-                            {alreadyAsserted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-8">
-                <AlertCircle className="w-8 h-8 mb-2 opacity-30" />
-                <p className="text-sm font-medium">Response is not valid JSON</p>
-                <p className="text-xs mt-1">Table view requires a JSON response body</p>
-                <p className="text-xs mt-2 max-w-sm text-center">
-                  {responseBody && responseBody.trim().startsWith('<')
-                    ? 'The response appears to be HTML. Check that the URL points to an API endpoint, not a web page.'
-                    : 'Switch to the Body tab to see the raw response content.'}
-                </p>
-              </div>
-            )}
+            {(() => {
+              // Detect array-of-objects for data grid view
+              let gridData: { items: any[]; columns: string[]; basePath: string; arrayKey?: string } | null = null;
+              try {
+                const parsed = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+                if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === "object" && parsed[0] !== null && !Array.isArray(parsed[0])) {
+                  // Top-level array of objects
+                  const colSet = new Set<string>();
+                  parsed.forEach((item: any) => { if (item && typeof item === "object") Object.keys(item).forEach(k => colSet.add(k)); });
+                  gridData = { items: parsed, columns: [...colSet], basePath: "$" };
+                } else if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                  // Object with an array-of-objects field (e.g. { data: [...], meta: {...} })
+                  for (const [key, val] of Object.entries(parsed)) {
+                    if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object" && val[0] !== null && !Array.isArray(val[0])) {
+                      const colSet = new Set<string>();
+                      (val as any[]).forEach((item: any) => { if (item && typeof item === "object") Object.keys(item).forEach(k => colSet.add(k)); });
+                      gridData = { items: val as any[], columns: [...colSet], basePath: `$.${key}`, arrayKey: key };
+                      break; // Use first array-of-objects found
+                    }
+                  }
+                }
+              } catch { /* not JSON */ }
+
+              if (gridData && gridData.items.length > 0) {
+                // Data Grid View: columns = field names, rows = array items
+                const { items, columns, basePath, arrayKey } = gridData;
+                return (
+                  <div>
+                    {arrayKey && (
+                      <div className="px-2 py-1 text-[10px] text-muted-foreground border-b bg-muted/40">
+                        Showing <span className="font-mono font-medium">{arrayKey}</span> array ({items.length} items)
+                      </div>
+                    )}
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10">
+                        <tr className="border-b">
+                          <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-8">#</th>
+                          {columns.map(col => (
+                            <th key={col} className="text-left py-1.5 px-2 font-medium text-muted-foreground">
+                              <span className="font-mono">{col}</span>
+                            </th>
+                          ))}
+                          <th className="text-center py-1.5 px-2 font-medium text-muted-foreground w-10">Assert</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((item, idx) => (
+                          <tr key={idx} className="border-b border-border/30 hover:bg-muted/40">
+                            <td className="py-1 px-2 text-muted-foreground font-mono">{idx}</td>
+                            {columns.map(col => {
+                              const val = item?.[col];
+                              const type = getType(val);
+                              const cellPath = `${basePath}[${idx}].${col}`;
+                              const asserted = hasAssertion(cellPath);
+                              return (
+                                <td
+                                  key={col}
+                                  className={`py-1 px-2 font-mono truncate max-w-[180px] cursor-pointer hover:bg-primary/5 ${asserted ? "bg-green-500/5" : ""}`}
+                                  title={`${cellPath} = ${typeof val === "object" ? JSON.stringify(val) : String(val ?? "null")}`}
+                                  onClick={() => {
+                                    const node: TreeNode = { key: col, path: cellPath, value: val, type, depth: 2 };
+                                    createAssertionFromNode(node);
+                                  }}
+                                >
+                                  <span className={getTypeColor(type)}>
+                                    {val === null || val === undefined ? <span className="text-gray-400">null</span>
+                                      : typeof val === "object" ? (Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).length}}`)
+                                      : typeof val === "string" ? (val.length > 40 ? `"${val.slice(0, 40)}..."` : `"${val}"`)
+                                      : String(val)}
+                                  </span>
+                                  {asserted && <CheckCircle2 className="w-2.5 h-2.5 text-green-500 inline ml-1" />}
+                                </td>
+                              );
+                            })}
+                            <td className="py-1 px-2 text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-5 w-5 p-0 text-primary hover:text-primary"
+                                onClick={() => {
+                                  // Assert entire row (all fields of this item)
+                                  columns.forEach(col => {
+                                    const val = item?.[col];
+                                    if (val === undefined) return;
+                                    const type = getType(val);
+                                    const cellPath = `${basePath}[${idx}].${col}`;
+                                    if (!hasAssertion(cellPath)) {
+                                      const node: TreeNode = { key: col, path: cellPath, value: val, type, depth: 2 };
+                                      createAssertionFromNode(node);
+                                    }
+                                  });
+                                }}
+                                title={`Assert all fields of item [${idx}]`}
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              }
+
+              // Fallback: leaf-node flat table (for non-array or non-uniform responses)
+              return allNodes.length > 0 ? (
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10">
+                    <tr className="border-b">
+                      <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-8"></th>
+                      <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Field</th>
+                      <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-16">Type</th>
+                      <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Value</th>
+                      <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-[200px]">JSONPath</th>
+                      <th className="text-center py-1.5 px-2 font-medium text-muted-foreground w-10">Assert</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allNodes.filter(n => !n.children).map((node) => {
+                      const alreadyAsserted = hasAssertion(node.path);
+                      return (
+                        <tr key={node.path} className={`border-b border-border/30 hover:bg-muted/40 ${alreadyAsserted ? "bg-green-500/5" : ""}`}>
+                          <td className="py-1 px-2">
+                            <span className={getTypeColor(node.type)}>{getTypeIcon(node.type)}</span>
+                          </td>
+                          <td className="py-1 px-2 font-mono font-medium truncate max-w-[150px]" title={node.key}>
+                            {node.key}
+                          </td>
+                          <td className="py-1 px-2">
+                            <span className={`${getTypeColor(node.type)} font-mono`}>{node.type}</span>
+                          </td>
+                          <td className="py-1 px-2 font-mono truncate max-w-[200px]" title={String(node.value)}>
+                            <span className={getTypeColor(node.type)}>{formatValue(node.value, node.type)}</span>
+                          </td>
+                          <td className="py-1 px-2 font-mono text-muted-foreground text-[10px] truncate max-w-[200px]" title={node.path}>
+                            {node.path}
+                          </td>
+                          <td className="py-1 px-2 text-center">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className={`h-5 w-5 p-0 ${alreadyAsserted ? "text-green-500" : "text-primary hover:text-primary"}`}
+                              onClick={() => createAssertionFromNode(node)}
+                              title={alreadyAsserted ? "Add another assertion" : `Assert ${node.key} = ${formatValue(node.value, node.type)}`}
+                            >
+                              {alreadyAsserted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-8">
+                  <AlertCircle className="w-8 h-8 mb-2 opacity-30" />
+                  <p className="text-sm font-medium">Response is not valid JSON</p>
+                  <p className="text-xs mt-1">Table view requires a JSON response body</p>
+                  <p className="text-xs mt-2 max-w-sm text-center">
+                    {responseBody && responseBody.trim().startsWith('<')
+                      ? 'The response appears to be HTML. Check that the URL points to an API endpoint, not a web page.'
+                      : 'Switch to the Body tab to see the raw response content.'}
+                  </p>
+                </div>
+              );
+            })()}
           </ScrollArea>
           <div
             className="flex items-center justify-center h-3 cursor-ns-resize hover:bg-muted/50 rounded-b-lg group/resize"

@@ -209,8 +209,8 @@ export default function MobileAdvancedTools() {
                 "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left",
                 activeSection === tool.id
                   ? isDark
-                    ? "bg-violet-500/20 text-violet-400"
-                    : "bg-violet-100 text-violet-700"
+                    ? "bg-primary/20 text-primary"
+                    : "bg-primary/10 text-primary"
                   : isDark
                     ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800"
                     : "text-gray-600 hover:text-gray-800 hover:bg-gray-100"
@@ -230,7 +230,7 @@ export default function MobileAdvancedTools() {
         {activeSection === 'deeplinks' && (
           <div className={cn("rounded-xl border p-5 h-full overflow-y-auto", isDark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200")}>
             <h3 className={cn("text-lg font-semibold mb-1 flex items-center gap-2", isDark ? 'text-white' : 'text-gray-900')}>
-              <Link2 className="w-5 h-5 text-violet-500" /> Deep Link Testing
+              <Link2 className="w-5 h-5 text-primary" /> Deep Link Testing
             </h3>
             <p className={cn("text-sm mb-6", isDark ? 'text-gray-400' : 'text-gray-500')}>
               Test universal links, app links, and custom URL schemes on your app
@@ -242,7 +242,7 @@ export default function MobileAdvancedTools() {
               <div className="grid grid-cols-[1fr_2fr_auto] gap-2">
                 <Input value={newLinkName} onChange={(e) => setNewLinkName(e.target.value)} placeholder="Name" className="h-8 text-xs" />
                 <Input value={newLinkUrl} onChange={(e) => setNewLinkUrl(e.target.value)} placeholder="myapp://screen/profile or https://app.com/deep/link" className="h-8 text-xs" />
-                <Button size="sm" onClick={handleAddDeepLink} className="h-8 bg-violet-500 hover:bg-violet-600 text-white">
+                <Button size="sm" onClick={handleAddDeepLink} className="h-8 bg-primary hover:bg-primary/90 text-primary-foreground">
                   <Plus className="w-3 h-3 mr-1" /> Add
                 </Button>
               </div>
@@ -253,7 +253,7 @@ export default function MobileAdvancedTools() {
               {deepLinks.length > 0 ? (
                 deepLinks.map(link => (
                   <div key={link.id} className={cn("flex items-center gap-3 p-3 rounded-lg border", isDark ? 'bg-gray-800/50 border-gray-700' : 'bg-white border-gray-200')}>
-                    <Link2 className={cn("w-4 h-4 shrink-0", isDark ? 'text-violet-400' : 'text-violet-500')} />
+                    <Link2 className={cn("w-4 h-4 shrink-0", isDark ? 'text-primary' : 'text-primary')} />
                     <div className="flex-1 min-w-0">
                       <div className={cn("text-sm font-medium", isDark ? 'text-white' : 'text-gray-900')}>{link.name}</div>
                       <div className={cn("text-xs font-mono truncate", isDark ? 'text-gray-400' : 'text-gray-500')}>{link.url}</div>
@@ -290,7 +290,7 @@ export default function MobileAdvancedTools() {
                 ].map((item, idx) => (
                   <div key={idx} className={cn("p-2 rounded flex items-center justify-between", isDark ? 'bg-gray-800' : 'bg-gray-50')}>
                     <div>
-                      <code className={cn("font-mono text-[10px]", isDark ? 'text-violet-400' : 'text-violet-600')}>{item.scheme}</code>
+                      <code className={cn("font-mono text-[10px]", isDark ? 'text-primary' : 'text-primary')}>{item.scheme}</code>
                       <p className={cn("text-[10px]", isDark ? 'text-gray-500' : 'text-gray-400')}>{item.desc}</p>
                     </div>
                     <button onClick={() => { navigator.clipboard.writeText(item.scheme); toast.success('Copied!'); }}>
@@ -307,7 +307,7 @@ export default function MobileAdvancedTools() {
         {activeSection === 'notifications' && (
           <div className={cn("rounded-xl border p-5 h-full overflow-y-auto", isDark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200")}>
             <h3 className={cn("text-lg font-semibold mb-1 flex items-center gap-2", isDark ? 'text-white' : 'text-gray-900')}>
-              <Bell className="w-5 h-5 text-violet-500" /> Push Notification Testing
+              <Bell className="w-5 h-5 text-primary" /> Push Notification Testing
             </h3>
             <p className={cn("text-sm mb-6", isDark ? 'text-gray-400' : 'text-gray-500')}>
               Send test push notifications to your connected device
@@ -329,7 +329,7 @@ export default function MobileAdvancedTools() {
 
               <div className="flex gap-2">
                 <Button
-                  className="flex-1 bg-violet-500 hover:bg-violet-600 text-white"
+                  className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleSendNotification}
                   disabled={isSending}
                 >
@@ -368,7 +368,7 @@ export default function MobileAdvancedTools() {
         {activeSection === 'biometrics' && (
           <div className={cn("rounded-xl border p-5 h-full overflow-y-auto", isDark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200")}>
             <h3 className={cn("text-lg font-semibold mb-1 flex items-center gap-2", isDark ? 'text-white' : 'text-gray-900')}>
-              <Fingerprint className="w-5 h-5 text-violet-500" /> Biometric Mocking
+              <Fingerprint className="w-5 h-5 text-primary" /> Biometric Mocking
             </h3>
             <p className={cn("text-sm mb-6", isDark ? 'text-gray-400' : 'text-gray-500')}>
               Simulate Face ID, Touch ID, and fingerprint authentication responses
@@ -492,7 +492,7 @@ export default function MobileAdvancedTools() {
         {activeSection === 'network' && (
           <div className={cn("rounded-xl border p-5 h-full overflow-y-auto", isDark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200")}>
             <h3 className={cn("text-lg font-semibold mb-1 flex items-center gap-2", isDark ? 'text-white' : 'text-gray-900')}>
-              <Wifi className="w-5 h-5 text-violet-500" /> Network Simulation
+              <Wifi className="w-5 h-5 text-primary" /> Network Simulation
             </h3>
             <p className={cn("text-sm mb-6", isDark ? 'text-gray-400' : 'text-gray-500')}>
               Simulate different network conditions to test app behavior under various connectivity scenarios
@@ -517,16 +517,16 @@ export default function MobileAdvancedTools() {
                       "p-4 rounded-xl border text-left transition-all",
                       isActive
                         ? isDark
-                          ? "bg-violet-500/15 border-violet-500 ring-2 ring-violet-500/30"
-                          : "bg-violet-50 border-violet-300 ring-2 ring-violet-200"
+                          ? "bg-primary/15 border-primary ring-2 ring-primary/30"
+                          : "bg-primary/10 border-primary/30 ring-2 ring-primary/20"
                         : isDark
                           ? "bg-gray-800 border-gray-700 hover:border-gray-600"
                           : "bg-white border-gray-200 hover:border-gray-300"
                     )}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <SignalIcon className={cn("w-5 h-5", isActive ? 'text-violet-500' : isDark ? 'text-gray-400' : 'text-gray-500')} />
-                      {isActive && <Badge className="text-[9px] h-4 bg-violet-500 text-white">Active</Badge>}
+                      <SignalIcon className={cn("w-5 h-5", isActive ? 'text-primary' : isDark ? 'text-gray-400' : 'text-gray-500')} />
+                      {isActive && <Badge className="text-[9px] h-4 bg-primary/100 text-white">Active</Badge>}
                     </div>
                     <div className={cn("text-sm font-semibold mb-1", isDark ? 'text-white' : 'text-gray-900')}>{profile.name}</div>
                     <div className={cn("text-[10px] space-y-0.5", isDark ? 'text-gray-400' : 'text-gray-500')}>
@@ -560,7 +560,7 @@ export default function MobileAdvancedTools() {
         {activeSection === 'geolocation' && (
           <div className={cn("rounded-xl border p-5 h-full overflow-y-auto", isDark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200")}>
             <h3 className={cn("text-lg font-semibold mb-1 flex items-center gap-2", isDark ? 'text-white' : 'text-gray-900')}>
-              <MapPin className="w-5 h-5 text-violet-500" /> Geolocation Mocking
+              <MapPin className="w-5 h-5 text-primary" /> Geolocation Mocking
             </h3>
             <p className={cn("text-sm mb-6", isDark ? 'text-gray-400' : 'text-gray-500')}>
               Set a custom GPS location on your connected device for location-based testing
@@ -568,11 +568,11 @@ export default function MobileAdvancedTools() {
 
             {/* Current Location */}
             {currentLocation && (
-              <div className={cn("p-4 rounded-lg mb-4 flex items-center gap-3", isDark ? 'bg-violet-500/10' : 'bg-violet-50')}>
-                <Navigation className="w-5 h-5 text-violet-500" />
+              <div className={cn("p-4 rounded-lg mb-4 flex items-center gap-3", isDark ? 'bg-primary/10' : 'bg-primary/10')}>
+                <Navigation className="w-5 h-5 text-primary" />
                 <div>
-                  <div className={cn("text-sm font-medium", isDark ? 'text-violet-400' : 'text-violet-700')}>Current: {currentLocation.name}</div>
-                  <div className={cn("text-xs font-mono", isDark ? 'text-violet-400/70' : 'text-violet-500')}>
+                  <div className={cn("text-sm font-medium", isDark ? 'text-primary' : 'text-primary')}>Current: {currentLocation.name}</div>
+                  <div className={cn("text-xs font-mono", isDark ? 'text-primary/70' : 'text-primary')}>
                     {currentLocation.latitude.toFixed(4)}, {currentLocation.longitude.toFixed(4)}
                   </div>
                 </div>
@@ -589,7 +589,7 @@ export default function MobileAdvancedTools() {
                 <Input value={newLocName} onChange={(e) => setNewLocName(e.target.value)} placeholder="Name" className="h-8 text-xs" />
                 <Input value={newLocLat} onChange={(e) => setNewLocLat(e.target.value)} placeholder="Latitude" type="number" step="0.0001" className="h-8 text-xs" />
                 <Input value={newLocLng} onChange={(e) => setNewLocLng(e.target.value)} placeholder="Longitude" type="number" step="0.0001" className="h-8 text-xs" />
-                <Button size="sm" onClick={handleAddLocation} className="h-8 bg-violet-500 hover:bg-violet-600 text-white">
+                <Button size="sm" onClick={handleAddLocation} className="h-8 bg-primary hover:bg-primary/90 text-primary-foreground">
                   <Plus className="w-3 h-3" />
                 </Button>
               </div>
@@ -606,13 +606,13 @@ export default function MobileAdvancedTools() {
                     className={cn(
                       "p-3 rounded-lg border text-left transition-all group",
                       isActive
-                        ? isDark ? "bg-violet-500/15 border-violet-500" : "bg-violet-50 border-violet-300"
+                        ? isDark ? "bg-primary/15 border-primary" : "bg-primary/10 border-primary/30"
                         : isDark ? "bg-gray-800 border-gray-700 hover:border-gray-600" : "bg-white border-gray-200 hover:border-gray-300"
                     )}
                   >
                     <div className="flex items-center justify-between">
-                      <MapPin className={cn("w-4 h-4", isActive ? 'text-violet-500' : isDark ? 'text-gray-400' : 'text-gray-500')} />
-                      {isActive && <Badge className="text-[9px] h-4 bg-violet-500 text-white">Active</Badge>}
+                      <MapPin className={cn("w-4 h-4", isActive ? 'text-primary' : isDark ? 'text-gray-400' : 'text-gray-500')} />
+                      {isActive && <Badge className="text-[9px] h-4 bg-primary/100 text-white">Active</Badge>}
                       <button
                         onClick={(e) => { e.stopPropagation(); deleteSavedLocation(loc.id); }}
                         className="opacity-0 group-hover:opacity-100 text-red-500"
@@ -635,7 +635,7 @@ export default function MobileAdvancedTools() {
         {activeSection === 'device-config' && (
           <div className={cn("rounded-xl border p-5 h-full overflow-y-auto", isDark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200")}>
             <h3 className={cn("text-lg font-semibold mb-1 flex items-center gap-2", isDark ? 'text-white' : 'text-gray-900')}>
-              <Smartphone className="w-5 h-5 text-violet-500" /> Device Configuration
+              <Smartphone className="w-5 h-5 text-primary" /> Device Configuration
             </h3>
             <p className={cn("text-sm mb-6", isDark ? 'text-gray-400' : 'text-gray-500')}>
               Control device settings like orientation, locale, appearance, and more

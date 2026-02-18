@@ -91,7 +91,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
   const { toast } = useToast();
   const [request, setRequest] = useState<RequestConfig>(createEmptyRequest());
   const [assertions, setAssertions] = useState<AssertionConfig[]>([]);
-  const [assertionResults, setAssertionResults] = useState<Array<{ passed: boolean; message: string }>>([]);
+  const [assertionResults, setAssertionResults] = useState<Array<{ passed: boolean; message: string; actual?: string; type?: string; path?: string; expected?: string }>>([]);
   const [response, setResponse] = useState<ResponseData | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -607,20 +607,23 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
           })));
         } else {
           // Build assertion results client-side (with correct JSONPath for arrays)
-          const results: Array<{ passed: boolean; message: string }> = [];
+          const results: Array<{ passed: boolean; message: string; actual?: string; type?: string; path?: string; expected?: string }> = [];
           for (const a of assertions) {
             if (a.type === "status_code") {
               const expected = parseInt(a.expected) || 200;
               results.push({
                 passed: httpStatus === expected,
                 message: `Status code: expected ${expected}, got ${httpStatus}`,
+                type: "status_code", path: "", expected: String(expected), actual: String(httpStatus),
               });
             } else if (a.type === "contains") {
               const bodyStr = typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody || "");
               const found = bodyStr.includes(a.expected);
+              const pass = a.operator === "not_contains" ? !found : found;
               results.push({
-                passed: a.operator === "not_contains" ? !found : found,
+                passed: pass,
                 message: `Body ${found ? "contains" : "does not contain"} "${a.expected}"`,
+                type: "contains", path: "(body)", expected: a.expected, actual: found ? "found" : "not found",
               });
             } else if (a.type === "response_time") {
               const maxMs = parseInt(a.expected) || 1000;
@@ -628,6 +631,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
               results.push({
                 passed: actualMs <= maxMs,
                 message: `Response time: ${actualMs}ms (max ${maxMs}ms)`,
+                type: "response_time", path: "", expected: `<= ${maxMs}ms`, actual: `${actualMs}ms`,
               });
             } else if (a.type === "header") {
               const headerVal = (testResult.response_headers || {})[a.path || ""] || "";
@@ -637,22 +641,43 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
               results.push({
                 passed: match,
                 message: `Header "${a.path}": ${match ? "matches" : `expected "${a.expected}", got "${headerVal}"`}`,
+                type: "header", path: a.path, expected: a.expected, actual: headerVal,
               });
             } else if (a.type === "jsonpath" && a.path) {
               try {
                 const bodyObj = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
                 const val = jsonPathValue(bodyObj, a.path);
-                const actual = val === undefined || val === null ? "undefined" : String(val);
-                const passed = a.operator === "exists" ? val !== undefined && val !== null
-                  : a.operator === "not_exists" ? val === undefined || val === null
-                  : a.operator === "contains" ? actual.includes(a.expected)
-                  : actual === (a.expected ?? "");
+                // Serialize arrays/objects as JSON so full nodes can be compared
+                const actual = val === undefined || val === null
+                  ? "undefined"
+                  : (typeof val === "object" ? JSON.stringify(val) : String(val));
+                // For comparison, also try parsing the expected value as JSON for deep equality
+                let passed: boolean;
+                if (a.operator === "exists") {
+                  passed = val !== undefined && val !== null;
+                } else if (a.operator === "not_exists") {
+                  passed = val === undefined || val === null;
+                } else if (a.operator === "contains") {
+                  passed = actual.includes(a.expected);
+                } else if (typeof val === "object" && val !== null) {
+                  // Deep compare: parse expected as JSON and compare structurally
+                  try {
+                    const expectedObj = JSON.parse(a.expected ?? "");
+                    passed = JSON.stringify(val) === JSON.stringify(expectedObj);
+                  } catch {
+                    // Fallback to string comparison if expected is not valid JSON
+                    passed = actual === (a.expected ?? "");
+                  }
+                } else {
+                  passed = actual === (a.expected ?? "");
+                }
                 results.push({
                   passed,
-                  message: `JSONPath "${a.path}": ${passed ? "passed" : `expected "${a.expected ?? ""}", got "${actual}"`}`,
+                  message: `JSONPath "${a.path}": ${passed ? "passed" : `expected "${a.expected ?? ""}", got "${actual.length > 120 ? actual.slice(0, 120) + "..." : actual}"`}`,
+                  type: "jsonpath", path: a.path, expected: a.expected ?? "", actual,
                 });
               } catch {
-                results.push({ passed: false, message: `JSONPath "${a.path}": failed to evaluate` });
+                results.push({ passed: false, message: `JSONPath "${a.path}": failed to evaluate`, type: "jsonpath", path: a.path, expected: a.expected, actual: "error" });
               }
             } else if (a.type === "not_contains") {
               const bodyStr = typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody || "");
@@ -660,6 +685,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
               results.push({
                 passed: !found,
                 message: `Body ${found ? "contains" : "does not contain"} "${a.expected}"`,
+                type: "not_contains", path: "(body)", expected: a.expected, actual: found ? "found" : "not found",
               });
             } else if (a.type === "regex") {
               try {
@@ -669,17 +695,37 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 results.push({
                   passed: match,
                   message: `Regex /${a.expected}/: ${match ? "matched" : "no match"}`,
+                  type: "regex", path: "(body)", expected: `/${a.expected}/`, actual: match ? "matched" : "no match",
                 });
               } catch (regErr: any) {
-                results.push({ passed: false, message: `Regex error: ${regErr.message}` });
+                results.push({ passed: false, message: `Regex error: ${regErr.message}`, type: "regex", path: "(body)", expected: a.expected, actual: regErr.message });
               }
             } else if (a.type === "equals") {
               const bodyStr = typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody || "");
-              const actual = a.path ? (() => { try { return String(jsonPathValue(typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody, a.path) ?? ""); } catch { return bodyStr; } })() : bodyStr.trim();
-              const passed = actual === a.expected;
+              const actual = a.path ? (() => {
+                try {
+                  const v = jsonPathValue(typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody, a.path);
+                  if (v === undefined || v === null) return "";
+                  return typeof v === "object" ? JSON.stringify(v) : String(v);
+                } catch { return bodyStr; }
+              })() : bodyStr.trim();
+              // For objects/arrays, try deep-equal via JSON parse of expected
+              let passed: boolean;
+              if (a.path) {
+                try {
+                  const expectedObj = JSON.parse(a.expected ?? "");
+                  const actualObj = JSON.parse(actual);
+                  passed = JSON.stringify(actualObj) === JSON.stringify(expectedObj);
+                } catch {
+                  passed = actual === a.expected;
+                }
+              } else {
+                passed = actual === a.expected;
+              }
               results.push({
                 passed,
-                message: `Equals: ${passed ? "matched" : `expected "${a.expected}", got "${actual.slice(0, 80)}${actual.length > 80 ? "..." : ""}"`}`,
+                message: `Equals: ${passed ? "matched" : `expected "${a.expected}", got "${actual.slice(0, 120)}${actual.length > 120 ? "..." : ""}"`}`,
+                type: "equals", path: a.path || "(body)", expected: a.expected, actual,
               });
             } else if (a.type === "schema") {
               try {
@@ -706,9 +752,10 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 results.push({
                   passed: errors.length === 0,
                   message: errors.length === 0 ? "Schema: valid" : `Schema: ${errors.join("; ")}`,
+                  type: "schema", path: "(body)", expected: "(schema)", actual: errors.length === 0 ? "valid" : errors.join("; "),
                 });
               } catch (schErr: any) {
-                results.push({ passed: false, message: `Schema: ${schErr.message}` });
+                results.push({ passed: false, message: `Schema: ${schErr.message}`, type: "schema", path: "(body)", expected: "(schema)", actual: schErr.message });
               }
             } else if (a.type === "xpath") {
               try {
@@ -723,9 +770,10 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 results.push({
                   passed,
                   message: `XPath "${a.path}": ${passed ? "passed" : `expected "${a.expected}", got "${actual}"`}`,
+                  type: "xpath", path: a.path, expected: a.expected, actual,
                 });
               } catch (xpErr: any) {
-                results.push({ passed: false, message: `XPath: ${xpErr.message}` });
+                results.push({ passed: false, message: `XPath: ${xpErr.message}`, type: "xpath", path: a.path, expected: a.expected, actual: xpErr.message });
               }
             } else if (a.type === "matches_baseline") {
               try {
@@ -737,12 +785,13 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   message: diffs.length === 0
                     ? "Matches baseline: identical"
                     : `Baseline mismatch: ${diffs.length} difference(s) — ${diffs.slice(0, 3).map(d => `${d.path}: ${d.type}`).join(", ")}${diffs.length > 3 ? "..." : ""}`,
+                  type: "baseline", path: "(body)", expected: "(baseline)", actual: diffs.length === 0 ? "identical" : `${diffs.length} diff(s)`,
                 });
               } catch (blErr: any) {
-                results.push({ passed: false, message: `Baseline: ${blErr.message}` });
+                results.push({ passed: false, message: `Baseline: ${blErr.message}`, type: "baseline", path: "(body)", expected: "(baseline)", actual: blErr.message });
               }
             } else {
-              results.push({ passed: true, message: `${a.type}: evaluated` });
+              results.push({ passed: true, message: `${a.type}: evaluated`, type: a.type, path: a.path, expected: a.expected, actual: "ok" });
             }
           }
           setAssertionResults(results);
@@ -1900,17 +1949,35 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
             <TabsContent value="assertions" className="p-4 mt-0">
               <AssertionsPanel assertions={assertions} onChange={setAssertions} results={assertionResults.length > 0 ? assertionResults : undefined} currentResponseBody={response?.body} />
               {assertionResults.length > 0 && (
-                <div className="mt-3 space-y-1">
-                  {assertionResults.map((r, i) => (
-                    <div key={i} className="flex items-center gap-2 text-sm">
-                      {r.passed
-                        ? <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
-                        : <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />}
-                      <span className={r.passed ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}>
-                        {r.message}
-                      </span>
-                    </div>
-                  ))}
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/50">
+                        <th className="text-left p-1.5 font-medium text-muted-foreground w-8">#</th>
+                        <th className="text-left p-1.5 font-medium text-muted-foreground w-6">Status</th>
+                        <th className="text-left p-1.5 font-medium text-muted-foreground">Type</th>
+                        <th className="text-left p-1.5 font-medium text-muted-foreground">Path</th>
+                        <th className="text-left p-1.5 font-medium text-muted-foreground">Expected</th>
+                        <th className="text-left p-1.5 font-medium text-muted-foreground">Actual</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {assertionResults.map((r, i) => (
+                        <tr key={i} className={`border-b border-border/50 ${r.passed ? "bg-green-500/5" : "bg-red-500/5"}`}>
+                          <td className="p-1.5 text-muted-foreground">{i + 1}</td>
+                          <td className="p-1.5">
+                            {r.passed
+                              ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                              : <AlertCircle className="w-3.5 h-3.5 text-red-500" />}
+                          </td>
+                          <td className="p-1.5 font-mono">{r.type || "—"}</td>
+                          <td className="p-1.5 font-mono text-muted-foreground max-w-[140px] truncate" title={r.path || ""}>{r.path || "—"}</td>
+                          <td className="p-1.5 font-mono max-w-[200px] truncate" title={r.expected || ""}>{r.expected || "—"}</td>
+                          <td className={`p-1.5 font-mono max-w-[200px] truncate ${r.passed ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`} title={r.actual || ""}>{r.actual || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </TabsContent>

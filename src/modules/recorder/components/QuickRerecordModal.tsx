@@ -169,7 +169,7 @@ export default function QuickRerecordModal({
 
     setStatus('picking');
     setError(null);
-    toast.info('🎯 Click on the element you want to use');
+    toast.info('Click on the element you want to use');
 
     try {
       const result = await flowstral.elementPicker.start();
@@ -185,7 +185,7 @@ export default function QuickRerecordModal({
         setPickedElement(element);
         setSelectedSelector(element.selector);
         setStatus('picked');
-        toast.success('✅ Element captured!');
+        toast.success('Element captured!');
       } else if (result?.cancelled) {
         setStatus('ready');
         toast.info('Picker cancelled');
@@ -214,10 +214,10 @@ export default function QuickRerecordModal({
     try {
       const result = await flowstral.elementPicker.testSelector(selectedSelector);
       if (result.success) {
-        toast.success(`✅ Found element: ${result.message}`);
+        toast.success(`Found element: ${result.message}`);
         await flowstral.elementPicker.highlight(selectedSelector);
       } else {
-        toast.error(`❌ Not found: ${result.message}`);
+        toast.error(`Not found: ${result.message}`);
       }
     } catch (e: any) {
       toast.error(e.message);
@@ -253,7 +253,7 @@ export default function QuickRerecordModal({
 
     onSave(updates);
     onOpenChange(false);
-    toast.success(`✅ Step ${stepIndex + 1} updated!`);
+    toast.success(`Step ${stepIndex + 1} updated!`);
   }, [selectedSelector, pickedElement, onSave, onOpenChange, stepIndex]);
 
   // Close browser when modal closes

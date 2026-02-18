@@ -114,7 +114,7 @@ export default function MobileTestingPage() {
       )}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-violet-500 to-purple-600">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-primary">
               <MonitorSmartphone className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -158,9 +158,7 @@ export default function MobileTestingPage() {
                   "flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-all relative",
                   "border-b-2 -mb-[1px]",
                   isActive
-                    ? isDark
-                      ? "text-violet-400 border-violet-400"
-                      : "text-violet-600 border-violet-600"
+                    ? "text-primary border-primary"
                     : isDark
                       ? "text-gray-400 border-transparent hover:text-gray-300 hover:border-gray-700"
                       : "text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300"

@@ -283,7 +283,7 @@ export default function MobileInspector() {
           className={cn(
             "flex items-center gap-1 py-1 px-2 cursor-pointer text-xs rounded transition-colors",
             isSelected
-              ? isDark ? 'bg-violet-500/20 text-violet-400' : 'bg-violet-100 text-violet-700'
+              ? isDark ? 'bg-primary/20 text-primary' : 'bg-primary/10 text-primary'
               : isDark ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-100 text-gray-700',
             matchesSearch && !isSelected && (isDark ? 'bg-amber-500/10' : 'bg-amber-50'),
           )}
@@ -320,7 +320,7 @@ export default function MobileInspector() {
               <Button
                 variant={isInspecting ? 'default' : 'outline'}
                 size="sm"
-                className={cn("h-7 text-xs", isInspecting && "bg-violet-500 text-white")}
+                className={cn("h-7 text-xs", isInspecting && "bg-primary text-primary-foreground")}
                 onClick={() => isInspecting ? setIsInspecting(false) : handleStartInspecting()}
               >
                 <Crosshair className="w-3 h-3 mr-1" />
@@ -346,7 +346,7 @@ export default function MobileInspector() {
         <div className="flex-1 overflow-y-auto py-2">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
             </div>
           ) : (
             renderTree(tree)
@@ -460,16 +460,16 @@ export default function MobileInspector() {
                 {generateSelector(selectedElement).map((sel, idx) => (
                   <div key={idx} className={cn(
                     "p-2 rounded-lg flex items-start justify-between gap-2",
-                    isDark ? 'bg-violet-500/10' : 'bg-violet-50'
+                    isDark ? 'bg-primary/10' : 'bg-primary/5'
                   )}>
-                    <code className={cn("text-[11px] font-mono whitespace-pre", isDark ? 'text-violet-400' : 'text-violet-600')}>
+                    <code className={cn("text-[11px] font-mono whitespace-pre", isDark ? 'text-primary' : 'text-primary')}>
                       - {sel}
                     </code>
                     <button
                       onClick={() => copySelector(sel)}
                       className="shrink-0 mt-0.5"
                     >
-                      <Copy className={cn("w-3 h-3", isDark ? 'text-violet-400 hover:text-violet-300' : 'text-violet-500 hover:text-violet-600')} />
+                      <Copy className={cn("w-3 h-3", isDark ? 'text-primary hover:text-primary/80' : 'text-primary hover:text-primary')} />
                     </button>
                   </div>
                 ))}

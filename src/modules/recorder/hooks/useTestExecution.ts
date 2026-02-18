@@ -296,14 +296,14 @@ export function useTestExecution(params: UseTestExecutionParams) {
 
         // Notify on auto-skipped steps
         if (data.success && isSkipped) {
-          console.log(`[Test] ⏭️ Step ${data.stepIndex + 1} auto-skipped (non-critical)`);
+          console.log(`[Test] Step ${data.stepIndex + 1} auto-skipped (non-critical)`);
         }
 
         // =========== SMART SUGGESTIONS ON TRUE FAILURE ===========
         // Only pause and show failure UI when step truly failed
         // (NOT when healed or skipped by resilient runtime)
         if (!data.success && !isHealed && !isSkipped) {
-          console.log('[Test] ❌ Step failed - showing Smart Suggestions for quick fix');
+          console.log('[Test] Step failed - showing Smart Suggestions for quick fix');
 
           // Set paused state so user can fix
           setIsTestPaused(true);
@@ -378,7 +378,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
         stepResults?: any[];
         error?: string 
       }) => {
-        console.log('[Test] ✅ Test complete event received:', data.success ? 'PASSED' : 'FAILED');
+        console.log('[Test] Test complete event received:', data.success ? 'PASSED' : 'FAILED');
         
         // Build step results from event data or create default
         const finalStepResults = data.stepResults?.map((s: any, i: number) => ({
@@ -427,7 +427,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
           const skipInfo = skippedCount > 0 ? `, ${skippedCount} auto-skipped` : '';
           toast.success(`Test Passed! (${data.passedSteps}/${data.totalSteps} steps${healInfo}${skipInfo})`, { duration: 3000 });
         } else {
-          toast.error(`❌ Test Failed: ${data.error || 'Step failed'}`, { duration: 5000 });
+          toast.error(`Test Failed: ${data.error || 'Step failed'}`, { duration: 5000 });
         }
       });
       eventCleanups.push(unsubComplete);
@@ -735,7 +735,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
                   `AI detected: ${fpResult.reason} (${Math.round(fpResult.confidence * 100)}% confidence)`
                 );
                 toast.info(
-                  `🤖 AI detected Step ${failedStep.index + 1} may be a false positive: ${fpResult.reason}`,
+                  `AI detected Step ${failedStep.index + 1} may be a false positive: ${fpResult.reason}`,
                   { duration: 6000 }
                 );
               }
@@ -749,10 +749,10 @@ export function useTestExecution(params: UseTestExecutionParams) {
       }
 
       if (testPassed) {
-        toast.success(`✅ Test Passed! (${actions.length} steps)`, { id: 'run' });
+        toast.success(`Test Passed! (${actions.length} steps)`, { id: 'run' });
       } else {
         const browserMsg = result?.browserKeptOpen ? ' Browser kept open for debugging.' : '';
-        toast.error(`❌ Test Failed: ${result?.error || 'Unknown error'}${browserMsg}`, { id: 'run' });
+        toast.error(`Test Failed: ${result?.error || 'Unknown error'}${browserMsg}`, { id: 'run' });
       }
     } catch (error: any) {
       // Cleanup progress tracking
@@ -822,7 +822,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
     if (!testExecutionResult || testExecutionResult.status !== 'running') return;
     
     setPauseRequested(true);
-    toast.info('⏸️ Pause requested... waiting for current step to complete', { duration: 2000 });
+    toast.info('Pause requested... waiting for current step to complete', { duration: 2000 });
     
     // Notify backend to pause after current step
     const flowstral = (window as any).flowstral;
@@ -870,7 +870,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
       currentStep: resumeFromStep 
     } : null);
     
-    toast.success(`▶️ Resuming from step ${resumeFromStep + 1}...`, { duration: 1500 });
+    toast.success(`Resuming from step ${resumeFromStep + 1}...`, { duration: 1500 });
     
     // Notify backend to resume execution from the specific step
     // Backend keeps the browser/page context alive during pause
@@ -930,9 +930,9 @@ export function useTestExecution(params: UseTestExecutionParams) {
     setEditingPausedStep(null);
     
     if (isLastStep) {
-      toast.info(`⏭️ Skipped step ${pausedAtStep + 1}. Test complete.`, { duration: 2000 });
+      toast.info(`Skipped step ${pausedAtStep + 1}. Test complete.`, { duration: 2000 });
     } else {
-      toast.info(`⏭️ Skipped step ${pausedAtStep + 1}, continuing from step ${nextStep + 1}...`, { duration: 1500 });
+      toast.info(`Skipped step ${pausedAtStep + 1}, continuing from step ${nextStep + 1}...`, { duration: 1500 });
     }
     
     // Notify backend to skip and continue from next step
@@ -1088,7 +1088,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
     const screenshot = stepResult?.screenshot || null;
 
     try {
-      toast.info(`🤖 AI is auto-fixing step ${stepIndex + 1}...`, { duration: 3000 });
+      toast.info(`AI is auto-fixing step ${stepIndex + 1}...`, { duration: 3000 });
 
       const result = await autoFixStepApi({
         test_id: currentTestId,
@@ -1140,7 +1140,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
 
         setAutoFixResults(prev => new Map(prev).set(stepIndex, { success: true, message: `AI fixed: ${result.strategy_used || 'auto-healed'}` }));
         toast.success(
-          `✅ Step ${stepIndex + 1} auto-fixed by AI (${result.strategy_used || 'healed'}, ${Math.round(result.confidence * 100)}% confidence). Run test again to verify.`,
+          `Step ${stepIndex + 1} auto-fixed by AI (${result.strategy_used || 'healed'}, ${Math.round(result.confidence * 100)}% confidence). Run test again to verify.`,
           { duration: 5000 }
         );
       } else {
@@ -1176,7 +1176,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
     setEditSelectorModalOpen(true);
     
     toast.info(
-      '🎯 Stopped at flagged step. Click the correct element to fix it.',
+      'Stopped at flagged step. Click the correct element to fix it.',
       { duration: 5000 }
     );
   }, []);
@@ -1186,7 +1186,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
     setStoppedAtFalsePositive(null);
     // Remove from false positive list since it's now fixed
     unmarkFalsePositive(actionId);
-    toast.success('✅ Step fixed! Run test again to continue.');
+    toast.success('Step fixed! Run test again to continue.');
   }, [unmarkFalsePositive]);
 
   // Stop test execution and close browser
@@ -1218,7 +1218,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
   // Toggle step-by-step execution mode
   const toggleStepByStepMode = useCallback(() => {
     setStepByStepMode(prev => !prev);
-    toast.info(stepByStepMode ? '▶️ Continuous mode' : '⏯️ Step-by-step mode enabled', { duration: 1500 });
+    toast.info(stepByStepMode ? 'Continuous mode' : '⏯️ Step-by-step mode enabled', { duration: 1500 });
   }, [stepByStepMode]);
 
   // Update the paused step's automation
@@ -1256,7 +1256,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
         });
         
         if (result?.success) {
-          toast.success(`✅ Step ${pausedAtStep + 1} passed`, { id: 'single-step' });
+          toast.success(`Step ${pausedAtStep + 1} passed`, { id: 'single-step' });
           
           // Auto-advance to next step if there are more
           if (pausedAtStep < actions.length - 1) {
@@ -1265,10 +1265,10 @@ export function useTestExecution(params: UseTestExecutionParams) {
           } else {
             // Test complete
             setTestExecutionResult(prev => prev ? { ...prev, status: 'passed' } : null);
-            toast.success('🎉 All steps completed!', { duration: 3000 });
+            toast.success('All steps completed!', { duration: 3000 });
           }
         } else {
-          toast.error(`❌ Step ${pausedAtStep + 1} failed: ${result?.error || 'Unknown error'}`, { id: 'single-step' });
+          toast.error(`Step ${pausedAtStep + 1} failed: ${result?.error || 'Unknown error'}`, { id: 'single-step' });
         }
       } catch (error: any) {
         toast.error(`Failed: ${error?.message}`, { id: 'single-step' });

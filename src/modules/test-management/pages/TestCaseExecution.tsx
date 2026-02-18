@@ -638,10 +638,10 @@ export default function TestCaseExecution() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <Clock className="h-12 w-12 text-amber-400 mx-auto mb-4 animate-pulse" />
-          <h3 className="text-lg font-semibold text-white">Loading Test Case...</h3>
+          <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4 animate-pulse" />
+          <h3 className="text-lg font-semibold text-foreground">Loading Test Case...</h3>
         </div>
       </div>
     );
@@ -649,10 +649,10 @@ export default function TestCaseExecution() {
 
   if (!testCase) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <XCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-white mb-2">Test Case Not Found</h3>
+          <XCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">Test Case Not Found</h3>
           <Button onClick={() => navigate('/test-cases?tab=runs')}>Back to Runs</Button>
         </div>
       </div>
@@ -671,33 +671,33 @@ export default function TestCaseExecution() {
   const isTestComplete = completedSteps === steps.length;
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden">
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* Compact Header */}
-      <header className="flex-none bg-gray-900/95 border-b border-gray-700 px-4 py-3">
+      <header className="flex-none bg-card border-b border-border px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" onClick={() => navigate('/test-cases?tab=runs')} className="border-gray-700 text-gray-300 h-8">
+            <Button variant="outline" size="sm" onClick={() => navigate('/test-cases?tab=runs')} className="h-8">
               <Home className="h-4 w-4 mr-1" />
               Runs
             </Button>
-            <div className="border-l border-gray-700 pl-3">
-              <h1 className="text-base font-semibold text-white">{testCase.name}</h1>
+            <div className="border-l border-border pl-3">
+              <h1 className="text-base font-semibold text-foreground">{testCase.name}</h1>
             </div>
           </div>
           
           <div className="flex items-center gap-4">
             {/* Progress */}
             <div className="flex items-center gap-2 text-xs">
-              <Progress value={progressPercent} className="w-32 h-1.5 bg-gray-700" />
-              <span className="text-green-400">{passedSteps}✓</span>
-              <span className="text-red-400">{failedSteps}✗</span>
-              <span className="text-gray-400">{steps.length - completedSteps} left</span>
+              <Progress value={progressPercent} className="w-32 h-1.5" />
+              <span className="text-emerald-600 dark:text-emerald-400">{passedSteps} passed</span>
+              <span className="text-red-600 dark:text-red-400">{failedSteps} failed</span>
+              <span className="text-muted-foreground">{steps.length - completedSteps} left</span>
             </div>
             
             {/* Multi-test nav */}
             {testIds.length > 1 && (
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 bg-gray-800 rounded px-2 py-1">
+                <div className="flex items-center gap-1 bg-muted rounded px-2 py-1">
                   <Button 
                     variant="ghost" 
                     size="sm" 
@@ -708,7 +708,7 @@ export default function TestCaseExecution() {
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <span className="text-xs text-white px-1 min-w-[60px] text-center">
+                  <span className="text-xs text-foreground px-1 min-w-[60px] text-center">
                     Test {currentTestIndex + 1}/{testIds.length}
                   </span>
                   <Button 
@@ -728,7 +728,7 @@ export default function TestCaseExecution() {
                     variant="outline" 
                     size="sm" 
                     onClick={skipCurrentTest}
-                    className="h-7 text-xs border-gray-600 text-gray-400 hover:text-white hover:border-amber-500"
+                    className="h-7 text-xs border-border text-muted-foreground hover:text-foreground hover:border-primary"
                     title="Skip this test and move to next"
                   >
                     <SkipForward className="h-3 w-3 mr-1" />
@@ -744,8 +744,8 @@ export default function TestCaseExecution() {
       {/* Main Content - Fixed Height */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel - Steps List */}
-        <aside className="w-56 flex-none border-r border-gray-700 overflow-y-auto bg-gray-900/50">
-          <div className="p-2 text-xs text-gray-400 border-b border-gray-800 sticky top-0 bg-gray-900/95 backdrop-blur">
+        <aside className="w-56 flex-none border-r border-border overflow-y-auto bg-muted/30">
+          <div className="p-2 text-xs text-muted-foreground border-b border-border sticky top-0 bg-card/95 backdrop-blur">
             Steps ({completedSteps}/{steps.length})
           </div>
           <div className="p-1">
@@ -758,7 +758,7 @@ export default function TestCaseExecution() {
                   onClick={() => setCurrentStepIndex(idx)}
                   className={cn(
                     "w-full p-2 rounded text-left transition-all flex items-center gap-2 text-xs",
-                    idx === currentStepIndex ? "bg-amber-500/20 border border-amber-500/50" : "hover:bg-gray-800",
+                    idx === currentStepIndex ? "bg-primary/20 border border-primary/50" : "hover:bg-muted",
                     result?.status === 'passed' && "border-l-2 border-l-green-500",
                     result?.status === 'failed' && "border-l-2 border-l-red-500",
                     result?.status === 'skipped' && "border-l-2 border-l-gray-500"
@@ -766,14 +766,14 @@ export default function TestCaseExecution() {
                 >
                   <span className={cn(
                     "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0",
-                    result?.status === 'passed' && "bg-green-600 text-white",
-                    result?.status === 'failed' && "bg-red-600 text-white",
-                    result?.status === 'skipped' && "bg-gray-600 text-white",
-                    (!result || result.status === 'pending') && "bg-gray-700 text-gray-400"
+                    result?.status === 'passed' && "bg-emerald-600 dark:bg-emerald-500 text-white",
+                    result?.status === 'failed' && "bg-red-600 dark:bg-red-500 text-white",
+                    result?.status === 'skipped' && "bg-muted-foreground text-white",
+                    (!result || result.status === 'pending') && "bg-muted text-muted-foreground"
                   )}>
                     {idx + 1}
                   </span>
-                  <span className="truncate flex-1 text-gray-300">{action}</span>
+                  <span className="truncate flex-1 text-foreground">{action}</span>
                   {result?.screenshots?.length > 0 && <ImageIcon className="w-3 h-3 text-blue-400 flex-shrink-0" />}
                   {result?.defectId && <Bug className="w-3 h-3 text-red-400 flex-shrink-0" />}
                 </button>
@@ -785,7 +785,7 @@ export default function TestCaseExecution() {
         {/* Main Panel */}
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Step Header */}
-          <div className="flex-none p-4 border-b border-gray-700 bg-gray-800/30">
+          <div className="flex-none p-4 border-b border-border bg-muted/30">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={cn(
@@ -798,7 +798,7 @@ export default function TestCaseExecution() {
                   {currentStepIndex + 1}
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
                     {getActionIcon(currentStep?.qword)}
                     {stepDetails.action}
                   </h2>
@@ -809,7 +809,7 @@ export default function TestCaseExecution() {
                 "px-3 py-1",
                 currentResult?.status === 'passed' && "bg-green-500/20 text-green-400",
                 currentResult?.status === 'failed' && "bg-red-500/20 text-red-400",
-                currentResult?.status === 'skipped' && "bg-gray-500/20 text-gray-400",
+                currentResult?.status === 'skipped' && "bg-muted text-muted-foreground",
                 currentResult?.status === 'pending' && "bg-amber-500/20 text-amber-400"
               )}>
                 {currentResult?.status || 'pending'}
@@ -820,7 +820,7 @@ export default function TestCaseExecution() {
           {/* Content Area with Tabs */}
           <div className="flex-1 overflow-hidden">
             <Tabs defaultValue="execute" className="h-full flex flex-col">
-              <TabsList className="flex-none mx-4 mt-2 bg-gray-800 border border-gray-700">
+              <TabsList className="flex-none mx-4 mt-2 bg-muted border border-border">
                 <TabsTrigger value="execute" className="flex-1">Execute</TabsTrigger>
                 <TabsTrigger value="evidence" className="flex-1 relative">
                   Evidence
@@ -834,11 +834,11 @@ export default function TestCaseExecution() {
               <TabsContent value="execute" className="flex-1 overflow-y-auto p-4 space-y-4">
                 {/* Step Details */}
                 {stepDetails.details.length > 0 && (
-                  <div className="bg-gray-900/50 rounded-lg p-3 space-y-1">
+                  <div className="bg-muted/50 rounded-lg p-3 space-y-1">
                     {stepDetails.details.map((detail, idx) => (
                       <div key={idx} className="flex gap-2 text-sm">
                         <span className="text-gray-500 min-w-[70px]">{detail.label}:</span>
-                        <span className="text-white font-mono bg-gray-800 px-2 py-0.5 rounded break-all">{detail.value}</span>
+                        <span className="text-foreground font-mono bg-muted px-2 py-0.5 rounded break-all">{detail.value}</span>
                       </div>
                     ))}
                   </div>
@@ -850,16 +850,16 @@ export default function TestCaseExecution() {
                     <Check className="w-3 h-3" />
                     Expected Result
                   </div>
-                  <p className="text-white text-sm">{currentStep?.expectedResult || 'Step completes successfully'}</p>
+                  <p className="text-foreground text-sm">{currentStep?.expectedResult || 'Step completes successfully'}</p>
                 </div>
 
                 {/* Action Buttons */}
-                <div className="bg-gray-900/80 rounded-lg p-4 border border-gray-700">
-                  <div className="text-gray-400 text-xs uppercase tracking-wide mb-3">Mark Step Result</div>
+                <div className="bg-muted/50 rounded-lg p-4 border border-border">
+                  <div className="text-muted-foreground text-xs uppercase tracking-wide mb-3">Mark Step Result</div>
                   <div className="flex gap-3">
                     <Button
                       onClick={() => markStep('passed')}
-                      className="flex-1 h-11 bg-green-600 hover:bg-green-500 text-white font-semibold"
+                      className="flex-1 h-11 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-semibold"
                       disabled={currentResult?.status !== 'pending'}
                     >
                       <CheckCircle className="h-5 w-5 mr-2" />
@@ -870,7 +870,7 @@ export default function TestCaseExecution() {
                         const error = prompt("Enter failure reason:");
                         if (error !== null) markStep('failed', error || 'Step failed');
                       }}
-                      className="flex-1 h-11 bg-red-600 hover:bg-red-500 text-white font-semibold"
+                      className="flex-1 h-11 bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-500 text-white font-semibold"
                       disabled={currentResult?.status !== 'pending'}
                     >
                       <XCircle className="h-5 w-5 mr-2" />
@@ -879,7 +879,7 @@ export default function TestCaseExecution() {
                     <Button
                       onClick={() => markStep('skipped')}
                       variant="outline"
-                      className="h-11 border-gray-600 text-gray-300 px-4"
+                      className="h-11 border-border text-muted-foreground px-4"
                       disabled={currentResult?.status !== 'pending'}
                     >
                       <SkipForward className="h-4 w-4 mr-1" />
@@ -895,18 +895,18 @@ export default function TestCaseExecution() {
                       <AlertCircle className="w-4 h-4" />
                       Failure Reason
                     </div>
-                    <p className="text-gray-300 text-sm">{currentResult.errorMessage}</p>
+                    <p className="text-foreground text-sm">{currentResult.errorMessage}</p>
                   </div>
                 )}
 
                 {/* Notes */}
                 <div>
-                  <Label className="text-gray-400 text-xs uppercase">Notes</Label>
+                  <Label className="text-muted-foreground text-xs uppercase">Notes</Label>
                   <Textarea
                     value={stepNotes || currentResult?.notes || ''}
                     onChange={(e) => setStepNotes(e.target.value)}
                     placeholder="Add observations..."
-                    className="mt-1 bg-gray-900/50 border-gray-700 text-white h-20"
+                    className="mt-1 bg-muted/50 border-border text-foreground h-20"
                   />
                 </div>
               </TabsContent>
@@ -916,7 +916,7 @@ export default function TestCaseExecution() {
                 {/* Screenshots Section */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <Label className="text-gray-300 text-sm flex items-center gap-2">
+                    <Label className="text-foreground text-sm flex items-center gap-2">
                       <Camera className="w-4 h-4 text-blue-400" />
                       Screenshots ({currentResult?.screenshots?.length || 0})
                     </Label>
@@ -946,7 +946,7 @@ export default function TestCaseExecution() {
                   {currentResult?.screenshots?.length > 0 ? (
                     <div className="grid grid-cols-2 gap-3">
                       {currentResult.screenshots.map((img, idx) => (
-                        <div key={idx} className="relative group rounded-lg overflow-hidden border border-gray-700 bg-gray-900">
+                        <div key={idx} className="relative group rounded-lg overflow-hidden border border-border bg-muted">
                           <img
                             src={img}
                             alt={`Screenshot ${idx + 1}`}
@@ -966,12 +966,12 @@ export default function TestCaseExecution() {
                     </div>
                   ) : (
                     <div 
-                      className="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center hover:border-blue-500/50 transition-colors cursor-pointer"
+                      className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer"
                       onClick={() => fileInputRef.current?.click()}
                     >
                       <ImageIcon className="w-10 h-10 text-gray-600 mx-auto mb-2" />
                       <p className="text-gray-500 text-sm">No screenshots attached</p>
-                      <p className="text-gray-600 text-xs mt-1">Click to upload or press <kbd className="px-1.5 py-0.5 bg-gray-800 rounded text-gray-400 text-[10px] font-mono">Ctrl+V</kbd> to paste from clipboard</p>
+                      <p className="text-muted-foreground text-xs mt-1">Click to upload or press <kbd className="px-1.5 py-0.5 bg-muted rounded text-muted-foreground text-[10px] font-mono">Ctrl+V</kbd> to paste from clipboard</p>
                     </div>
                   )}
                 </div>
@@ -979,7 +979,7 @@ export default function TestCaseExecution() {
                 {/* Defects Section */}
                 <div className="border-t border-gray-700 pt-4">
                   <div className="flex items-center justify-between mb-3">
-                    <Label className="text-gray-300 text-sm flex items-center gap-2">
+                    <Label className="text-foreground text-sm flex items-center gap-2">
                       <Bug className="w-4 h-4 text-red-400" />
                       Linked Defect
                     </Label>
@@ -1052,12 +1052,12 @@ export default function TestCaseExecution() {
             
             {isTestComplete ? (
               testIds.length > 1 && currentTestIndex < testIds.length - 1 ? (
-                <Button onClick={navigateToNextTest} className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">
+                <Button onClick={navigateToNextTest} className="bg-primary hover:bg-primary/90">
                   Next Test
                   <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               ) : (
-                <Button onClick={() => navigate('/test-cases?tab=runs')} className="bg-gradient-to-r from-green-500 to-emerald-500 text-white">
+                <Button onClick={() => navigate('/test-cases?tab=runs')} variant="outline">
                   <Save className="h-4 w-4 mr-2" />
                   Complete Run
                 </Button>

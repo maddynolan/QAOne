@@ -35,14 +35,14 @@ import { toast } from 'sonner';
 // ============================================================================
 
 const PRODUCTS = [
-  { id: 1, name: 'MacBook Pro 14"', price: 1999.99, category: 'Electronics', stock: 15, rating: 4.8, image: '💻' },
-  { id: 2, name: 'iPhone 15 Pro', price: 1199.00, category: 'Electronics', stock: 42, rating: 4.9, image: '📱' },
-  { id: 3, name: 'AirPods Pro 2', price: 249.00, category: 'Electronics', stock: 100, rating: 4.7, image: '🎧' },
-  { id: 4, name: 'iPad Air', price: 599.00, category: 'Electronics', stock: 28, rating: 4.6, image: '📲' },
-  { id: 5, name: 'Apple Watch Ultra', price: 799.00, category: 'Electronics', stock: 8, rating: 4.8, image: '⌚' },
-  { id: 6, name: 'Sony WH-1000XM5', price: 349.99, category: 'Audio', stock: 35, rating: 4.7, image: '🎵' },
-  { id: 7, name: 'Samsung 4K TV 65"', price: 1299.00, category: 'Electronics', stock: 12, rating: 4.5, image: '📺' },
-  { id: 8, name: 'Nintendo Switch', price: 299.99, category: 'Gaming', stock: 55, rating: 4.8, image: '🎮' },
+  { id: 1, name: 'MacBook Pro 14"', price: 1999.99, category: 'Electronics', stock: 15, rating: 4.8, image: 'MB' },
+  { id: 2, name: 'iPhone 15 Pro', price: 1199.00, category: 'Electronics', stock: 42, rating: 4.9, image: 'IP' },
+  { id: 3, name: 'AirPods Pro 2', price: 249.00, category: 'Electronics', stock: 100, rating: 4.7, image: 'AP' },
+  { id: 4, name: 'iPad Air', price: 599.00, category: 'Electronics', stock: 28, rating: 4.6, image: 'IA' },
+  { id: 5, name: 'Apple Watch Ultra', price: 799.00, category: 'Electronics', stock: 8, rating: 4.8, image: 'AW' },
+  { id: 6, name: 'Sony WH-1000XM5', price: 349.99, category: 'Audio', stock: 35, rating: 4.7, image: 'SN' },
+  { id: 7, name: 'Samsung 4K TV 65"', price: 1299.00, category: 'Electronics', stock: 12, rating: 4.5, image: 'TV' },
+  { id: 8, name: 'Nintendo Switch', price: 299.99, category: 'Gaming', stock: 55, rating: 4.8, image: 'NS' },
 ];
 
 const ORDERS = [
@@ -89,14 +89,14 @@ export default function TestPlayground() {
   };
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-gradient-to-r from-violet-600 to-purple-600 text-white p-6 shadow-lg">
+      <header className="bg-primary text-primary-foreground p-6 shadow-sm">
         <div className="max-w-7xl mx-auto">
           <h1 className="text-3xl font-bold flex items-center gap-3">
-            🧪 Flowstral Test Playground
+            Test Playground
           </h1>
-          <p className="text-violet-200 mt-1">
+          <p className="text-primary-foreground/70 mt-1">
             Comprehensive testing environment for all Flowstral capabilities
           </p>
         </div>

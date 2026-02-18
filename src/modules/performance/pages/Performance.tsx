@@ -252,7 +252,7 @@ export default function Performance() {
           totalRequests: 0,
           totalBytes: 0
         });
-        toast.success("🔴 Protocol capture started - all HTTP traffic will be recorded");
+        toast.success("Protocol capture started - all HTTP traffic will be recorded");
       }
     } catch (error) {
       console.error("Failed to start protocol capture:", error);
@@ -270,7 +270,7 @@ export default function Performance() {
       
       if (response.ok) {
         const data = await response.json();
-        toast.success(`📊 Protocol capture stopped: ${data.summary?.total_requests || 0} requests captured`);
+        toast.success(`Protocol capture stopped: ${data.summary?.total_requests || 0} requests captured`);
         setProtocolRecording(null);
       }
     } catch (error) {
@@ -357,9 +357,9 @@ export default function Performance() {
 
           // Check for warnings
           const warnings: string[] = [];
-          if (serverData.cpu_percent > 80) warnings.push(`⚠️ HIGH CPU: ${serverData.cpu_percent.toFixed(1)}%`);
-          if (serverData.memory_percent > 85) warnings.push(`⚠️ HIGH MEMORY: ${serverData.memory_percent.toFixed(1)}%`);
-          if (serverData.disk_percent > 90) warnings.push(`⚠️ LOW DISK: ${serverData.disk_percent.toFixed(1)}% used`);
+          if (serverData.cpu_percent > 80) warnings.push(`HIGH CPU: ${serverData.cpu_percent.toFixed(1)}%`);
+          if (serverData.memory_percent > 85) warnings.push(`HIGH MEMORY: ${serverData.memory_percent.toFixed(1)}%`);
+          if (serverData.disk_percent > 90) warnings.push(`LOW DISK: ${serverData.disk_percent.toFixed(1)}% used`);
           setServerHealthWarnings(warnings);
         }
       }
@@ -775,7 +775,7 @@ export default function Performance() {
       
       setCurrentTest(completedTest);
       setTestHistory(prev => [completedTest, ...prev.slice(0, 9)]);
-      toast.success(`✅ Load test completed! ${completedTest.metrics.totalRequests} requests made.`);
+      toast.success(`Load test completed! ${completedTest.metrics.totalRequests} requests made.`);
     }
   };
 
@@ -788,7 +788,7 @@ export default function Performance() {
     if (currentTest) {
       setCurrentTest({ ...currentTest, status: "stopped" });
     }
-    toast.info("⏹️ Test stopped by user");
+    toast.info("Test stopped by user");
   };
 
   return (
@@ -1216,7 +1216,7 @@ export default function Performance() {
                   </p>
                 </div>
                 <div className="p-4 bg-muted rounded-lg">
-                  <h4 className="font-semibold mb-2">📊 Correlation Analysis</h4>
+                  <h4 className="font-semibold mb-2">Correlation Analysis</h4>
                   <p className="text-muted-foreground">
                     Automatically correlate response times with server metrics to identify bottlenecks.
                   </p>
@@ -1532,7 +1532,7 @@ export default function Performance() {
                         </div>
                       ))}
                       <p className="text-xs text-muted-foreground mt-2">
-                        ⚠️ High server resource usage detected - your load test may be approaching the server's capacity limit.
+                        High server resource usage detected - your load test may be approaching the server's capacity limit.
                         Consider stopping the test to prevent server crash.
                       </p>
                     </div>

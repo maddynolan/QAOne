@@ -747,7 +747,7 @@ export function SalesforceToolsPage() {
           <div className="px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center shadow-lg shadow-primary/25">
+                <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-sm">
                   <Cloud className="w-5 h-5 text-primary-foreground" />
                 </div>
                 <div>
@@ -881,7 +881,7 @@ export function SalesforceToolsPage() {
                   <span>UAT</span>
                 </TabsTrigger>
                 {/* Orchestrator - Main Hub */}
-                <TabsTrigger value="orchestrator" className="gap-1 px-2 py-1 text-xs text-muted-foreground bg-gradient-to-r from-primary/10 to-blue-500/10 data-[state=active]:from-primary/30 data-[state=active]:to-blue-500/30 data-[state=active]:text-primary hover:from-primary/20 hover:to-blue-500/20 hover:text-foreground border border-primary/30">
+                <TabsTrigger value="orchestrator" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-primary/10 hover:text-foreground border border-border">
                   <Rocket className="w-3.5 h-3.5" />
                   <span>Orchestrator</span>
                 </TabsTrigger>
@@ -1492,7 +1492,7 @@ export function SalesforceToolsPage() {
                             {objectDescribe.createable && <Badge className="bg-green-500/20 text-green-400">Createable</Badge>}
                             {objectDescribe.updateable && <Badge className="bg-blue-500/20 text-blue-400">Updateable</Badge>}
                             {objectDescribe.deletable && <Badge className="bg-red-500/20 text-red-400">Deletable</Badge>}
-                            {objectDescribe.queryable && <Badge className="bg-purple-500/20 text-purple-400">Queryable</Badge>}
+                            {objectDescribe.queryable && <Badge className="bg-primary/20 text-primary">Queryable</Badge>}
                             {objectDescribe.custom && <Badge className="bg-orange-500/20 text-orange-400">Custom</Badge>}
                           </div>
 
@@ -1521,7 +1521,7 @@ export function SalesforceToolsPage() {
                                     <td className="px-4 py-2">
                                       <div className="flex flex-wrap gap-1">
                                         {!field.nillable && <Badge className="bg-red-500/20 text-red-400 text-[10px]">Req</Badge>}
-                                        {field.unique && <Badge className="bg-purple-500/20 text-purple-400 text-[10px]">Unique</Badge>}
+                                        {field.unique && <Badge className="bg-primary/20 text-primary text-[10px]">Unique</Badge>}
                                         {field.externalId && <Badge className="bg-yellow-500/20 text-yellow-400 text-[10px]">ExtId</Badge>}
                                         {field.custom && <Badge className="bg-orange-500/20 text-orange-400 text-[10px]">Custom</Badge>}
                                       </div>
@@ -1976,7 +1976,7 @@ export function SalesforceToolsPage() {
                             key={template.name}
                             className={`p-3 rounded-lg border cursor-pointer transition-all ${
                               selectedSeedTemplate === template.name
-                                ? 'bg-purple-500/10 border-purple-500/50'
+                                ? 'bg-primary/10 border-primary/50'
                                 : 'bg-input/50 border-border hover:border-border'
                             }`}
                             onClick={() => handleApplySeedTemplate(template.name)}

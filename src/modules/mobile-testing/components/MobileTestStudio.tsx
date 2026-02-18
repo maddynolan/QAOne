@@ -278,17 +278,17 @@ export default function MobileTestStudio() {
         "rounded-xl border p-6",
         isStudioRunning
           ? isDark
-            ? "bg-gradient-to-r from-red-900/20 to-orange-900/20 border-red-500/50"
-            : "bg-gradient-to-r from-red-50 to-orange-50 border-red-300"
+            ? "bg-red-900/20 border-red-500/50"
+            : "bg-red-50 border-red-300"
           : isDark
-            ? "bg-gradient-to-r from-violet-900/20 to-purple-900/20 border-violet-500/30"
-            : "bg-gradient-to-r from-violet-50 to-purple-50 border-violet-200"
+            ? "bg-muted border-border"
+            : "bg-muted/50 border-border"
       )}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className={cn(
               "w-14 h-14 rounded-xl flex items-center justify-center",
-              isStudioRunning ? "bg-red-500 animate-pulse" : "bg-gradient-to-br from-violet-500 to-purple-600"
+              isStudioRunning ? "bg-red-500 animate-pulse" : "bg-primary"
             )}>
               {isStudioRunning ? <CircleDot className="w-7 h-7 text-white" /> : <Video className="w-7 h-7 text-white" />}
             </div>
@@ -317,7 +317,7 @@ export default function MobileTestStudio() {
               </>
             ) : (
               <Button onClick={handleStartStudio} disabled={!maestroInstalled || isStartingStudio}
-                className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white px-6" size="lg">
+                className="bg-primary hover:bg-primary/90 text-primary-foreground px-6" size="lg">
                 {isStartingStudio
                   ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Starting...</>
                   : <><CircleDot className="w-5 h-5 mr-2" /> Start Recording</>}
@@ -399,11 +399,11 @@ export default function MobileTestStudio() {
 
             <div className="flex gap-2 mb-4">
               <Button variant={selectedPlatform === 'ios' ? 'default' : 'outline'} onClick={() => setSelectedPlatform('ios')}
-                className={cn("flex-1", selectedPlatform === 'ios' && "bg-gradient-to-r from-gray-800 to-gray-900")}>
+                className="flex-1">
                 <Apple className="w-4 h-4 mr-2" /> iOS Simulator
               </Button>
               <Button variant={selectedPlatform === 'android' ? 'default' : 'outline'} onClick={() => setSelectedPlatform('android')}
-                className={cn("flex-1", selectedPlatform === 'android' && "bg-gradient-to-r from-emerald-500 to-emerald-600")}>
+                className="flex-1">
                 <Bot className="w-4 h-4 mr-2" /> Android Emulator
               </Button>
             </div>
@@ -425,7 +425,7 @@ export default function MobileTestStudio() {
                     <button key={idx} onClick={() => setSelectedDevice(device)}
                       className={cn("w-full p-2 rounded-lg text-left text-sm transition-all",
                         selectedDevice === device
-                          ? isDark ? "bg-violet-500/20 text-violet-400 border border-violet-500" : "bg-violet-100 text-violet-700 border border-violet-300"
+                          ? "bg-primary/20 text-primary border border-primary/50"
                           : isDark ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-50 text-gray-700 hover:bg-gray-100"
                       )}>
                       <Smartphone className="w-3.5 h-3.5 inline mr-2" />{device}
@@ -461,7 +461,7 @@ export default function MobileTestStudio() {
                   <Save className="w-3 h-3 mr-1" /> Save Flow
                 </Button>
                 <a href="https://maestro.mobile.dev/reference/commands" target="_blank" rel="noopener noreferrer"
-                  className={cn("text-xs flex items-center gap-1", isDark ? 'text-violet-400' : 'text-violet-600')}>
+                  className={cn("text-xs flex items-center gap-1", isDark ? 'text-primary' : 'text-primary')}>
                   Docs <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
@@ -480,7 +480,7 @@ export default function MobileTestStudio() {
 
             <div className="flex gap-2 mt-4">
               <Button onClick={handleRunTest} disabled={!maestroInstalled || isRunningTest || !appBundleId}
-                className="flex-1 bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 text-white">
+                className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground">
                 {isRunningTest ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Running...</> : <><Play className="w-4 h-4 mr-2" /> Run Test</>}
               </Button>
               {isRunningTest && (
@@ -500,7 +500,7 @@ export default function MobileTestStudio() {
               </Button>
             </div>
 
-            <div ref={outputRef} className={cn("rounded-lg p-3 font-mono text-xs h-48 overflow-y-auto", isDark ? 'bg-gray-950 text-gray-100' : 'bg-gray-900 text-gray-100')}>
+            <div ref={outputRef} className={cn("rounded-lg p-3 font-mono text-xs h-48 overflow-y-auto", isDark ? 'bg-gray-950 text-gray-100' : 'bg-gray-100 text-gray-900')}>
               {studioOutput.length === 0 ? (
                 <span className="text-gray-500">Run a test or start recording to see output...</span>
               ) : (
@@ -545,7 +545,7 @@ export default function MobileTestStudio() {
             { cmd: 'repeat:', desc: 'Loop actions' },
           ].map((item, idx) => (
             <div key={idx} className={cn("p-2 rounded", isDark ? 'bg-gray-800' : 'bg-gray-50')}>
-              <code className={cn("font-mono text-[11px]", isDark ? 'text-violet-400' : 'text-violet-600')}>{item.cmd}</code>
+              <code className={cn("font-mono text-[11px]", isDark ? 'text-primary' : 'text-primary')}>{item.cmd}</code>
               <p className={cn("text-[10px] mt-0.5", isDark ? 'text-gray-400' : 'text-gray-500')}>{item.desc}</p>
             </div>
           ))}

@@ -344,7 +344,7 @@ export default function Dashboard() {
               variant="outline"
               onClick={() => navigate('/test-cases?tab=runs')}
             >
-              <Eye className="h-4 w-4 mr-2 text-purple-500" />
+              <Eye className="h-4 w-4 mr-2 text-muted-foreground" />
               View Test Runs
             </Button>
             <Button 
@@ -431,8 +431,8 @@ export default function Dashboard() {
                   {metrics.avgDuration > 0 ? `${metrics.avgDuration}s` : '-'}
                 </p>
               </div>
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Clock className="h-5 w-5 text-purple-600" />
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <Clock className="h-5 w-5 text-primary" />
               </div>
             </div>
           </CardContent>

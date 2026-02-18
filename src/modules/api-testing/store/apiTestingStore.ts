@@ -435,7 +435,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
           renameFolder: (folderId, newName) => {
             const collId = get().active_collection_id;
             if (!collId) return;
-            
+
             set((s) => {
               const coll = s.collections[collId];
               if (!coll) return;
@@ -443,8 +443,9 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               if (folder) folder.name = newName;
               coll.updated_at = nowISO();
             });
-            
-            get()._debouncedSaveCollection(collId);
+
+            // Save immediately so renames persist (not debounced)
+            get()._saveCollectionNow(collId);
           },
           
           deleteFolder: (folderId) => {

@@ -428,7 +428,7 @@ export default function VisualTestingPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg">
+          <div className="p-2 bg-primary rounded-lg">
             <Eye className="w-6 h-6 " />
           </div>
           <div>
@@ -488,7 +488,7 @@ export default function VisualTestingPage() {
           {/* Dashboard Tab */}
           <TabsContent value="dashboard" className="space-y-6">
             {/* How It Works Guide */}
-            <Card className="border-violet-200 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/30 dark:border-violet-800">
+            <Card className="border-primary/20 bg-primary/5 dark:bg-primary/10 dark:border-primary/30">
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Lightbulb className="w-5 h-5 text-amber-500" />
@@ -504,7 +504,7 @@ export default function VisualTestingPage() {
                     { step: 4, title: 'Review Diff', desc: 'See highlighted differences and approve changes', icon: Eye },
                   ].map((item) => (
                     <div key={item.step} className="flex items-start gap-3 p-3 bg-white/60 dark:bg-slate-900/60 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-violet-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold flex-shrink-0">
                         {item.step}
                       </div>
                       <div>
@@ -526,8 +526,8 @@ export default function VisualTestingPage() {
                       <p className="text-sm text-muted-foreground">Total Baselines</p>
                       <p className="text-3xl font-bold">{baselines.length}</p>
                     </div>
-                    <div className="p-3 bg-violet-100 dark:bg-violet-900/30 rounded-lg">
-                      <ImageIcon className="w-6 h-6 text-violet-600 dark:text-violet-400" />
+                    <div className="p-3 bg-primary/10 dark:bg-primary/20 rounded-lg">
+                      <ImageIcon className="w-6 h-6 text-primary" />
                     </div>
                   </div>
                 </CardContent>
@@ -583,7 +583,7 @@ export default function VisualTestingPage() {
               <Card className="">
                 <CardHeader>
                   <CardTitle className=" flex items-center gap-2">
-                    <GitCompare className="w-5 h-5 text-violet-400" />
+                    <GitCompare className="w-5 h-5 text-primary" />
                     Quick Compare
                   </CardTitle>
                   <CardDescription>Compare images using any comparison mode</CardDescription>
@@ -625,7 +625,7 @@ export default function VisualTestingPage() {
                     
                     <Button 
                       onClick={() => setShowCompareDialog(true)}
-                      className="w-full bg-violet-600 hover:bg-violet-500"
+                      className="w-full bg-primary hover:bg-primary/90"
                     >
                       <GitCompare className="w-4 h-4 mr-2" />
                       Start Comparison
@@ -649,7 +649,7 @@ export default function VisualTestingPage() {
                         key={mode.value}
                         className={`p-3 rounded-lg border cursor-pointer transition-all ${
                           compareMode === mode.value 
-                            ? 'border-violet-500 bg-violet-500/10' 
+                            ? 'border-primary bg-primary/10' 
                             : 'border-border hover:border-primary'
                         }`}
                         onClick={() => setCompareMode(mode.value)}
@@ -686,7 +686,7 @@ export default function VisualTestingPage() {
                     {baselines.slice(0, 8).map(baseline => (
                       <div 
                         key={baseline.test_name}
-                        className="group relative bg-card rounded-lg border border-border/50 overflow-hidden cursor-pointer hover:border-violet-500/50 transition-all"
+                        className="group relative bg-card rounded-lg border border-border/50 overflow-hidden cursor-pointer hover:border-primary/50 transition-all"
                         onClick={() => handleViewBaseline(baseline)}
                       >
                         <div className="aspect-video bg-muted flex items-center justify-center">
@@ -850,7 +850,7 @@ export default function VisualTestingPage() {
                     <Button 
                       onClick={handleCompare}
                       disabled={!baselineImage || !actualImage || isComparing}
-                      className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500"
+                      className="w-full bg-primary hover:bg-primary/90"
                     >
                       {isComparing ? (
                         <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
@@ -982,7 +982,7 @@ export default function VisualTestingPage() {
                 {filteredBaselines.map(baseline => (
                   <Card 
                     key={baseline.test_name}
-                    className=" hover:border-violet-500/50 transition-all cursor-pointer group"
+                    className=" hover:border-primary/50 transition-all cursor-pointer group"
                     onClick={() => handleViewBaseline(baseline)}
                   >
                     <div className="aspect-video bg-slate-900 relative overflow-hidden">
@@ -1236,7 +1236,7 @@ export default function VisualTestingPage() {
             <Button 
               onClick={handleCaptureScreenshot}
               disabled={!captureUrl || !captureTestName || isCapturing}
-              className="bg-violet-600 hover:bg-violet-500"
+              className="bg-primary hover:bg-primary/90"
             >
               {isCapturing ? (
                 <RefreshCw className="w-4 h-4 mr-2 animate-spin" />

@@ -308,12 +308,21 @@ const FolderNode = memo(({
   // Inline rename state
   const [localRenameName, setLocalRenameName] = React.useState(folder.name);
   const localRenameRef = React.useRef<HTMLInputElement>(null);
+  const hasSubmittedRef = React.useRef(false);
+  const renameReadyRef = React.useRef(false);
 
   // Focus the rename input when this folder enters rename mode
   React.useEffect(() => {
     if (isRenaming) {
       setLocalRenameName(folder.name);
-      setTimeout(() => localRenameRef.current?.focus(), 50);
+      hasSubmittedRef.current = false;
+      renameReadyRef.current = false;
+      // Delay focus and mark ready — prevents dropdown-close blur from auto-submitting
+      setTimeout(() => {
+        localRenameRef.current?.focus();
+        localRenameRef.current?.select();
+        renameReadyRef.current = true;
+      }, 100);
     }
   }, [isRenaming, folder.name]);
 
@@ -339,17 +348,29 @@ const FolderNode = memo(({
               onKeyDown={(e) => {
                 e.stopPropagation();
                 if (e.key === 'Enter') {
-                  if (localRenameName.trim()) onRenameSubmit?.(folder.id, localRenameName.trim());
-                  else onCancelRename?.();
+                  if (!hasSubmittedRef.current && localRenameName.trim()) {
+                    hasSubmittedRef.current = true;
+                    onRenameSubmit?.(folder.id, localRenameName.trim());
+                  } else if (!localRenameName.trim()) {
+                    hasSubmittedRef.current = true;
+                    onCancelRename?.();
+                  }
                 }
-                if (e.key === 'Escape') onCancelRename?.();
+                if (e.key === 'Escape') {
+                  hasSubmittedRef.current = true;
+                  onCancelRename?.();
+                }
               }}
               onBlur={() => {
-                // Small delay to allow click events to fire first
+                // Guard: skip if Enter/Escape already handled the submit
+                // Also skip early blurs from dropdown-close before input is ready
                 setTimeout(() => {
+                  if (hasSubmittedRef.current) return;
+                  if (!renameReadyRef.current) return; // dropdown closing caused premature blur
+                  hasSubmittedRef.current = true;
                   if (localRenameName.trim()) onRenameSubmit?.(folder.id, localRenameName.trim());
                   else onCancelRename?.();
-                }, 150);
+                }, 200);
               }}
               className="h-6 text-xs flex-1"
               placeholder="Folder name"

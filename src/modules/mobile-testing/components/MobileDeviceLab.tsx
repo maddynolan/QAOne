@@ -205,8 +205,8 @@ export default function MobileDeviceLab() {
               "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-1 justify-center",
               activeSection === tab.id
                 ? isDark
-                  ? 'bg-violet-500/20 text-violet-400 shadow-sm'
-                  : 'bg-white text-violet-600 shadow-sm'
+                  ? 'bg-primary/20 text-primary shadow-sm'
+                  : 'bg-white text-primary shadow-sm'
                 : isDark
                   ? 'text-gray-400 hover:text-gray-300'
                   : 'text-gray-500 hover:text-gray-700'
@@ -254,7 +254,7 @@ export default function MobileDeviceLab() {
 
             {isLoadingDevices ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
               </div>
             ) : nativeDevices.length > 0 ? (
               <div className="space-y-2">
@@ -266,8 +266,8 @@ export default function MobileDeviceLab() {
                       "p-3 rounded-lg cursor-pointer transition-all border",
                       selectedDevice === device
                         ? isDark
-                          ? "bg-violet-500/15 border-violet-500/50"
-                          : "bg-violet-50 border-violet-300"
+                          ? "bg-primary/15 border-primary/50"
+                          : "bg-primary/10 border-primary/30"
                         : isDark
                           ? "bg-gray-800 border-gray-700 hover:border-gray-600"
                           : "bg-gray-50 border-gray-200 hover:border-gray-300"
@@ -278,7 +278,7 @@ export default function MobileDeviceLab() {
                         "w-10 h-10 rounded-lg flex items-center justify-center",
                         isDark ? 'bg-gray-700' : 'bg-gray-200'
                       )}>
-                        <Smartphone className={cn("w-5 h-5", selectedDevice === device ? 'text-violet-500' : isDark ? 'text-gray-400' : 'text-gray-500')} />
+                        <Smartphone className={cn("w-5 h-5", selectedDevice === device ? 'text-primary' : isDark ? 'text-gray-400' : 'text-gray-500')} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className={cn("text-sm font-medium truncate", isDark ? 'text-white' : 'text-gray-900')}>{device}</div>
@@ -393,7 +393,7 @@ export default function MobileDeviceLab() {
               </div>
 
               <Button
-                className="w-full bg-violet-500 hover:bg-violet-600 text-white"
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                 onClick={handleInstallApp}
                 disabled={isInstalling || !installPath.trim()}
               >
@@ -480,7 +480,7 @@ export default function MobileDeviceLab() {
                   Stop
                 </Button>
               ) : (
-                <Button size="sm" className="h-7 text-xs bg-violet-500 hover:bg-violet-600 text-white" onClick={handleStartLogs}>
+                <Button size="sm" className="h-7 text-xs bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleStartLogs}>
                   <Play className="w-3 h-3 mr-1" /> Start Capture
                 </Button>
               )}
@@ -492,7 +492,7 @@ export default function MobileDeviceLab() {
 
           <div
             ref={logRef}
-            className={cn("rounded-lg p-3 font-mono text-[11px] h-[500px] overflow-y-auto", isDark ? 'bg-gray-950 text-gray-300' : 'bg-gray-900 text-gray-300')}
+            className={cn("rounded-lg p-3 font-mono text-[11px] h-[500px] overflow-y-auto", isDark ? 'bg-gray-950 text-gray-300' : 'bg-gray-100 text-gray-700')}
           >
             {deviceLogs.length === 0 ? (
               <span className="text-gray-500">Start log capture to see device logs ({selectedPlatform === 'ios' ? 'syslog' : 'logcat'})...</span>
@@ -524,7 +524,7 @@ export default function MobileDeviceLab() {
             </h3>
             <Button
               size="sm"
-              className="h-7 text-xs bg-violet-500 hover:bg-violet-600 text-white"
+              className="h-7 text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
               onClick={handleTakeScreenshot}
               disabled={isTakingScreenshot || !selectedDevice}
             >

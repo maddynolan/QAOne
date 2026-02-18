@@ -794,7 +794,7 @@ export default function UnifiedWorkflowEditor() {
               }),
             }));
             
-            toast.success(`✅ Step ${result.stepIndex + 1} updated with new recording!`, {
+            toast.success(`Step ${result.stepIndex + 1} updated with new recording!`, {
               description: 'The step will use the new element selector on next run.',
               duration: 5000,
             });
@@ -2008,7 +2008,7 @@ export default function UnifiedWorkflowEditor() {
           setExecutionResult(prev => ({
             ...prev,
             status: result.status,
-            logs: [...prev.logs, `\n${result.status === 'passed' ? '✅ TEST PASSED' : '❌ TEST FAILED'} (${result.duration}ms)`]
+            logs: [...prev.logs, `\n${result.status === 'passed' ? 'TEST PASSED' : 'TEST FAILED'} (${result.duration}ms)`]
           }));
           
           setIsRunning(false);
@@ -2227,14 +2227,14 @@ export default function UnifiedWorkflowEditor() {
       resultsIngestionService.ingestResults(runData);
 
       if (passed) {
-        toast.success('✅ Test passed!');
+        toast.success('Test passed!');
         // Clear failure state on success
         setFailureState(null);
         setBrowserKeptOpen(false);
       } else {
         const stepInfo = failedStep ? `step ${failedStep}` : 'test';
         const errorInfo = errorMessage?.slice(0, 40) || 'Check logs';
-        toast.error(`❌ Failed at ${stepInfo}: ${errorInfo}`);
+        toast.error(`Failed at ${stepInfo}: ${errorInfo}`);
         
         // Track failure state for repair wizard
         if (failedStep !== null && failedStep > 0) {
@@ -2256,7 +2256,7 @@ export default function UnifiedWorkflowEditor() {
       console.error('[Test Run] Execution error:', error);
       const errorMsg = error?.message || String(error) || 'Unknown error';
       const errorLogs = [
-        `❌ Execution Error: ${errorMsg}`,
+        `Execution Error: ${errorMsg}`,
         '',
         'Possible causes:',
         '- Backend server not running (start with: cd backend && uvicorn app.main:app)',
@@ -2383,7 +2383,7 @@ export default function UnifiedWorkflowEditor() {
     
     setRepairWizardOpen(false);
     setRepairStepIndex(null);
-    toast.success('✅ Step updated! Changes will apply on next run.');
+    toast.success('Step updated! Changes will apply on next run.');
   }, [repairStepIndex]);
 
   /**
@@ -2466,7 +2466,7 @@ export default function UnifiedWorkflowEditor() {
         const result = await flowstral.playwrightRecorder.reopenToFailure();
         if (result?.success) {
           setBrowserKeptOpen(true);
-          toast.success('✅ Browser re-opened to failure state');
+          toast.success('Browser re-opened to failure state');
           return { success: true };
         }
         return { success: false, error: result?.error || 'Failed to re-open browser' };
@@ -2505,7 +2505,7 @@ export default function UnifiedWorkflowEditor() {
           // Clear failure state on successful resume
           setFailureState(null);
           setBrowserKeptOpen(false);
-          toast.success('✅ Test resumed successfully!');
+          toast.success('Test resumed successfully!');
         }
         return result;
       } catch (e: any) {
@@ -2607,10 +2607,10 @@ export default function UnifiedWorkflowEditor() {
           });
           
           if (response.ok) {
-            toast.success('✅ Test case saved');
+            toast.success('Test case saved');
           } else {
             // Backend failed but already saved locally
-            toast.success('✅ Saved locally');
+            toast.success('Saved locally');
           }
         } else {
           // Create new test case
@@ -2623,16 +2623,16 @@ export default function UnifiedWorkflowEditor() {
           if (response.ok) {
             const data = await response.json();
             setSavedTestCaseId(data.id);
-            toast.success('✅ Test case saved');
+            toast.success('Test case saved');
           } else {
             // Backend failed but already saved locally
-            toast.success('✅ Saved locally');
+            toast.success('Saved locally');
           }
         }
       } catch (networkError) {
         // Network error - already saved locally
         console.log('[Save] Backend unavailable, saved locally');
-        toast.success('✅ Saved locally');
+        toast.success('Saved locally');
       }
     } catch (error) {
       console.error('[Save] Error:', error);
@@ -2656,7 +2656,7 @@ export default function UnifiedWorkflowEditor() {
         // Update current test case name and ID
         setTestCase(prev => ({ ...prev, name: newName }));
         setSavedTestCaseId(data.id);
-        toast.success(`✅ Saved as "${newName}"`);
+        toast.success(`Saved as "${newName}"`);
         setShowSaveAsDialog(false);
         setSaveAsName('');
       } else {
@@ -2786,7 +2786,7 @@ export default function UnifiedWorkflowEditor() {
           <div className="flex items-center justify-between">
             {/* Left: Title - Expanded to show full name */}
             <div className="flex items-start gap-3 max-w-[400px]">
-              <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 dark:from-amber-500 dark:to-orange-500 shadow-lg shadow-blue-500/25 dark:shadow-amber-500/25 shrink-0 mt-1">
+              <div className="p-2 rounded-lg bg-primary shadow-sm shrink-0 mt-1">
                 <Layers className="h-5 w-5 text-white" />
               </div>
               <div className="flex-1 min-w-0 group">
@@ -4168,10 +4168,10 @@ export default function UnifiedWorkflowEditor() {
                   {/* Progress */}
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-green-600 font-medium">
-                      ✅ {Object.values(manualResults).filter(r => r.result === 'passed').length}
+                      {Object.values(manualResults).filter(r => r.result === 'passed').length}
                     </span>
                     <span className="text-red-600 font-medium">
-                      ❌ {Object.values(manualResults).filter(r => r.result === 'failed').length}
+                      {Object.values(manualResults).filter(r => r.result === 'failed').length}
                     </span>
                     <span className="text-gray-500 font-medium">
                       ⏭️ {Object.values(manualResults).filter(r => r.result === 'skipped').length}

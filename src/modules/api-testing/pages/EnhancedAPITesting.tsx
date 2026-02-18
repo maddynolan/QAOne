@@ -432,7 +432,7 @@ export default function EnhancedAPITesting() {
       setRequestResults(prev => ({ ...prev, [req.id]: result }));
       
       toast({
-        title: response.ok ? "✅ Request Successful" : "❌ Request Failed",
+        title: response.ok ? "Request Successful" : "Request Failed",
         description: `${req.method} ${req.name} - ${response.status} (${responseTime}ms)`,
         variant: response.ok ? "default" : "destructive",
       });
@@ -479,7 +479,7 @@ export default function EnhancedAPITesting() {
     const failed = results.length - successful;
     
     toast({
-      title: "📊 Test Complete",
+      title: "Test Complete",
       description: `${successful} passed, ${failed} failed`,
       variant: failed > 0 ? "destructive" : "default",
     });
@@ -3145,7 +3145,7 @@ export default function EnhancedAPITesting() {
                     size="sm" 
                     onClick={() => setReportViewTab("summary")}
                   >
-                    📊 Summary
+                    Summary
                   </Button>
                   <Button 
                     variant={reportViewTab === "html" ? "default" : "outline"} 

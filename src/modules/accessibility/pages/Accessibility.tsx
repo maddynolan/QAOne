@@ -186,12 +186,12 @@ export default function Accessibility() {
               <Label htmlFor="scanType">Scan Type</Label>
               <select
                 id="scanType"
-                className="w-full rounded-md border border-gray-700 bg-gray-800 text-gray-100 px-3 py-2 focus:border-amber-500 focus:outline-none"
+                className="w-full rounded-md border border-border bg-background text-foreground px-3 py-2 focus:border-primary focus:outline-none"
                 value={scanType}
                 onChange={(e) => setScanType(e.target.value as "full_page" | "component")}
               >
-                <option value="full_page" className="bg-gray-800 text-gray-100">Full Page</option>
-                <option value="component" className="bg-gray-800 text-gray-100">Component</option>
+                <option value="full_page">Full Page</option>
+                <option value="component">Component</option>
               </select>
             </div>
 
@@ -199,13 +199,13 @@ export default function Accessibility() {
               <Label htmlFor="wcagLevel">WCAG Level</Label>
               <select
                 id="wcagLevel"
-                className="w-full rounded-md border border-gray-700 bg-gray-800 text-gray-100 px-3 py-2 focus:border-amber-500 focus:outline-none"
+                className="w-full rounded-md border border-border bg-background text-foreground px-3 py-2 focus:border-primary focus:outline-none"
                 value={wcagLevel}
                 onChange={(e) => setWcagLevel(e.target.value as "A" | "AA" | "AAA")}
               >
-                <option value="A" className="bg-gray-800 text-gray-100">WCAG A</option>
-                <option value="AA" className="bg-gray-800 text-gray-100">WCAG AA</option>
-                <option value="AAA" className="bg-gray-800 text-gray-100">WCAG AAA</option>
+                <option value="A">WCAG A</option>
+                <option value="AA">WCAG AA</option>
+                <option value="AAA">WCAG AAA</option>
               </select>
             </div>
           </div>
@@ -256,20 +256,20 @@ export default function Accessibility() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-4 gap-4 mb-6">
-              <div className="text-center p-4 bg-red-50 rounded-lg">
-                <div className="text-2xl font-bold text-red-600">{scanResult.summary.critical}</div>
+              <div className="text-center p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                <div className="text-2xl font-bold text-red-600 dark:text-red-400">{scanResult.summary.critical}</div>
                 <div className="text-sm text-muted-foreground">Critical</div>
               </div>
-              <div className="text-center p-4 bg-orange-50 rounded-lg">
-                <div className="text-2xl font-bold text-orange-600">{scanResult.summary.serious}</div>
+              <div className="text-center p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{scanResult.summary.serious}</div>
                 <div className="text-sm text-muted-foreground">Serious</div>
               </div>
-              <div className="text-center p-4 bg-yellow-50 rounded-lg">
-                <div className="text-2xl font-bold text-yellow-600">{scanResult.summary.moderate}</div>
+              <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{scanResult.summary.moderate}</div>
                 <div className="text-sm text-muted-foreground">Moderate</div>
               </div>
-              <div className="text-center p-4 bg-blue-50 rounded-lg">
-                <div className="text-2xl font-bold text-blue-600">{scanResult.summary.minor}</div>
+              <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{scanResult.summary.minor}</div>
                 <div className="text-sm text-muted-foreground">Minor</div>
               </div>
             </div>
@@ -280,7 +280,7 @@ export default function Accessibility() {
               
               {(!scanResult.issues || scanResult.issues.length === 0) ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  <p>No accessibility issues found! 🎉</p>
+                  <p>No accessibility issues found!</p>
                 </div>
               ) : (
                 scanResult.issues.map((issue, idx) => (
@@ -310,7 +310,7 @@ export default function Accessibility() {
                           )}
                           {issue.suggested_fix && (
                             <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4 rounded-md mt-3">
-                              <p className="text-sm font-semibold mb-1 text-green-800 dark:text-green-200">✅ Recommended Fix:</p>
+                              <p className="text-sm font-semibold mb-1 text-green-800 dark:text-green-200">Recommended Fix:</p>
                               <p className="text-sm text-green-700 dark:text-green-300">{issue.suggested_fix}</p>
                             </div>
                           )}

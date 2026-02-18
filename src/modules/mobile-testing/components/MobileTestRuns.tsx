@@ -106,7 +106,7 @@ export default function MobileTestRuns() {
       {/* Stats Dashboard */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
-          { label: 'Total Runs', value: stats.total, icon: Activity, color: 'violet' },
+          { label: 'Total Runs', value: stats.total, icon: Activity, color: 'sky' },
           { label: 'Passed', value: stats.passed, icon: CheckCircle2, color: 'emerald' },
           { label: 'Failed', value: stats.failed, icon: XCircle, color: 'red' },
           { label: 'Pass Rate', value: `${stats.passRate}%`, icon: stats.passRate >= 80 ? TrendingUp : TrendingDown, color: stats.passRate >= 80 ? 'emerald' : 'amber' },
@@ -234,7 +234,7 @@ export default function MobileTestRuns() {
                     className={cn(
                       "flex items-center gap-3 p-3 border-b border-inherit cursor-pointer transition-colors",
                       selectedRunId === run.id
-                        ? isDark ? 'bg-violet-500/10' : 'bg-violet-50'
+                        ? isDark ? 'bg-primary/10' : 'bg-primary/5'
                         : isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
                     )}
                   >

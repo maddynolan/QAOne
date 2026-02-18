@@ -302,7 +302,7 @@ export default function MobileTestFlows() {
               </Button>
               <Button
                 size="sm"
-                className="h-7 text-xs bg-violet-500 hover:bg-violet-600 text-white"
+                className="h-7 text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
                 onClick={() => setIsCreating(true)}
               >
                 <Plus className="w-3 h-3 mr-1" /> New
@@ -497,7 +497,7 @@ export default function MobileTestFlows() {
                       </Button>
                       <Button
                         size="sm"
-                        className="h-7 text-xs bg-violet-500 hover:bg-violet-600 text-white"
+                        className="h-7 text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
                         onClick={() => handleRunFlow(activeFlow)}
                         disabled={isRunningTest || !maestroInstalled}
                       >
@@ -602,7 +602,7 @@ export default function MobileTestFlows() {
               <p className={cn("text-xs mb-4", isDark ? 'text-gray-500' : 'text-gray-400')}>
                 Or create a new test flow to get started
               </p>
-              <Button onClick={() => setIsCreating(true)} size="sm" className="bg-violet-500 hover:bg-violet-600 text-white">
+              <Button onClick={() => setIsCreating(true)} size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
                 <Plus className="w-4 h-4 mr-1" /> New Flow
               </Button>
             </div>
@@ -639,8 +639,8 @@ function FlowItem({ flow, isActive, isDark, onClick, onRun, onDuplicate, onDelet
         indent && "ml-4",
         isActive
           ? isDark
-            ? "bg-violet-500/20 border border-violet-500/50"
-            : "bg-violet-50 border border-violet-200"
+            ? "bg-primary/20 border border-primary/50"
+            : "bg-primary/10 border border-primary/20"
           : isDark
             ? "hover:bg-gray-800"
             : "hover:bg-gray-50"
