@@ -10,7 +10,7 @@ import React from 'react';
 import {
   ArrowUp, ArrowDown, Eye, EyeOff, Copy, Trash2,
   MoreHorizontal, GripVertical, Crosshair, Video,
-  ChevronRight
+  ChevronRight, Wand2, CheckCircle, Zap, ClipboardList
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

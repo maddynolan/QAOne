@@ -3937,6 +3937,13 @@ app.whenReady().then(async () => {
         mainWindow.setTitleBarOverlay({ color: theme.color, symbolColor: theme.symbolColor });
         mainWindow.setBackgroundColor(theme.backgroundColor);
       } catch (e) { /* titleBarOverlay not supported on all platforms */ }
+      // Also update the shell.html title bar background (for local webapp mode)
+      try {
+        mainWindow.webContents.executeJavaScript(`
+          document.documentElement.style.setProperty('--bg-primary', '${theme.backgroundColor}');
+          document.documentElement.style.setProperty('--text-primary', '${isDark ? '#f0f0f5' : '#1f2937'}');
+        `).catch(() => {});
+      } catch (e) { /* ignore */ }
     }
     return { success: true };
   });

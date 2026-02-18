@@ -11,7 +11,7 @@ import {
   Settings, Target, Zap, Globe, MousePointer, Type, Clock,
   CheckCircle, Navigation, AlertCircle, Wand2, ChevronRight, ChevronDown,
   Layers, RefreshCw, FileText, Monitor, Server, Gauge,
-  Video, Camera, Search, X, Edit,
+  Video, Camera, Search, X, Edit, Code, Download, File, FolderPlus, Plus, Share2,
   Database, ToggleLeft, ToggleRight,
   BookOpen, ExternalLink,
   Calendar, Calculator, Shuffle, AlertTriangle,

@@ -2989,7 +2989,7 @@ export default function UnifiedWorkflowEditor() {
                   size="sm" 
                   onClick={runTest}
                   disabled={isRunning || testCase.steps.length === 0}
-                  className="bg-green-600 hover:bg-green-500 text-white font-medium shadow-lg shadow-green-500/25 disabled:opacity-50 px-4 rounded-r-none border-r border-green-700"
+                  className="bg-green-600 hover:bg-green-500 text-white font-medium shadow-lg shadow-green-600/40 disabled:opacity-40 px-4 rounded-r-none border-r border-green-700"
                 >
                   {isRunning ? (
                     <>
