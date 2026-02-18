@@ -59,6 +59,7 @@ let _builderDirtyState: {
   method: string;
   url: string;
   headers: Array<{ key: string; value: string; enabled: boolean }>;
+  params: Array<{ key: string; value: string; enabled: boolean }>;
   body: string;
   bodyType: string;
   assertions: any[];
@@ -738,6 +739,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                       url: ds.url,
                       path: pathOnly,
                       headers: ds.headers,
+                      params: ds.params || [],
                       body: ds.body || '',
                       assertions: ds.assertions || [],
                       updated_at: nowISO(),
@@ -789,6 +791,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                   if (h.key) acc[h.key] = h.value;
                   return acc;
                 }, {}) || { 'Content-Type': 'application/json' },
+                params: request.params?.length ? request.params : undefined,
                 body: request.body || undefined,
                 assertions: request.assertions?.length ? request.assertions : undefined,
                 editingTestCaseId: requestId,

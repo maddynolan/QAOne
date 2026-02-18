@@ -70,6 +70,8 @@ export interface InitialRequestData {
   method: string;
   url: string;
   headers?: Record<string, string>;
+  /** Query params as key-value pairs — persisted across request switches and app restarts */
+  params?: Array<{ key: string; value: string; enabled: boolean }>;
   body?: any;
   bodyType?: string;
   /** When loading a test case from the collection, pass its assertions so they can be edited */
@@ -129,11 +131,21 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
         headers.push({ key: "Content-Type", value: "application/json", enabled: true });
       }
 
+      // Restore params from saved data, or default to one empty row
+      const params: KeyValuePair[] = initialRequest.params && initialRequest.params.length > 0
+        ? [...initialRequest.params]
+        : [{ key: "", value: "", enabled: true }];
+      // Ensure there's always a trailing empty row for adding new params
+      if (params.length === 0 || params[params.length - 1].key.trim()) {
+        params.push({ key: "", value: "", enabled: true });
+      }
+
       setRequest({
         ...createEmptyRequest(),
         method: initialRequest.method || "GET",
         url: initialRequest.url || "",
         headers,
+        params,
         body: initialRequest.body
           ? (typeof initialRequest.body === "string" ? initialRequest.body : JSON.stringify(initialRequest.body, null, 2))
           : "",
@@ -170,6 +182,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
         method: request.method,
         url: request.url,
         headers: request.headers,
+        params: request.params,
         body: request.body,
         bodyType: request.bodyType,
         assertions: assertions,
@@ -182,7 +195,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
         localStorage.setItem('api_builder_active_state', JSON.stringify(dirtyState));
       } catch { /* ignore quota errors */ }
     }
-  }, [editingId, request.method, request.url, request.headers, request.body, request.bodyType, request.authType, request.authToken, assertions]);
+  }, [editingId, request.method, request.url, request.headers, request.params, request.body, request.bodyType, request.authType, request.authToken, assertions]);
 
   // Save dirty state on page unload (app close) so changes survive restart.
   // Uses a ref to avoid re-registering the listener on every keystroke.
@@ -205,6 +218,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
               url: request.url,
               path: pathOnly,
               headers: request.headers,
+              params: request.params.filter(p => p.key.trim()),
               body: request.body || '',
               assertions: assertions || [],
             });
@@ -468,6 +482,54 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
 
   // Check for unresolved variables in URL
   const unresolvedVars = request.url ? hasUnresolvedVariables(request.url) : [];
+
+  // --- Live URL preview with query params appended ---
+  const previewUrl = useMemo(() => {
+    let url = request.url.trim();
+    if (!url) return "";
+    // Strip any existing query string from the base URL (params table is source of truth)
+    const [baseUrl] = url.split("?");
+    const enabledParams = request.params.filter(p => p.enabled && p.key.trim());
+    if (enabledParams.length > 0) {
+      const qs = enabledParams.map(p => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`).join("&");
+      return `${baseUrl}?${qs}`;
+    }
+    return baseUrl;
+  }, [request.url, request.params]);
+
+  // --- Two-way sync: parse query params from URL into params table ---
+  const syncingUrlRef = useRef(false);
+  const handleUrlChange = useCallback((newUrl: string) => {
+    syncingUrlRef.current = true;
+    const qIdx = newUrl.indexOf("?");
+    if (qIdx >= 0) {
+      const baseUrl = newUrl.slice(0, qIdx);
+      const queryStr = newUrl.slice(qIdx + 1);
+      // Parse query string into params
+      const parsedParams: KeyValuePair[] = [];
+      if (queryStr) {
+        const pairs = queryStr.split("&");
+        for (const pair of pairs) {
+          const eqIdx = pair.indexOf("=");
+          if (eqIdx >= 0) {
+            parsedParams.push({
+              key: decodeURIComponent(pair.slice(0, eqIdx)),
+              value: decodeURIComponent(pair.slice(eqIdx + 1)),
+              enabled: true,
+            });
+          } else if (pair.trim()) {
+            parsedParams.push({ key: decodeURIComponent(pair), value: "", enabled: true });
+          }
+        }
+      }
+      // Always keep one empty row at end for adding new params
+      parsedParams.push({ key: "", value: "", enabled: true });
+      setRequest(prev => ({ ...prev, url: baseUrl, params: parsedParams }));
+    } else {
+      setRequest(prev => ({ ...prev, url: newUrl }));
+    }
+    syncingUrlRef.current = false;
+  }, []);
 
   // --- Check if current response is valid JSON ---
   const isResponseJson = useMemo(() => {
@@ -944,6 +1006,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
         path: pathOnly,
         endpoint: pathOnly,
         fullUrl: url,  // Preserve the complete URL including base
+        params: request.params.filter(p => p.key.trim()),
         expected_status: (() => {
           const sa = assertions.find(a => a.type === "status_code");
           if (sa) return parseInt(String(sa.expected), 10) || 200;
@@ -1079,15 +1142,16 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
         </Card>
       )}
 
-      {/* URL Bar */}
+      {/* URL Bar — 2-row layout: URL row on top, action buttons below */}
       <Card>
-        <CardContent className="p-4">
+        <CardContent className="p-4 space-y-2">
+          {/* Row 1: Method + URL + Send */}
           <div className="flex gap-2">
             <Select
               value={request.method}
               onValueChange={v => setRequest({ ...request, method: v })}
             >
-              <SelectTrigger className={`w-[120px] font-bold text-sm ${methodColor}`}>
+              <SelectTrigger className={`w-[100px] font-bold text-sm ${methodColor}`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1101,10 +1165,10 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
 
             <div className="flex-1 relative">
               <Input
-                className={`w-full font-mono text-sm ${unresolvedVars.length > 0 ? "border-amber-400 pr-20" : ""}`}
+                className={`w-full font-mono text-sm h-10 ${unresolvedVars.length > 0 ? "border-amber-400 pr-20" : ""}`}
                 placeholder="https://api.example.com/endpoint  or  {{base_url}}/api/users"
                 value={request.url}
-                onChange={e => setRequest({ ...request, url: e.target.value })}
+                onChange={e => handleUrlChange(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") handleSend(); }}
               />
               {unresolvedVars.length > 0 && activeEnvironment && (
@@ -1117,13 +1181,21 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   vars resolved
                 </span>
               )}
+              {/* Live URL preview showing base + query params */}
+              {previewUrl && previewUrl !== request.url && request.params.some(p => p.enabled && p.key.trim()) && (
+                <div className="absolute left-0 top-full mt-0.5 z-10 w-full">
+                  <div className="bg-muted/90 backdrop-blur-sm border border-border rounded-b px-2 py-1 text-[10px] font-mono text-muted-foreground truncate">
+                    {previewUrl}
+                  </div>
+                </div>
+              )}
             </div>
 
             {sending ? (
               <Button
                 onClick={handleCancel}
                 variant="destructive"
-                className="min-w-[100px]"
+                className="min-w-[100px] h-10"
               >
                 <X className="w-4 h-4 mr-2" />
                 Cancel
@@ -1132,20 +1204,24 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
               <Button
                 onClick={handleSend}
                 disabled={!request.url.trim()}
-                className="bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 min-w-[100px]"
+                className="bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 min-w-[100px] h-10"
               >
                 <Send className="w-4 h-4 mr-2" />
                 Send
               </Button>
             )}
+          </div>
 
+          {/* Row 2: Action buttons */}
+          <div className="flex items-center gap-1.5 flex-wrap">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" title="Generate code snippet">
-                  <Code className="w-4 h-4" />
+                <Button variant="outline" size="sm" className="h-7 text-xs px-2" title="Generate code snippet">
+                  <Code className="w-3.5 h-3.5 mr-1" />
+                  Code
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="start">
                 <DropdownMenuLabel>Copy as</DropdownMenuLabel>
                 {SNIPPET_LABELS.map(({ value, label }) => (
                   <DropdownMenuItem
@@ -1164,25 +1240,32 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
 
             <Button
               variant="outline"
-              size="icon"
+              size="sm"
+              className="h-7 text-xs px-2"
               onClick={() => setShowCurlImport(true)}
               title="Import from cURL"
             >
-              <Terminal className="w-4 h-4" />
+              <Terminal className="w-3.5 h-3.5 mr-1" />
+              cURL
             </Button>
 
             <Button
               variant="outline"
-              size="icon"
+              size="sm"
+              className="h-7 text-xs px-2"
               onClick={() => setShowHistory(!showHistory)}
               title="Request history"
             >
-              <History className="w-4 h-4" />
+              <History className="w-3.5 h-3.5 mr-1" />
+              History
             </Button>
+
+            <div className="w-px h-5 bg-border mx-0.5" />
 
             <Button
               variant="outline"
-              size="icon"
+              size="sm"
+              className="h-7 text-xs px-2"
               onClick={() => {
                 // If editing an existing request, save in-place (no name prompt)
                 if (editingId && onAddToTestSuite) {
@@ -1197,6 +1280,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                     path: pathOnly,
                     endpoint: pathOnly,
                     fullUrl: url,
+                    params: request.params.filter(p => p.key.trim()),
                     expected_status: (() => {
                       const sa = assertions.find(a => a.type === "status_code");
                       if (sa) return parseInt(String(sa.expected), 10) || 200;
@@ -1224,17 +1308,19 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
               }}
               title={editingId ? "Save changes" : "Save request"}
             >
-              <Save className="w-4 h-4" />
+              <Save className="w-3.5 h-3.5 mr-1" />
+              Save
             </Button>
 
             {onSaveToChain && (
               <Button
                 variant="outline"
                 size="sm"
+                className="h-7 text-xs px-2"
                 onClick={() => onSaveToChain(request, assertions)}
                 title="Add to chain"
               >
-                <Plus className="w-4 h-4 mr-1" />
+                <Plus className="w-3.5 h-3.5 mr-1" />
                 Chain
               </Button>
             )}
@@ -1259,6 +1345,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                     method: request.method,
                     path: pathOnly,
                     endpoint: pathOnly,
+                    params: request.params.filter(p => p.key.trim()),
                     expected_status: (() => {
                       const statusAssertion = assertions.find(a => a.type === "status_code");
                       if (statusAssertion) return parseInt(statusAssertion.expected) || 200;
@@ -1285,10 +1372,10 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   });
                 }}
                 title={(initialRequest as any)?.editingTestCaseId ? "Update this test case in the collection" : "Add this request as a test case to the Execute tab and Tests page"}
-                className="text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-950"
+                className="h-7 text-xs px-2 text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-950"
               >
-                <CheckCircle2 className="w-4 h-4 mr-1" />
-                {(initialRequest as any)?.editingTestCaseId ? "Update test" : "Add to Tests"}
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                {(initialRequest as any)?.editingTestCaseId ? "Update" : "Add to Tests"}
               </Button>
             )}
 
@@ -1296,9 +1383,9 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
             {response && onAddToTestSuite && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="text-orange-600 border-orange-500/30 hover:bg-orange-500/5">
-                    <FlaskConical className="w-4 h-4 mr-1" />
-                    Generate Negative Tests
+                  <Button variant="outline" size="sm" className="h-7 text-xs px-2 text-orange-600 border-orange-500/30 hover:bg-orange-500/5">
+                    <FlaskConical className="w-3.5 h-3.5 mr-1" />
+                    Negative Tests
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-64">
@@ -1307,7 +1394,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                     const url = buildUrl();
                     const pathOnly = url.replace(/^https?:\/\/[^/]+/, "") || "/";
                     const variations: Array<{ name: string; method: string; url: string; body?: string; headers?: Record<string, string>; expectedStatus: number; description: string }> = [];
-                    
+
                     // 1. Wrong HTTP method
                     const altMethods = ["GET", "POST", "PUT", "DELETE", "PATCH"].filter(m => m !== request.method);
                     variations.push({
@@ -1316,7 +1403,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                       url, expectedStatus: 405,
                       description: `Send ${altMethods[0]} instead of ${request.method} - expect 405 Method Not Allowed`,
                     });
-                    
+
                     // 2. Missing auth header
                     variations.push({
                       name: `${request.method} ${pathOnly} - No Auth`,
@@ -1325,7 +1412,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                       headers: { "Content-Type": "application/json" },
                       description: "Send without authentication - expect 401 Unauthorized",
                     });
-                    
+
                     // 3. Invalid body (for POST/PUT/PATCH)
                     if (["POST", "PUT", "PATCH"].includes(request.method)) {
                       variations.push({
@@ -1343,7 +1430,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                         description: "Send empty body - expect 400 Bad Request",
                       });
                     }
-                    
+
                     // 4. Non-existent resource (404)
                     const notFoundUrl = url.replace(/\/(\d+|[a-f0-9-]{36})(\?|$)/i, "/99999999$2");
                     if (notFoundUrl !== url) {
@@ -1354,7 +1441,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                         description: "Request non-existent resource - expect 404 Not Found",
                       });
                     }
-                    
+
                     // Add all variations to collection
                     let added = 0;
                     for (const v of variations) {
@@ -1380,7 +1467,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                       });
                       added++;
                     }
-                    
+
                     toast({
                       title: "Negative Tests Generated",
                       description: `${added} negative test variations created in your collection. Run them to verify error handling.`,

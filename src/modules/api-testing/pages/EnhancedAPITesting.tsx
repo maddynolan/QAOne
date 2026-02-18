@@ -1821,6 +1821,11 @@ export default function EnhancedAPITesting() {
                       // Use fullUrl (complete URL with base) from RequestBuilder, fall back to existing request URL
                       const existingReq = coll?.requests?.find((r: any) => r.id === editingId);
                       const resolvedUrl = testCase.fullUrl || existingReq?.url || testCase.path || testCase.endpoint || '';
+                      // Rebuild params from query object if raw params not available
+                      const savedParams = testCase.params
+                        || (testCase.request?.query
+                          ? Object.entries(testCase.request.query).map(([k, v]) => ({ key: k, value: String(v), enabled: true }))
+                          : undefined);
                       store.updateRequest(editingId, {
                         name: testCase.title || `${testCase.method} ${testCase.path || ''}`,
                         method: testCase.method,
@@ -1829,6 +1834,7 @@ export default function EnhancedAPITesting() {
                         headers: testCase.request?.headers
                           ? Object.entries(testCase.request.headers).map(([k, v]) => ({ key: k, value: String(v), enabled: true }))
                           : [{ key: 'Content-Type', value: 'application/json', enabled: true }],
+                        params: savedParams || [],
                         body: testCase.request?.body
                           ? (typeof testCase.request.body === 'string' ? testCase.request.body : JSON.stringify(testCase.request.body))
                           : '',
