@@ -117,70 +117,83 @@ export default function RecordingControlsPanel({
       <div className="p-3 border-b border-border">
         {/* Device & Network Selection - Only show when NOT recording */}
         {!isRecording && (
-          <div className="flex gap-2 mb-2">
-            <Select value={selectedMobileDevice} onValueChange={setSelectedMobileDevice}>
-              <SelectTrigger className="h-8 w-[200px] text-xs">
-                {selectedMobileDevice === 'desktop' ? (
-                  <Monitor className="h-3.5 w-3.5 mr-1.5" />
-                ) : (
-                  <Smartphone className="h-3.5 w-3.5 mr-1.5" />
-                )}
-                <SelectValue placeholder="Device">{getDeviceName(selectedMobileDevice)}</SelectValue>
-              </SelectTrigger>
-              <SelectContent className="max-h-[400px]">
-                <SelectItem value="desktop" className="text-xs">
-                  <span className="flex items-center gap-2">Desktop (Default)</span>
-                </SelectItem>
-                {Object.entries(deviceCategories).map(([category, devices]) => (
-                  <div key={category}>
-                    <div className="px-2 py-1.5 text-[10px] text-muted-foreground font-semibold bg-muted/50 sticky top-0">
-                      {category} ({devices.length})
-                    </div>
-                    {devices.map(device => (
-                      <SelectItem key={device.id} value={device.id} className="text-xs pl-4">
-                        {category.includes('iOS') ? '' : ''} {device.name}
-                      </SelectItem>
-                    ))}
-                  </div>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {selectedMobileDevice !== 'desktop' && (
-              <Select value={selectedNetwork} onValueChange={setSelectedNetwork}>
-                <SelectTrigger className="h-8 w-[130px] text-xs">
-                  <Wifi className="h-3.5 w-3.5 mr-1.5" />
-                  <SelectValue placeholder="Network" />
+          <div className="space-y-2 mb-2">
+            {/* Row 1: Device, Network, Mobile Badge */}
+            <div className="flex gap-2 items-center">
+              <Select value={selectedMobileDevice} onValueChange={setSelectedMobileDevice}>
+                <SelectTrigger className="h-8 w-[200px] text-xs">
+                  {selectedMobileDevice === 'desktop' ? (
+                    <Monitor className="h-3.5 w-3.5 mr-1.5" />
+                  ) : (
+                    <Smartphone className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  <SelectValue placeholder="Device">{getDeviceName(selectedMobileDevice)}</SelectValue>
                 </SelectTrigger>
-                <SelectContent>
-                  {networkPresets.map(network => (
-                    <SelectItem key={network.id} value={network.id} className="text-xs">
-                      {network.name}
-                    </SelectItem>
+                <SelectContent className="max-h-[400px]">
+                  <SelectItem value="desktop" className="text-xs">
+                    <span className="flex items-center gap-2">Desktop (Default)</span>
+                  </SelectItem>
+                  {Object.entries(deviceCategories).map(([category, devices]) => (
+                    <div key={category}>
+                      <div className="px-2 py-1.5 text-[10px] text-muted-foreground font-semibold bg-muted/50 sticky top-0">
+                        {category} ({devices.length})
+                      </div>
+                      {devices.map(device => (
+                        <SelectItem key={device.id} value={device.id} className="text-xs pl-4">
+                          {category.includes('iOS') ? '' : ''} {device.name}
+                        </SelectItem>
+                      ))}
+                    </div>
                   ))}
                 </SelectContent>
               </Select>
-            )}
 
-            {/* Browser Engine Selector */}
-            <Select value={selectedBrowser} onValueChange={(v) => setSelectedBrowser(v as 'chromium' | 'firefox' | 'webkit')}>
-              <SelectTrigger className="h-8 w-[140px] text-xs">
-                <Globe className="h-3.5 w-3.5 mr-1.5" />
-                <SelectValue placeholder="Browser" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="chromium" className="text-xs">Chromium</SelectItem>
-                <SelectItem value="firefox" className="text-xs">Firefox</SelectItem>
-                <SelectItem value="webkit" className="text-xs">WebKit (Safari)</SelectItem>
-              </SelectContent>
-            </Select>
+              {selectedMobileDevice !== 'desktop' && (
+                <Select value={selectedNetwork} onValueChange={setSelectedNetwork}>
+                  <SelectTrigger className="h-8 w-[130px] text-xs">
+                    <Wifi className="h-3.5 w-3.5 mr-1.5" />
+                    <SelectValue placeholder="Network" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {networkPresets.map(network => (
+                      <SelectItem key={network.id} value={network.id} className="text-xs">
+                        {network.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
 
-            {selectedMobileDevice !== 'desktop' && (
-              <Badge variant="outline" className="h-8 px-2 text-[10px] bg-sky-500/10 text-sky-500 border-sky-500/30">
-                <Smartphone className="h-3 w-3 mr-1" />
-                Mobile Mode
-              </Badge>
-            )}
+              {selectedMobileDevice !== 'desktop' && (
+                <Badge variant="outline" className="h-8 px-2 text-[10px] bg-sky-500/10 text-sky-500 border-sky-500/30">
+                  <Smartphone className="h-3 w-3 mr-1" />
+                  Mobile Mode
+                </Badge>
+              )}
+
+              {/* Spacer */}
+              <div className="flex-1" />
+
+              {/* Browser Engine Selector — always visible */}
+              <div className="flex items-center gap-1.5">
+                <Label className="text-[10px] text-muted-foreground whitespace-nowrap font-medium">Browser:</Label>
+                <Select value={selectedBrowser} onValueChange={(v) => setSelectedBrowser(v as 'chromium' | 'firefox' | 'webkit')}>
+                  <SelectTrigger className={cn(
+                    "h-8 w-[160px] text-xs font-medium",
+                    selectedBrowser === 'firefox' && "border-orange-500/50 bg-orange-500/5 text-orange-600",
+                    selectedBrowser === 'webkit' && "border-blue-500/50 bg-blue-500/5 text-blue-600"
+                  )}>
+                    <Globe className="h-3.5 w-3.5 mr-1.5" />
+                    <SelectValue placeholder="Browser" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="chromium" className="text-xs">Chromium (Default)</SelectItem>
+                    <SelectItem value="firefox" className="text-xs">Firefox</SelectItem>
+                    <SelectItem value="webkit" className="text-xs">WebKit (Safari)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
         )}
 
