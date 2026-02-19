@@ -321,11 +321,14 @@ const FolderNode = memo(({
       setLocalRenameName(folder.name);
       hasSubmittedRef.current = false;
       mountTimeRef.current = Date.now();
-      // Delay focus slightly to let dropdown close animations finish
-      setTimeout(() => {
-        localRenameRef.current?.focus();
-        localRenameRef.current?.select();
-      }, 60);
+      // Delay focus to let DOM expansion + dropdown close animations finish
+      // Use requestAnimationFrame + setTimeout for reliable focus after React re-render
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          localRenameRef.current?.focus();
+          localRenameRef.current?.select();
+        }, 120);
+      });
     }
   }, [isRenaming, folder.name]);
 
@@ -369,8 +372,12 @@ const FolderNode = memo(({
                 const elapsed = Date.now() - mountTimeRef.current;
                 setTimeout(() => {
                   if (hasSubmittedRef.current) return;
-                  // Ignore blurs that happen within 250ms of mount (dropdown-close, etc.)
-                  if (elapsed < 250) return;
+                  // If blur fires within 350ms of mount, re-focus instead of submitting
+                  // (covers DOM expansion, dropdown close, scroll adjustments)
+                  if (elapsed < 350) {
+                    localRenameRef.current?.focus();
+                    return;
+                  }
                   hasSubmittedRef.current = true;
                   if (localRenameName.trim()) onRenameSubmit?.(folder.id, localRenameName.trim());
                   else onCancelRename?.();
@@ -1505,20 +1512,26 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                           </div>
                         )}
 
-                        {/* Empty collection */}
+                        {/* Empty collection message */}
                         {totalRequests === 0 && rootFolders.length === 0 && (
-                          <div className="px-1 py-2 space-y-1.5">
-                            <p className="text-[11px] text-muted-foreground">Empty — add requests or import</p>
-                            <div className="flex gap-1">
-                              <Button variant="outline" size="sm" className="h-6 text-[10px] flex-1 px-1.5" onClick={() => handleNewRequest()}>
-                                <Plus className="w-2.5 h-2.5 mr-0.5" /> Request
-                              </Button>
-                              <Button variant="outline" size="sm" className="h-6 text-[10px] flex-1 px-1.5" onClick={handleCreateFolder}>
-                                <FolderPlus className="w-2.5 h-2.5 mr-0.5" /> Folder
-                              </Button>
-                            </div>
-                          </div>
+                          <p className="text-[11px] text-muted-foreground px-1 py-1">Empty — use buttons below to add items</p>
                         )}
+
+                        {/* Quick-add toolbar — always visible at bottom of active collection */}
+                        <div className="flex items-center gap-1 pt-1 mt-0.5 border-t border-border/30">
+                          <button
+                            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                            onClick={() => handleNewRequest()}
+                          >
+                            <Plus className="w-3 h-3" /> Request
+                          </button>
+                          <button
+                            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                            onClick={handleCreateFolder}
+                          >
+                            <FolderPlus className="w-3 h-3" /> Folder
+                          </button>
+                        </div>
                       </div>
                     )}
 
