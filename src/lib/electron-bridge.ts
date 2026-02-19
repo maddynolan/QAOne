@@ -431,7 +431,9 @@ export const mobile = {
   checkMaestro: async () => {
     const api = getElectronAPI();
     if (api) {
-      return api.invoke('mobile-check-maestro');
+      const result = await api.invoke('mobile-check-maestro');
+      // IPC returns { success, installed, version, ... } — extract the boolean
+      return result?.installed === true;
     }
     return false;
   },
@@ -439,7 +441,9 @@ export const mobile = {
   getNativeDevices: async (platform: 'ios' | 'android') => {
     const api = getElectronAPI();
     if (api) {
-      return api.invoke('mobile-get-native-devices', platform);
+      const result = await api.invoke('mobile-get-native-devices', platform);
+      // IPC returns { success, devices: [...] } — extract the array
+      return result?.devices || [];
     }
     return [];
   },

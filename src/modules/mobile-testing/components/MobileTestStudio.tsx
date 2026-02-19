@@ -270,8 +270,13 @@ export default function MobileTestStudio() {
     setSaveName('');
   };
 
+  const isWindows = navigator.platform?.toLowerCase().includes('win') || navigator.userAgent?.toLowerCase().includes('windows');
+  const installCommand = isWindows
+    ? 'iwr -useb https://get.maestro.mobile.dev | iex'
+    : 'curl -Ls "https://get.maestro.mobile.dev" | bash';
+
   const copyInstallCommand = () => {
-    navigator.clipboard.writeText('curl -Ls "https://get.maestro.mobile.dev" | bash');
+    navigator.clipboard.writeText(installCommand);
     setCopiedInstall(true);
     setTimeout(() => setCopiedInstall(false), 2000);
   };
@@ -388,7 +393,7 @@ export default function MobileTestStudio() {
                 </div>
                 <div className="flex gap-2">
                   <code className={cn("flex-1 p-2 rounded text-xs font-mono", isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-900')}>
-                    curl -Ls "https://get.maestro.mobile.dev" | bash
+                    {installCommand}
                   </code>
                   <Button size="sm" variant="outline" onClick={copyInstallCommand} className="h-8">
                     {copiedInstall ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
