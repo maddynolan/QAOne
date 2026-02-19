@@ -386,6 +386,7 @@ const FolderNode = memo(({
           type="button"
           className="flex items-center gap-1.5 flex-1 min-w-0"
           onClick={() => onToggleExpand(folder.id)}
+          onDoubleClick={(e) => { e.stopPropagation(); onStartRename?.(folder.id); }}
         >
           {isExpanded ? (
             <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
@@ -675,258 +676,7 @@ const EndpointGroup = memo(({
 });
 EndpointGroup.displayName = 'EndpointGroup';
 
-// ============================================================================
-// WORKSPACE / COLLECTION SWITCHER
-// ============================================================================
-
-const WorkspaceCollectionSwitcher = memo(() => {
-  const workspaces = useWorkspaces();
-  const activeWsId = useApiTestingStore(s => s.active_workspace_id);
-  const activeCollId = useApiTestingStore(s => s.active_collection_id);
-  const collections = useApiTestingStore(s => s.collections);
-  const switchWorkspace = useApiTestingStore(s => s.switchWorkspace);
-  const switchCollection = useApiTestingStore(s => s.switchCollection);
-  const createCollection = useApiTestingStore(s => s.createCollection);
-  const updateCollection = useApiTestingStore(s => s.updateCollection);
-  const deleteCollection = useApiTestingStore(s => s.deleteCollection);
-
-  const [renamingCollId, setRenamingCollId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState('');
-  const collRenameRef = useRef<HTMLInputElement>(null);
-  // Mount-time guard: prevents premature onBlur from firing when rename input first mounts
-  const collRenameMountRef = useRef(0);
-  // Track which collections are expanded in tree view
-  const [expandedCollections, setExpandedCollections] = useState<Set<string>>(() => {
-    return activeCollId ? new Set([activeCollId]) : new Set();
-  });
-
-  const wsCollections = useMemo(() => {
-    return Object.values(collections).filter(c =>
-      !activeWsId || !c.workspace_id || c.workspace_id === activeWsId
-    );
-  }, [collections, activeWsId]);
-
-  // Auto-expand active collection when it changes
-  useEffect(() => {
-    if (activeCollId) {
-      setExpandedCollections(prev => {
-        if (prev.has(activeCollId)) return prev;
-        const next = new Set(prev);
-        next.add(activeCollId);
-        return next;
-      });
-    }
-  }, [activeCollId]);
-
-  const toggleCollectionExpanded = useCallback((collId: string) => {
-    setExpandedCollections(prev => {
-      const next = new Set(prev);
-      if (next.has(collId)) next.delete(collId);
-      else next.add(collId);
-      return next;
-    });
-  }, []);
-
-  const handleNewCollection = useCallback(async () => {
-    try {
-      const name = `Collection ${wsCollections.length + 1}`;
-      const coll = await createCollection({ name });
-      if (coll?.id) {
-        switchCollection(coll.id);
-        setRenamingCollId(coll.id);
-        setRenameValue(name);
-        collRenameMountRef.current = Date.now();
-        requestAnimationFrame(() => setTimeout(() => {
-          collRenameRef.current?.focus();
-          collRenameRef.current?.select();
-        }, 80));
-      }
-    } catch (err) {
-      console.error('[CollectionSidebar] Failed to create collection:', err);
-    }
-  }, [createCollection, switchCollection, wsCollections.length]);
-
-  const handleRenameSubmit = useCallback(() => {
-    // Guard against premature blur (within 250ms of mounting the input)
-    if (Date.now() - collRenameMountRef.current < 250) return;
-    if (renamingCollId && renameValue.trim()) {
-      updateCollection(renamingCollId, { name: renameValue.trim() });
-    }
-    setRenamingCollId(null);
-    setRenameValue('');
-  }, [renamingCollId, renameValue, updateCollection]);
-
-  const startRename = useCallback((collId: string) => {
-    const coll = collections[collId];
-    if (!coll) return;
-    setRenamingCollId(collId);
-    setRenameValue(coll.name);
-    collRenameMountRef.current = Date.now();
-    requestAnimationFrame(() => setTimeout(() => {
-      collRenameRef.current?.focus();
-      collRenameRef.current?.select();
-    }, 80));
-  }, [collections]);
-
-  const handleDeleteCollection = useCallback(async (collId: string) => {
-    const coll = collections[collId];
-    if (!coll) return;
-    const confirmed = window.confirm(`Delete collection "${coll.name}"? This cannot be undone.`);
-    if (!confirmed) return;
-    await deleteCollection(collId);
-    const remaining = Object.values(collections).filter(c => c.id !== collId);
-    if (remaining.length > 0) {
-      switchCollection(remaining[0].id);
-    }
-  }, [collections, deleteCollection, switchCollection]);
-
-  const handleCollectionClick = useCallback((collId: string) => {
-    switchCollection(collId);
-    // Also expand it
-    setExpandedCollections(prev => {
-      const next = new Set(prev);
-      next.add(collId);
-      return next;
-    });
-  }, [switchCollection]);
-
-  return (
-    <div className="space-y-1 px-2 pt-2">
-      {/* Workspace selector */}
-      {workspaces.length > 1 && (
-        <Select value={activeWsId || ''} onValueChange={switchWorkspace}>
-          <SelectTrigger className="h-7 text-xs">
-            <Layers className="w-3 h-3 mr-1.5 shrink-0" />
-            <SelectValue placeholder="Workspace" />
-          </SelectTrigger>
-          <SelectContent>
-            {workspaces.map(ws => (
-              <SelectItem key={ws.id} value={ws.id} className="text-xs">
-                {ws.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-
-      {/* Collection tree list */}
-      <div className="space-y-0.5">
-        {wsCollections.map(coll => {
-          const isActive = coll.id === activeCollId;
-          const isExpanded = expandedCollections.has(coll.id);
-          const isRenaming = renamingCollId === coll.id;
-          const reqCount = coll.requests?.length || 0;
-          const folderCount = coll.folders?.length || 0;
-
-          return (
-            <div key={coll.id} className="group/coll">
-              {/* Collection row */}
-              <div
-                className={`flex items-center gap-1 px-1.5 py-1 rounded-md cursor-pointer transition-colors ${
-                  isActive
-                    ? 'bg-primary/10 text-primary border border-primary/20'
-                    : 'hover:bg-muted/60 border border-transparent'
-                }`}
-                onClick={() => handleCollectionClick(coll.id)}
-              >
-                {/* Expand/collapse chevron */}
-                <button
-                  className="w-4 h-4 flex items-center justify-center shrink-0 rounded hover:bg-muted"
-                  onClick={(e) => { e.stopPropagation(); toggleCollectionExpanded(coll.id); }}
-                >
-                  {isExpanded
-                    ? <ChevronDown className="w-3 h-3" />
-                    : <ChevronRight className="w-3 h-3" />
-                  }
-                </button>
-
-                {/* Collection icon */}
-                <FolderOpen className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-primary' : 'text-amber-500/70'}`} />
-
-                {/* Name or rename input */}
-                {isRenaming ? (
-                  <Input
-                    ref={collRenameRef}
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      e.stopPropagation();
-                      if (e.key === 'Enter') handleRenameSubmit();
-                      if (e.key === 'Escape') { setRenamingCollId(null); setRenameValue(''); }
-                    }}
-                    onBlur={handleRenameSubmit}
-                    onClick={(e) => e.stopPropagation()}
-                    className="h-5 text-xs px-1 py-0 flex-1 min-w-0"
-                    placeholder="Collection name"
-                  />
-                ) : (
-                  <span className="text-xs font-medium truncate flex-1 min-w-0">
-                    {coll.name || 'Untitled'}
-                  </span>
-                )}
-
-                {/* Request count badge */}
-                {!isRenaming && (
-                  <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
-                    {reqCount}
-                  </span>
-                )}
-
-                {/* Per-collection actions dropdown */}
-                {!isRenaming && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        className="w-5 h-5 flex items-center justify-center shrink-0 rounded opacity-0 group-hover/coll:opacity-100 hover:bg-muted transition-opacity"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <MoreHorizontal className="w-3 h-3" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-40">
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); startRename(coll.id); }}>
-                        <Edit3 className="w-3.5 h-3.5 mr-2" /> Rename
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={(e) => { e.stopPropagation(); handleDeleteCollection(coll.id); }}
-                        className="text-destructive"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </div>
-
-              {/* Expanded: show summary info for non-active collections */}
-              {isExpanded && !isActive && (
-                <div className="ml-6 pl-2 border-l border-border/50 py-0.5">
-                  <button
-                    className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
-                    onClick={() => handleCollectionClick(coll.id)}
-                  >
-                    {reqCount} request{reqCount !== 1 ? 's' : ''} · {folderCount} folder{folderCount !== 1 ? 's' : ''} — click to open
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* New Collection button */}
-        <button
-          className="flex items-center gap-1.5 w-full px-1.5 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-          onClick={handleNewCollection}
-        >
-          <Plus className="w-3.5 h-3.5 shrink-0" />
-          <span>New Collection</span>
-        </button>
-      </div>
-    </div>
-  );
-});
-WorkspaceCollectionSwitcher.displayName = 'WorkspaceCollectionSwitcher';
+// WorkspaceCollectionSwitcher removed — merged into main CollectionSidebar as unified tree
 
 // ============================================================================
 // MAIN SIDEBAR COMPONENT
@@ -963,7 +713,15 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
   const updateRequest = useApiTestingStore(s => s.updateRequest);
   const createCollection = useApiTestingStore(s => s.createCollection);
   const switchCollection = useApiTestingStore(s => s.switchCollection);
-  
+  // Collection management (migrated from WorkspaceCollectionSwitcher)
+  const collections = useApiTestingStore(s => s.collections);
+  const activeCollId = useApiTestingStore(s => s.active_collection_id);
+  const activeWsId = useApiTestingStore(s => s.active_workspace_id);
+  const workspaces = useWorkspaces();
+  const switchWorkspace = useApiTestingStore(s => s.switchWorkspace);
+  const updateCollection = useApiTestingStore(s => s.updateCollection);
+  const deleteCollection = useApiTestingStore(s => s.deleteCollection);
+
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [moveDialogRequestId, setMoveDialogRequestId] = useState<string | null>(null);
   // Inline request rename state
@@ -974,6 +732,15 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
   // Multi-select / bulk delete state
   const [selectMode, setSelectMode] = useState(false);
   const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set());
+  // Collection tree state (migrated from WorkspaceCollectionSwitcher)
+  const [renamingCollectionId, setRenamingCollectionId] = useState<string | null>(null);
+  const [collectionRenameValue, setCollectionRenameValue] = useState('');
+  const collectionRenameRef = useRef<HTMLInputElement>(null);
+  const collectionRenameMountRef = useRef(0);
+  const [expandedCollections, setExpandedCollections] = useState<Set<string>>(() => {
+    const initId = useApiTestingStore.getState().active_collection_id;
+    return initId ? new Set([initId]) : new Set();
+  });
 
   // Resizable sidebar width
   const SIDEBAR_MIN = 220;
@@ -1021,21 +788,108 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
     };
   }, [sidebarWidth]);
   
+  // ---- Collection tree callbacks (migrated from WorkspaceCollectionSwitcher) ----
+  const wsCollections = useMemo(() => {
+    return Object.values(collections).filter(c =>
+      !activeWsId || !c.workspace_id || c.workspace_id === activeWsId
+    );
+  }, [collections, activeWsId]);
+
+  // Auto-expand active collection when it changes
+  useEffect(() => {
+    if (activeCollId) {
+      setExpandedCollections(prev => {
+        if (prev.has(activeCollId)) return prev;
+        const next = new Set(prev);
+        next.add(activeCollId);
+        return next;
+      });
+    }
+  }, [activeCollId]);
+
+  const toggleCollectionExpanded = useCallback((collId: string) => {
+    setExpandedCollections(prev => {
+      const next = new Set(prev);
+      if (next.has(collId)) next.delete(collId);
+      else next.add(collId);
+      return next;
+    });
+  }, []);
+
+  const handleCollectionClick = useCallback((collId: string) => {
+    switchCollection(collId);
+    setExpandedCollections(prev => {
+      const next = new Set(prev);
+      next.add(collId);
+      return next;
+    });
+  }, [switchCollection]);
+
+  const handleNewCollection = useCallback(async () => {
+    try {
+      const name = `Collection ${wsCollections.length + 1}`;
+      const coll = await createCollection({ name });
+      if (coll?.id) {
+        switchCollection(coll.id);
+        setRenamingCollectionId(coll.id);
+        setCollectionRenameValue(name);
+        collectionRenameMountRef.current = Date.now();
+        requestAnimationFrame(() => setTimeout(() => {
+          collectionRenameRef.current?.focus();
+          collectionRenameRef.current?.select();
+        }, 80));
+      }
+    } catch (err) {
+      console.error('[CollectionSidebar] Failed to create collection:', err);
+    }
+  }, [createCollection, switchCollection, wsCollections.length]);
+
+  const startCollectionRename = useCallback((collId: string) => {
+    const coll = collections[collId];
+    if (!coll) return;
+    setRenamingCollectionId(collId);
+    setCollectionRenameValue(coll.name);
+    collectionRenameMountRef.current = Date.now();
+    requestAnimationFrame(() => setTimeout(() => {
+      collectionRenameRef.current?.focus();
+      collectionRenameRef.current?.select();
+    }, 80));
+  }, [collections]);
+
+  const handleCollectionRenameSubmit = useCallback(() => {
+    if (Date.now() - collectionRenameMountRef.current < 250) return;
+    if (renamingCollectionId && collectionRenameValue.trim()) {
+      updateCollection(renamingCollectionId, { name: collectionRenameValue.trim() });
+    }
+    setRenamingCollectionId(null);
+    setCollectionRenameValue('');
+  }, [renamingCollectionId, collectionRenameValue, updateCollection]);
+
+  const handleDeleteCollection = useCallback(async (collId: string) => {
+    const coll = collections[collId];
+    if (!coll) return;
+    if (!window.confirm(`Delete collection "${coll.name}"? This cannot be undone.`)) return;
+    await deleteCollection(collId);
+    const remaining = Object.values(collections).filter(c => c.id !== collId);
+    if (remaining.length > 0) switchCollection(remaining[0].id);
+  }, [collections, deleteCollection, switchCollection]);
+
   // Handler: "New" button — ensure a collection exists, then add a request and open it in builder
-  const handleNewRequest = useCallback(async () => {
+  const handleNewRequest = useCallback(async (folderId?: string | null) => {
     let collId = useApiTestingStore.getState().active_collection_id;
-    
+
     // Create a collection first if none exists
     if (!collId) {
       const coll = await createCollection({ name: 'My Collection' });
       switchCollection(coll.id);
       collId = coll.id;
     }
-    
-    // Add a new blank request and open it
-    const reqId = addRequest({ method: 'GET', name: 'New Request', url: '' });
+
+    // Add a new blank request and open it, auto-enter rename mode
+    const reqId = addRequest({ method: 'GET', name: 'New Request', url: '' }, folderId || undefined);
     if (reqId) {
       openRequestInBuilder(reqId);
+      setRenamingRequestId(reqId);
     }
   }, [createCollection, switchCollection, addRequest, openRequestInBuilder]);
 
@@ -1289,7 +1143,10 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
     switch (action) {
       case 'add-request': {
         const reqId = addRequest({ method: 'GET', name: 'New Request' }, folderId);
-        if (reqId) openRequestInBuilder(reqId);
+        if (reqId) {
+          openRequestInBuilder(reqId);
+          setRenamingRequestId(reqId);
+        }
         break;
       }
       case 'add-subfolder': {
@@ -1379,9 +1236,23 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
       
       {sidebar.open && (
         <>
-          {/* Workspace & Collection Switcher */}
-          <WorkspaceCollectionSwitcher />
-          
+          {/* Workspace selector (only when multiple workspaces) */}
+          {workspaces.length > 1 && (
+            <div className="px-2 pt-2">
+              <Select value={activeWsId || ''} onValueChange={switchWorkspace}>
+                <SelectTrigger className="h-7 text-xs">
+                  <Layers className="w-3 h-3 mr-1.5 shrink-0" />
+                  <SelectValue placeholder="Workspace" />
+                </SelectTrigger>
+                <SelectContent>
+                  {workspaces.map(ws => (
+                    <SelectItem key={ws.id} value={ws.id} className="text-xs">{ws.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Search */}
           <div className="px-2 pt-2">
             <div className="relative">
@@ -1395,148 +1266,167 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
               />
             </div>
           </div>
-          
-          {/* Content — flex-1 + min-h-0 ensures ScrollArea shrinks within flex parent and scrolls */}
+
+          {/* === UNIFIED TREE === */}
           <ScrollArea className="flex-1 min-h-0 mt-1">
-            <div className="p-2 space-y-1">
-              {loading ? (
+            <div className="p-2 space-y-0.5">
+              {loading && (
                 <p className="text-xs text-muted-foreground px-2 py-4 flex items-center gap-1.5">
                   <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                  Loading collection...
+                  Loading...
                 </p>
-              ) : !collection || (totalRequests === 0 && rootFolders.length === 0) ? (
-                <div className="px-2 py-4 space-y-2">
-                  <p className="text-xs text-muted-foreground">
-                    No requests yet. Use the Import tab to import a collection, or add requests from Builder.
-                  </p>
-                  <div className="flex gap-1.5">
-                    <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={handleNewRequest}>
-                      <Plus className="w-3 h-3 mr-1" /> New Request
-                    </Button>
-                    <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={handleCreateFolder}>
-                      <FolderPlus className="w-3 h-3 mr-1" /> New Folder
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Bulk action bar (visible when in select mode) */}
-                  {selectMode && (
-                    <div className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-destructive/5 border border-destructive/20">
-                      <Checkbox
-                        checked={selectedRequestIds.size === totalRequests && totalRequests > 0}
-                        onCheckedChange={(checked) => checked ? handleSelectAll() : handleDeselectAll()}
-                        className="h-3.5 w-3.5 shrink-0"
-                      />
-                      <span className="text-[11px] font-medium flex-1 truncate">
-                        {selectedRequestIds.size > 0 ? `${selectedRequestIds.size} selected` : 'Select items'}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-1.5 text-[10px]"
-                        onClick={handleSelectAll}
-                      >
-                        All
-                      </Button>
-                      {selectedRequestIds.size > 0 && (
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          className="h-6 px-2 text-[10px]"
-                          onClick={handleBulkDelete}
-                        >
-                          <Trash2 className="w-3 h-3 mr-1" />
-                          Delete ({selectedRequestIds.size})
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0"
-                        onClick={handleToggleSelectMode}
-                        title="Exit select mode"
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  )}
+              )}
 
-                  {/* Collection header */}
-                  <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-muted/50">
-                    <FolderOpen className="w-4 h-4 text-primary shrink-0" />
-                    <span className="text-sm font-medium truncate flex-1">
-                      {collection.name || 'My Collection'}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground shrink-0">
-                      {totalRequests} req
-                    </span>
-                    {/* Visible bulk select/delete button */}
-                    {totalRequests > 0 && !selectMode && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-5 w-5 p-0 shrink-0 text-muted-foreground hover:text-destructive"
-                        title="Select & delete requests"
-                        onClick={handleToggleSelectMode}
+              {/* Bulk action bar (visible in select mode) */}
+              {selectMode && (
+                <div className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-destructive/5 border border-destructive/20 mb-1">
+                  <Checkbox
+                    checked={selectedRequestIds.size === totalRequests && totalRequests > 0}
+                    onCheckedChange={(checked) => checked ? handleSelectAll() : handleDeselectAll()}
+                    className="h-3.5 w-3.5 shrink-0"
+                  />
+                  <span className="text-[11px] font-medium flex-1 truncate">
+                    {selectedRequestIds.size > 0 ? `${selectedRequestIds.size} selected` : 'Select items'}
+                  </span>
+                  <Button variant="ghost" size="sm" className="h-6 px-1.5 text-[10px]" onClick={handleSelectAll}>All</Button>
+                  {selectedRequestIds.size > 0 && (
+                    <Button variant="destructive" size="sm" className="h-6 px-2 text-[10px]" onClick={handleBulkDelete}>
+                      <Trash2 className="w-3 h-3 mr-1" /> Delete ({selectedRequestIds.size})
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={handleToggleSelectMode} title="Exit select mode">
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              )}
+
+              {/* Collection tree — each collection as a top-level node */}
+              {wsCollections.map(coll => {
+                const isActive = coll.id === activeCollId;
+                const isExpanded = expandedCollections.has(coll.id);
+                const isCollRenaming = renamingCollectionId === coll.id;
+                const reqCount = coll.requests?.length || 0;
+                const folderCount = coll.folders?.length || 0;
+
+                return (
+                  <div key={coll.id} className="group/coll">
+                    {/* ── Collection Row ── */}
+                    <div
+                      className={`flex items-center gap-1 px-1.5 py-1 rounded-md cursor-pointer transition-colors ${
+                        isActive
+                          ? 'bg-primary/10 text-primary border border-primary/20'
+                          : 'hover:bg-muted/60 border border-transparent'
+                      }`}
+                      onClick={() => handleCollectionClick(coll.id)}
+                    >
+                      {/* Chevron */}
+                      <button
+                        className="w-4 h-4 flex items-center justify-center shrink-0 rounded hover:bg-muted"
+                        onClick={(e) => { e.stopPropagation(); toggleCollectionExpanded(coll.id); }}
                       >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    )}
-                    {/* New dropdown: Request or Folder */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-5 w-5 p-0 shrink-0"
-                          title="Add new..."
+                        {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                      </button>
+
+                      {/* Icon */}
+                      <FolderOpen className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-primary' : 'text-amber-500/70'}`} />
+
+                      {/* Name or inline rename */}
+                      {isCollRenaming ? (
+                        <Input
+                          ref={collectionRenameRef}
+                          value={collectionRenameValue}
+                          onChange={(e) => setCollectionRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === 'Enter') handleCollectionRenameSubmit();
+                            if (e.key === 'Escape') { setRenamingCollectionId(null); setCollectionRenameValue(''); }
+                          }}
+                          onBlur={handleCollectionRenameSubmit}
+                          onClick={(e) => e.stopPropagation()}
+                          className="h-5 text-xs px-1 py-0 flex-1 min-w-0"
+                          placeholder="Collection name"
+                        />
+                      ) : (
+                        <span
+                          className="text-xs font-medium truncate flex-1 min-w-0"
+                          onDoubleClick={(e) => { e.stopPropagation(); startCollectionRename(coll.id); }}
                         >
-                          <Plus className="w-3 h-3" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-40">
-                        <DropdownMenuItem onClick={handleNewRequest}>
-                          <Plus className="w-3.5 h-3.5 mr-2" /> New Request
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={handleCreateFolder}>
-                          <FolderPlus className="w-3.5 h-3.5 mr-2" /> New Folder
-                        </DropdownMenuItem>
-                        {totalRequests > 0 && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={handleToggleSelectMode}>
-                              <CheckSquare className="w-3.5 h-3.5 mr-2" /> Select & Delete...
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleDeleteAll} className="text-destructive">
-                              <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete All ({totalRequests})
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  
-                  {/* Folders section */}
-                  {rootFolders.length > 0 && (
-                    <div className="pt-1">
-                      <div className="flex items-center justify-between px-2 py-1">
-                        <div className="flex items-center gap-1.5 text-muted-foreground">
-                          <Folder className="w-3.5 h-3.5 shrink-0" />
-                          <span className="text-xs font-medium">Folders</span>
+                          {coll.name || 'Untitled'}
+                        </span>
+                      )}
+
+                      {/* Count */}
+                      {!isCollRenaming && (
+                        <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">{reqCount}</span>
+                      )}
+
+                      {/* Action buttons (visible on hover) */}
+                      {!isCollRenaming && (
+                        <div className="flex items-center gap-0.5 opacity-0 group-hover/coll:opacity-100 transition-opacity">
+                          {/* + Add dropdown */}
+                          {isActive && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  className="w-5 h-5 flex items-center justify-center shrink-0 rounded hover:bg-muted"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-40">
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleNewRequest(); }}>
+                                  <Plus className="w-3.5 h-3.5 mr-2" /> New Request
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleCreateFolder(); }}>
+                                  <FolderPlus className="w-3.5 h-3.5 mr-2" /> New Folder
+                                </DropdownMenuItem>
+                                {reqCount > 0 && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleToggleSelectMode(); }}>
+                                      <CheckSquare className="w-3.5 h-3.5 mr-2" /> Select & Delete...
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDeleteAll(); }} className="text-destructive">
+                                      <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete All ({reqCount})
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+
+                          {/* ⋯ More dropdown */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                className="w-5 h-5 flex items-center justify-center shrink-0 rounded hover:bg-muted"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreHorizontal className="w-3 h-3" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-40">
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); startCollectionRename(coll.id); }}>
+                                <Edit3 className="w-3.5 h-3.5 mr-2" /> Rename
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={(e) => { e.stopPropagation(); handleDeleteCollection(coll.id); }}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-5 w-5 p-0"
-                          onClick={handleCreateFolder}
-                          title="New folder"
-                        >
-                          <FolderPlus className="w-3 h-3" />
-                        </Button>
-                      </div>
-                      
-                      <div className="space-y-0.5">
+                      )}
+                    </div>
+
+                    {/* ── Expanded: Active collection content ── */}
+                    {isExpanded && isActive && collection && (
+                      <div className="ml-4 pl-2 border-l border-border/40 space-y-0.5 py-0.5">
+                        {/* Folders */}
                         {rootFolders.map(folder => (
                           <FolderNode
                             key={folder.id}
@@ -1572,75 +1462,92 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                             onRequestRenameSubmit={handleRequestRenameSubmit}
                           />
                         ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Endpoints section (unfiled requests grouped by endpoint) */}
-                  {endpointGroups.length > 0 && (
-                    <div
-                      className={`${rootFolders.length > 0 ? 'pt-2 border-t border-border mt-1' : 'pt-1'} ${dropTargetId === 'root' ? 'bg-primary/5 ring-1 ring-primary/30 rounded' : ''}`}
-                      onDragOver={(e) => { e.preventDefault(); handleDragOver(e, 'root'); }}
-                      onDragLeave={handleDragLeave}
-                      onDrop={(e) => handleDropOnFolder(e, null)}
-                    >
-                      <div className="flex items-center justify-between px-2 py-1">
-                        <div className="flex items-center gap-1.5 text-muted-foreground">
-                          <Link2 className="w-3.5 h-3.5 shrink-0" />
-                          <span className="text-xs font-medium">Endpoints</span>
-                          <span className="text-[10px]">({totalEndpoints})</span>
-                        </div>
-                        {(
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-5 w-5 p-0"
-                            onClick={handleCreateFolder}
-                            title="New folder"
+
+                        {/* Unfiled requests (endpoints) */}
+                        {endpointGroups.length > 0 && (
+                          <div
+                            className={`${rootFolders.length > 0 ? 'pt-1 border-t border-border/30 mt-1' : ''} ${dropTargetId === 'root' ? 'bg-primary/5 ring-1 ring-primary/30 rounded' : ''}`}
+                            onDragOver={(e) => { e.preventDefault(); handleDragOver(e, 'root'); }}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDropOnFolder(e, null)}
                           >
-                            <FolderPlus className="w-3 h-3" />
-                          </Button>
+                            <div className="space-y-0.5">
+                              {endpointGroups.map(([endpointKey, requests]) => (
+                                <EndpointGroup
+                                  key={endpointKey}
+                                  endpointKey={endpointKey}
+                                  requests={requests}
+                                  selectedRequestId={sidebar.selected_request_id}
+                                  isExpanded={sidebar.expanded_endpoints.has(endpointKey)}
+                                  lastResultMap={lastResultMap}
+                                  onToggleExpand={toggleEndpointExpanded}
+                                  onRequestClick={handleRequestClick}
+                                  onRequestContextAction={handleRequestContextAction}
+                                  onAddTestCase={handleAddTestCase}
+                                  onRunEndpoint={handleRunEndpoint}
+                                  onRunRequest={handleRunRequest}
+                                  onDragStart={handleDragStart}
+                                  onDragOver={handleDragOver}
+                                  onDragLeave={handleDragLeave}
+                                  onDrop={handleDropReorder}
+                                  onDragEnd={handleDragEnd}
+                                  dragRequestId={dragRequestId}
+                                  dropTargetId={dropTargetId}
+                                  selectMode={selectMode}
+                                  selectedIds={selectedRequestIds}
+                                  onToggleSelect={handleToggleSelect}
+                                  renamingRequestId={renamingRequestId}
+                                  onRequestRenameSubmit={handleRequestRenameSubmit}
+                                  onCancelRename={handleCancelRename}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Empty collection */}
+                        {totalRequests === 0 && rootFolders.length === 0 && (
+                          <div className="px-1 py-2 space-y-1.5">
+                            <p className="text-[11px] text-muted-foreground">Empty — add requests or import</p>
+                            <div className="flex gap-1">
+                              <Button variant="outline" size="sm" className="h-6 text-[10px] flex-1 px-1.5" onClick={() => handleNewRequest()}>
+                                <Plus className="w-2.5 h-2.5 mr-0.5" /> Request
+                              </Button>
+                              <Button variant="outline" size="sm" className="h-6 text-[10px] flex-1 px-1.5" onClick={handleCreateFolder}>
+                                <FolderPlus className="w-2.5 h-2.5 mr-0.5" /> Folder
+                              </Button>
+                            </div>
+                          </div>
                         )}
                       </div>
-                      
-                      <div className="space-y-0.5">
-                        {endpointGroups.map(([endpointKey, requests]) => (
-                          <EndpointGroup
-                            key={endpointKey}
-                            endpointKey={endpointKey}
-                            requests={requests}
-                            selectedRequestId={sidebar.selected_request_id}
-                            isExpanded={sidebar.expanded_endpoints.has(endpointKey)}
-                            lastResultMap={lastResultMap}
-                            onToggleExpand={toggleEndpointExpanded}
-                            onRequestClick={handleRequestClick}
-                            onRequestContextAction={handleRequestContextAction}
-                            onAddTestCase={handleAddTestCase}
-                            onRunEndpoint={handleRunEndpoint}
-                            onRunRequest={handleRunRequest}
-                            onDragStart={handleDragStart}
-                            onDragOver={handleDragOver}
-                            onDragLeave={handleDragLeave}
-                            onDrop={handleDropReorder}
-                            onDragEnd={handleDragEnd}
-                            dragRequestId={dragRequestId}
-                            dropTargetId={dropTargetId}
-                            selectMode={selectMode}
-                            selectedIds={selectedRequestIds}
-                            onToggleSelect={handleToggleSelect}
-                            renamingRequestId={renamingRequestId}
-                            onRequestRenameSubmit={handleRequestRenameSubmit}
-                            onCancelRename={handleCancelRename}
-                          />
-                        ))}
+                    )}
+
+                    {/* ── Expanded: Non-active collection summary ── */}
+                    {isExpanded && !isActive && (
+                      <div className="ml-6 pl-2 border-l border-border/40 py-0.5">
+                        <button
+                          className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
+                          onClick={() => handleCollectionClick(coll.id)}
+                        >
+                          {reqCount} request{reqCount !== 1 ? 's' : ''} · {folderCount} folder{folderCount !== 1 ? 's' : ''} — click to open
+                        </button>
                       </div>
-                    </div>
-                  )}
-                </>
-              )}
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* + New Collection button */}
+              <button
+                className="flex items-center gap-1.5 w-full px-1.5 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors mt-1"
+                onClick={handleNewCollection}
+              >
+                <Plus className="w-3.5 h-3.5 shrink-0" />
+                <span>New Collection</span>
+              </button>
             </div>
           </ScrollArea>
-          
+
           {/* Footer with stats + Run All */}
           {collection && totalRequests > 0 && (
             <div className="px-2 py-1.5 border-t border-border shrink-0 space-y-1">
