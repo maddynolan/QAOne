@@ -724,12 +724,19 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
         // Extract assertion results: prefer backend results (assertions.results), else build client-side
         const backendResults = testResult.assertion_results ?? testResult.assertions?.results;
         if (Array.isArray(backendResults) && backendResults.length > 0) {
-          setAssertionResults(backendResults.map((r: any) => ({
-            passed: !!r.passed,
-            message: r.message ?? (r.actual !== undefined || r.expected !== undefined
-              ? `expected ${r.expected ?? "—"}, got ${r.actual ?? "—"}`
-              : r.error ?? "Assertion failed"),
-          })));
+          setAssertionResults(backendResults.map((r: any, i: number) => {
+            const src = assertions[i]; // cross-reference configured assertion by index
+            return {
+              passed: !!r.passed,
+              message: r.message ?? (r.actual !== undefined || r.expected !== undefined
+                ? `expected ${r.expected ?? "—"}, got ${r.actual ?? "—"}`
+                : r.error ?? "Assertion failed"),
+              type: r.type ?? src?.type ?? "",
+              path: r.path ?? src?.path ?? "",
+              expected: r.expected != null ? String(r.expected) : (src?.expected ?? ""),
+              actual: r.actual != null ? String(r.actual) : undefined,
+            };
+          }));
         } else {
           // Build assertion results client-side (with correct JSONPath for arrays)
           const results: Array<{ passed: boolean; message: string; actual?: string; type?: string; path?: string; expected?: string }> = [];
@@ -782,6 +789,22 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   passed = val !== undefined && val !== null;
                 } else if (a.operator === "not_exists") {
                   passed = val === undefined || val === null;
+                } else if (a.operator === "length_equals" || a.operator === "length_greater_than" || a.operator === "length_less_than") {
+                  // Length operators: get length of array, string, or object keys
+                  const len = Array.isArray(val) ? val.length
+                    : typeof val === "string" ? val.length
+                    : (val && typeof val === "object") ? Object.keys(val).length : 0;
+                  const expectedLen = parseInt(a.expected) || 0;
+                  if (a.operator === "length_equals") passed = len === expectedLen;
+                  else if (a.operator === "length_greater_than") passed = len > expectedLen;
+                  else passed = len < expectedLen;
+                  // Override actual for clarity in the results table
+                  results.push({
+                    passed,
+                    message: `JSONPath "${a.path}" length: ${passed ? "passed" : `expected ${a.operator.replace("length_", "")} ${expectedLen}, got ${len}`}`,
+                    type: "jsonpath", path: a.path, expected: `${a.operator === "length_equals" ? "==" : a.operator === "length_greater_than" ? ">" : "<"} ${expectedLen}`, actual: String(len),
+                  });
+                  continue; // already pushed result, skip the push below
                 } else if (a.operator === "contains") {
                   passed = actual.includes(a.expected);
                 } else if (typeof val === "object" && val !== null) {
@@ -2253,8 +2276,8 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                           id: generateId(),
                           type: "jsonpath",
                           name: `Array has ${parsed.length} items`,
-                          path: "$.length",
-                          operator: "equals",
+                          path: "$",
+                          operator: "length_equals",
                           expected: String(parsed.length),
                           schema: "",
                         });

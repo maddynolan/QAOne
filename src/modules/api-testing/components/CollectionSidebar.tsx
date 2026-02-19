@@ -689,28 +689,57 @@ const WorkspaceCollectionSwitcher = memo(() => {
   const createCollection = useApiTestingStore(s => s.createCollection);
   const updateCollection = useApiTestingStore(s => s.updateCollection);
   const deleteCollection = useApiTestingStore(s => s.deleteCollection);
-  
+
   const [renamingCollId, setRenamingCollId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const collRenameRef = useRef<HTMLInputElement>(null);
-  
+  // Mount-time guard: prevents premature onBlur from firing when rename input first mounts
+  const collRenameMountRef = useRef(0);
+  // Track which collections are expanded in tree view
+  const [expandedCollections, setExpandedCollections] = useState<Set<string>>(() => {
+    return activeCollId ? new Set([activeCollId]) : new Set();
+  });
+
   const wsCollections = useMemo(() => {
-    return Object.values(collections).filter(c => 
+    return Object.values(collections).filter(c =>
       !activeWsId || !c.workspace_id || c.workspace_id === activeWsId
     );
   }, [collections, activeWsId]);
-  
+
+  // Auto-expand active collection when it changes
+  useEffect(() => {
+    if (activeCollId) {
+      setExpandedCollections(prev => {
+        if (prev.has(activeCollId)) return prev;
+        const next = new Set(prev);
+        next.add(activeCollId);
+        return next;
+      });
+    }
+  }, [activeCollId]);
+
+  const toggleCollectionExpanded = useCallback((collId: string) => {
+    setExpandedCollections(prev => {
+      const next = new Set(prev);
+      if (next.has(collId)) next.delete(collId);
+      else next.add(collId);
+      return next;
+    });
+  }, []);
+
   const handleNewCollection = useCallback(async () => {
-    // Prompt-style: create then immediately rename
     try {
       const name = `Collection ${wsCollections.length + 1}`;
       const coll = await createCollection({ name });
       if (coll?.id) {
         switchCollection(coll.id);
-        // Open rename inline
         setRenamingCollId(coll.id);
         setRenameValue(name);
-        setTimeout(() => collRenameRef.current?.focus(), 100);
+        collRenameMountRef.current = Date.now();
+        requestAnimationFrame(() => setTimeout(() => {
+          collRenameRef.current?.focus();
+          collRenameRef.current?.select();
+        }, 80));
       }
     } catch (err) {
       console.error('[CollectionSidebar] Failed to create collection:', err);
@@ -718,6 +747,8 @@ const WorkspaceCollectionSwitcher = memo(() => {
   }, [createCollection, switchCollection, wsCollections.length]);
 
   const handleRenameSubmit = useCallback(() => {
+    // Guard against premature blur (within 250ms of mounting the input)
+    if (Date.now() - collRenameMountRef.current < 250) return;
     if (renamingCollId && renameValue.trim()) {
       updateCollection(renamingCollId, { name: renameValue.trim() });
     }
@@ -725,21 +756,42 @@ const WorkspaceCollectionSwitcher = memo(() => {
     setRenameValue('');
   }, [renamingCollId, renameValue, updateCollection]);
 
+  const startRename = useCallback((collId: string) => {
+    const coll = collections[collId];
+    if (!coll) return;
+    setRenamingCollId(collId);
+    setRenameValue(coll.name);
+    collRenameMountRef.current = Date.now();
+    requestAnimationFrame(() => setTimeout(() => {
+      collRenameRef.current?.focus();
+      collRenameRef.current?.select();
+    }, 80));
+  }, [collections]);
+
   const handleDeleteCollection = useCallback(async (collId: string) => {
     const coll = collections[collId];
     if (!coll) return;
     const confirmed = window.confirm(`Delete collection "${coll.name}"? This cannot be undone.`);
     if (!confirmed) return;
     await deleteCollection(collId);
-    // Switch to another collection if available
     const remaining = Object.values(collections).filter(c => c.id !== collId);
     if (remaining.length > 0) {
       switchCollection(remaining[0].id);
     }
   }, [collections, deleteCollection, switchCollection]);
-  
+
+  const handleCollectionClick = useCallback((collId: string) => {
+    switchCollection(collId);
+    // Also expand it
+    setExpandedCollections(prev => {
+      const next = new Set(prev);
+      next.add(collId);
+      return next;
+    });
+  }, [switchCollection]);
+
   return (
-    <div className="space-y-1.5 px-2 pt-2">
+    <div className="space-y-1 px-2 pt-2">
       {/* Workspace selector */}
       {workspaces.length > 1 && (
         <Select value={activeWsId || ''} onValueChange={switchWorkspace}>
@@ -756,76 +808,121 @@ const WorkspaceCollectionSwitcher = memo(() => {
           </SelectContent>
         </Select>
       )}
-      
-      {/* Collection selector with rename/delete */}
-      <div className="flex items-center gap-1">
-        <Select value={activeCollId || ''} onValueChange={switchCollection}>
-          <SelectTrigger className="h-7 text-xs flex-1">
-            <FolderOpen className="w-3 h-3 mr-1.5 shrink-0 text-primary" />
-            <SelectValue placeholder="Select collection" />
-          </SelectTrigger>
-          <SelectContent>
-            {wsCollections.map(c => (
-              <SelectItem key={c.id} value={c.id} className="text-xs">
-                {c.name} ({c.requests.length})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        
-        {/* Collection actions: rename, delete, new */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0">
-              <MoreHorizontal className="w-3.5 h-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem onClick={handleNewCollection}>
-              <Plus className="w-3.5 h-3.5 mr-2" /> New Collection
-            </DropdownMenuItem>
-            {activeCollId && (
-              <>
-                <DropdownMenuItem onClick={() => {
-                  const coll = collections[activeCollId];
-                  if (coll) {
-                    setRenamingCollId(activeCollId);
-                    setRenameValue(coll.name);
-                    setTimeout(() => collRenameRef.current?.focus(), 100);
-                  }
-                }}>
-                  <Edit3 className="w-3.5 h-3.5 mr-2" /> Rename
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  onClick={() => handleDeleteCollection(activeCollId)}
-                  className="text-destructive"
+
+      {/* Collection tree list */}
+      <div className="space-y-0.5">
+        {wsCollections.map(coll => {
+          const isActive = coll.id === activeCollId;
+          const isExpanded = expandedCollections.has(coll.id);
+          const isRenaming = renamingCollId === coll.id;
+          const reqCount = coll.requests?.length || 0;
+          const folderCount = coll.folders?.length || 0;
+
+          return (
+            <div key={coll.id} className="group/coll">
+              {/* Collection row */}
+              <div
+                className={`flex items-center gap-1 px-1.5 py-1 rounded-md cursor-pointer transition-colors ${
+                  isActive
+                    ? 'bg-primary/10 text-primary border border-primary/20'
+                    : 'hover:bg-muted/60 border border-transparent'
+                }`}
+                onClick={() => handleCollectionClick(coll.id)}
+              >
+                {/* Expand/collapse chevron */}
+                <button
+                  className="w-4 h-4 flex items-center justify-center shrink-0 rounded hover:bg-muted"
+                  onClick={(e) => { e.stopPropagation(); toggleCollectionExpanded(coll.id); }}
                 >
-                  <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete Collection
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                  {isExpanded
+                    ? <ChevronDown className="w-3 h-3" />
+                    : <ChevronRight className="w-3 h-3" />
+                  }
+                </button>
+
+                {/* Collection icon */}
+                <FolderOpen className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-primary' : 'text-amber-500/70'}`} />
+
+                {/* Name or rename input */}
+                {isRenaming ? (
+                  <Input
+                    ref={collRenameRef}
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') handleRenameSubmit();
+                      if (e.key === 'Escape') { setRenamingCollId(null); setRenameValue(''); }
+                    }}
+                    onBlur={handleRenameSubmit}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-5 text-xs px-1 py-0 flex-1 min-w-0"
+                    placeholder="Collection name"
+                  />
+                ) : (
+                  <span className="text-xs font-medium truncate flex-1 min-w-0">
+                    {coll.name || 'Untitled'}
+                  </span>
+                )}
+
+                {/* Request count badge */}
+                {!isRenaming && (
+                  <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+                    {reqCount}
+                  </span>
+                )}
+
+                {/* Per-collection actions dropdown */}
+                {!isRenaming && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="w-5 h-5 flex items-center justify-center shrink-0 rounded opacity-0 group-hover/coll:opacity-100 hover:bg-muted transition-opacity"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreHorizontal className="w-3 h-3" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40">
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); startRename(coll.id); }}>
+                        <Edit3 className="w-3.5 h-3.5 mr-2" /> Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={(e) => { e.stopPropagation(); handleDeleteCollection(coll.id); }}
+                        className="text-destructive"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+
+              {/* Expanded: show summary info for non-active collections */}
+              {isExpanded && !isActive && (
+                <div className="ml-6 pl-2 border-l border-border/50 py-0.5">
+                  <button
+                    className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
+                    onClick={() => handleCollectionClick(coll.id)}
+                  >
+                    {reqCount} request{reqCount !== 1 ? 's' : ''} · {folderCount} folder{folderCount !== 1 ? 's' : ''} — click to open
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* New Collection button */}
+        <button
+          className="flex items-center gap-1.5 w-full px-1.5 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+          onClick={handleNewCollection}
+        >
+          <Plus className="w-3.5 h-3.5 shrink-0" />
+          <span>New Collection</span>
+        </button>
       </div>
-      
-      {/* Inline rename input */}
-      {renamingCollId && (
-        <div className="flex gap-1">
-          <Input
-            ref={collRenameRef}
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleRenameSubmit();
-              if (e.key === 'Escape') { setRenamingCollId(null); setRenameValue(''); }
-            }}
-            onBlur={handleRenameSubmit}
-            className="h-7 text-xs"
-            placeholder="Collection name"
-          />
-        </div>
-      )}
     </div>
   );
 });
@@ -1195,9 +1292,11 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
         if (reqId) openRequestInBuilder(reqId);
         break;
       }
-      case 'add-subfolder':
-        createFolder('New Folder', folderId);
+      case 'add-subfolder': {
+        const newFolderId = createFolder('New Folder', folderId);
+        if (newFolderId) setRenamingFolderId(newFolderId);
         break;
+      }
       case 'rename':
         // Just set the renamingFolderId — the FolderNode will show an inline input
         setRenamingFolderId(folderId);
@@ -1237,7 +1336,8 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
   }, [updateRequest]);
   
   const handleCreateFolder = useCallback(() => {
-    createFolder('New Folder');
+    const newId = createFolder('New Folder');
+    if (newId) setRenamingFolderId(newId);
   }, [createFolder]);
   
   const totalRequests = collection?.requests.length || 0;

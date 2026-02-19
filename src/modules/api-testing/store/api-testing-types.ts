@@ -289,7 +289,7 @@ export interface ApiTestingActions {
   importCollection: (payload: any, name?: string) => Promise<ApiCollection>;
 
   // --- Folder Actions (nested support) ---
-  createFolder: (name: string, parentFolderId?: string | null) => void;
+  createFolder: (name: string, parentFolderId?: string | null) => string | undefined;
   renameFolder: (folderId: string, newName: string) => void;
   deleteFolder: (folderId: string) => void;
   moveFolder: (folderId: string, newParentId: string | null) => void;

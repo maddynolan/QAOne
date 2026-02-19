@@ -1767,7 +1767,7 @@ export default function EnhancedAPITesting() {
         </TabsList>
 
         {/* Builder Tab - Ad-hoc Request Builder */}
-        <TabsContent value="builder" className="space-y-4">
+        <TabsContent value="builder" className="space-y-4" forceMount>
           <TabErrorBoundary tabName="Builder">
             <RequestBuilder 
               initialRequest={builderInitialRequest}

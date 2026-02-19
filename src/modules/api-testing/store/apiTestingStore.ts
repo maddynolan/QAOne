@@ -440,8 +440,8 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
           
           createFolder: (name, parentFolderId = null) => {
             const collId = get().active_collection_id;
-            if (!collId) return;
-            
+            if (!collId) return undefined;
+
             const folder: ApiFolder = {
               id: generateId(),
               name,
@@ -451,7 +451,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               sort_order: get().collections[collId]?.folders.length || 0,
               expanded: true,
             };
-            
+
             set((s) => {
               const coll = s.collections[collId];
               if (!coll) return;
@@ -460,9 +460,10 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               ensureSidebarSets(s);
               s.sidebar.expanded_folders.add(folder.id);
             });
-            
+
             // Save immediately so new folders persist
             get()._saveCollectionNow(collId);
+            return folder.id;
           },
           
           renameFolder: (folderId, newName) => {

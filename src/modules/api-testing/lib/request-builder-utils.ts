@@ -8,6 +8,13 @@ export function jsonPathValue(obj: any, path: string): unknown {
   if (obj == null) return undefined;
   let s = path.replace(/^\$\.?/, "").trim();
   if (!s) return obj;
+  // Explicit support for $.length on arrays/strings/objects
+  if (s === "length") {
+    if (Array.isArray(obj)) return obj.length;
+    if (typeof obj === "string") return obj.length;
+    if (obj && typeof obj === "object") return Object.keys(obj).length;
+    return undefined;
+  }
   let current: any = obj;
   const tokens: string[] = [];
   for (let i = 0; i < s.length; ) {

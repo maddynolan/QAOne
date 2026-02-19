@@ -68,6 +68,9 @@ export const ASSERTION_OPERATORS = [
   { value: "matches_regex", label: "Matches Regex" },
   { value: "exists", label: "Exists" },
   { value: "not_exists", label: "Not Exists" },
+  { value: "length_equals", label: "Length Equals" },
+  { value: "length_greater_than", label: "Length >" },
+  { value: "length_less_than", label: "Length <" },
 ] as const;
 
 // --- Extraction Methods (for request chaining) ---
