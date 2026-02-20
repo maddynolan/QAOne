@@ -522,13 +522,15 @@ class EnhancedAssertionEngine:
                 else:
                     passed = length < expected_len
                 actual = length
+                op_label = operator.replace("length_", "")
+                msg = f"JSONPath '{path}' length: matched" if passed else f"JSONPath '{path}' length: expected {op_label} {expected_len}, got {length}"
                 return AssertionResult(
                     "jsonpath",
                     name,
                     passed,
                     expected=expected,
                     actual=length,
-                    message=f"JSONPath '{path}' length: {'matched' if passed else f'expected {operator.replace(\"length_\", \"\")} {expected_len}, got {length}'}"
+                    message=msg
                 )
             elif expected is not None and expected != "":
                 # Default: equals comparison
