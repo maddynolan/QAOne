@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { trackCTAClick, trackPricingView } from '@/lib/web-analytics';
 import {
   Check, X, ArrowRight, Rocket, Building2, Zap,
   ChevronDown, HelpCircle, Mail, MessageSquare, Sparkles,
@@ -49,10 +50,10 @@ function MarketingHeader() {
           </nav>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
+          <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => { trackCTAClick('sign_in', '/pricing'); navigate('/signin'); }}>
             Sign In
           </Button>
-          <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => navigate('/signup')}>
+          <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => { trackCTAClick('start_free', '/pricing'); navigate('/signup'); }}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -323,6 +324,8 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
 export default function PricingPage() {
   const navigate = useNavigate();
 
+  React.useEffect(() => { trackPricingView(); }, []);
+
   // Compute total tool replacement savings
   const totalSavingsLow = replacedTools.reduce((sum, t) => {
     const match = t.cost.match(/\$(\d+)K/);
@@ -408,7 +411,7 @@ export default function PricingPage() {
 
               <Button
                 className="w-full h-12 rounded-xl font-semibold mb-8 bg-white border-2 border-emerald-500 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-600 transition-all"
-                onClick={() => navigate('/signup')}
+                onClick={() => { trackCTAClick('get_started_free', '/pricing'); navigate('/signup'); }}
               >
                 Get Started Free <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
@@ -461,14 +464,14 @@ export default function PricingPage() {
               <div className="flex gap-3 mb-8">
                 <Button
                   className="flex-1 h-12 rounded-xl font-semibold bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white shadow-lg shadow-blue-500/25 transition-all"
-                  onClick={() => navigate('/contact')}
+                  onClick={() => { trackCTAClick('talk_to_sales', '/pricing'); navigate('/contact'); }}
                 >
                   Talk to Sales <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
                 <Button
                   variant="outline"
                   className="h-12 rounded-xl font-semibold border-violet-300 text-violet-600 hover:bg-violet-50"
-                  onClick={() => navigate('/contact')}
+                  onClick={() => { trackCTAClick('request_demo', '/pricing'); navigate('/contact'); }}
                 >
                   <CalendarCheck className="w-4 h-4 mr-1.5" /> Demo
                 </Button>
@@ -688,12 +691,12 @@ export default function PricingPage() {
           <div className="mt-12 text-center">
             <p className="text-slate-500 mb-4">Still have questions?</p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Button variant="outline" className="h-12 px-6 rounded-xl" onClick={() => navigate('/contact')}>
+              <Button variant="outline" className="h-12 px-6 rounded-xl" onClick={() => { trackCTAClick('chat_with_us', '/pricing'); navigate('/contact'); }}>
                 <MessageSquare className="w-5 h-5 mr-2" /> Chat with Us
               </Button>
               <Button
                 className="h-12 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700"
-                onClick={() => navigate('/contact')}
+                onClick={() => { trackCTAClick('contact_sales', '/pricing'); navigate('/contact'); }}
               >
                 <Mail className="w-5 h-5 mr-2" /> Contact Sales
               </Button>
@@ -714,14 +717,14 @@ export default function PricingPage() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
               className="h-14 px-8 rounded-xl text-lg font-semibold bg-white text-blue-600 hover:bg-blue-50 shadow-lg transition-all"
-              onClick={() => navigate('/signup')}
+              onClick={() => { trackCTAClick('get_started_free_bottom', '/pricing'); navigate('/signup'); }}
             >
               <Rocket className="w-5 h-5 mr-2" /> Get Started Free
             </Button>
             <Button
               variant="outline"
               className="h-14 px-8 rounded-xl text-lg font-semibold border-2 border-white/50 text-white hover:bg-white/10 transition-all"
-              onClick={() => navigate('/contact')}
+              onClick={() => { trackCTAClick('talk_to_sales_bottom', '/pricing'); navigate('/contact'); }}
             >
               <Building2 className="w-5 h-5 mr-2" /> Talk to Sales
             </Button>

@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { trackEvent } from '@/lib/web-analytics';
 
 export default function SignInPage() {
   const navigate = useNavigate();
@@ -31,6 +32,7 @@ export default function SignInPage() {
 
     try {
       await signIn(formData.email, formData.password);
+      trackEvent('login', { method: 'email' });
       toast.success('Welcome back!');
       navigate('/dashboard');
     } catch (error: any) {

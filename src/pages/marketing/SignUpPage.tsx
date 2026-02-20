@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { validateBusinessEmail, isPersonalEmail, getEmailDomain } from '@/lib/email-validator';
 import { captureSignupLead } from '@/lib/leads-service';
+import { trackSignup } from '@/lib/web-analytics';
 
 export default function SignUpPage() {
   const navigate = useNavigate();
@@ -73,6 +74,7 @@ export default function SignUpPage() {
         .catch(() => {}); // Silent fail - don't block signup
       
       await signUp(formData.email, formData.password, formData.name);
+      trackSignup('email');
       toast.success('Account created! Check your email to verify.');
       // Navigate to welcome page instead of dashboard
       navigate('/welcome', { state: { email: formData.email, name: formData.name } });

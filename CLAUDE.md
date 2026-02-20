@@ -2,7 +2,7 @@
 
 > **This file is the starting reference for all Claude sessions working on this codebase.**
 > It must be kept up-to-date whenever changes are made to components, APIs, or architecture.
-> Last updated: 2026-02-16
+> Last updated: 2026-02-20
 
 ---
 
@@ -111,7 +111,7 @@ QAAI (also branded as Flowstral/ArisTrace) is an enterprise QA automation platfo
 │   │       └── components/       # PluginManagement, WorkspaceSwitcher
 │   ├── pages/                    # Landing page + marketing pages only
 │   │   ├── LandingPage.tsx
-│   │   └── marketing/            # SmartRecorder, Pricing, About, etc.
+│   │   └── marketing/            # SmartRecorder, Pricing, About, Compare, CostCalculator, Blog, etc.
 │   ├── components/               # Shared layout & UI components
 │   │   ├── ui/                   # 49 shadcn/ui primitives
 │   │   ├── enterprise/           # Enterprise UI components
@@ -978,6 +978,93 @@ interface ComparisonResult { passed, diff_percentage, diff_pixel_count, total_pi
 - `backend/app/services/ai/` — AI generation, failure analysis
 - `backend/app/config/llm_config.py` — Provider configuration
 - `backend/app/routers/ai/ai_generation_api.py` — 28 AI endpoints (prefix `/ai`)
+
+### Web Analytics, UTM Tracking & Live Chat
+
+Marketing site analytics via Google Analytics 4, Microsoft Clarity, Crisp live chat, and UTM attribution tracking. All disabled in Electron desktop app.
+
+**Key File:** `src/lib/web-analytics.ts` — unified analytics + chat service
+
+**Setup (`.env`):**
+- `VITE_GA4_MEASUREMENT_ID` — GA4 measurement ID (e.g., `G-XXXXXXXXXX`)
+- `VITE_CLARITY_PROJECT_ID` — Clarity project ID (e.g., `abc123xyz`)
+- `VITE_CRISP_WEBSITE_ID` — Crisp website ID (from app.crisp.chat → Settings)
+- All scripts are injected dynamically on `initAnalytics()` — no `index.html` changes needed
+
+**Architecture:**
+- `initAnalytics()` — called once in `App.tsx` useEffect; injects GA4 + Clarity + Crisp + captures UTM params; skips in Electron
+- `RouteTracker` component in `App.tsx` — fires `page_view` on every route change via `useLocation`
+- CTA tracking via `trackCTAClick(ctaName, page)` on all marketing page buttons
+- `captureUTMParams()` — reads `utm_source/medium/campaign/term/content` from URL, stores in `sessionStorage` key `flowstral_utm`, fires `campaign_hit` GA4 event
+- `getUTMParams()` — retrieves stored UTM params for CRM/lead capture form pre-fill
+- `openCrispChat()` — programmatically opens Crisp chat widget (for "Chat with us" buttons)
+
+**Tracked Events:**
+
+| Event | Function | Where Fired |
+|-------|----------|-------------|
+| `page_view` | `trackPageView()` | `RouteTracker` (App.tsx) — every route change |
+| `cta_click` | `trackCTAClick(name, page)` | All marketing pages — headers + CTAs |
+| `sign_up` | `trackSignup(method)` | SignUpPage on successful registration |
+| `login` | `trackEvent('login')` | SignInPage on successful sign-in |
+| `pricing_view` | `trackPricingView()` | PricingPage on mount |
+| `enterprise_inquiry` | `trackEnterpriseInquiry()` | ContactPage on form submit |
+| `campaign_hit` | `captureUTMParams()` | Auto on init when URL has `utm_*` params |
+| `cost_calculator_used` | `trackEvent()` | CostCalculatorPage when ≥2 tools selected |
+| `feature_engaged` | `trackFeatureEngaged(feature)` | Available for in-app feature tracking |
+| `app_download` | `trackDownload(platform)` | Available for download tracking |
+
+**CTA Names Used:**
+- `start_free`, `sign_in`, `get_started_free`, `watch_demo`, `explore_flowpilot`
+- `talk_to_sales`, `contact_sales`, `request_demo`, `schedule_demo`, `schedule_live_demo`
+- `chat_with_us`, `start_free_trial`, `create_account_download`
+- `get_started_free_bottom`, `talk_to_sales_bottom` (pricing page bottom CTA)
+
+**Pages with tracking:**
+- `LandingPage.tsx` — hero CTAs, header, final CTA section, social proof
+- `PricingPage.tsx` — all tier CTAs, FAQ CTAs, header, pricing_view event
+- `SignUpPage.tsx` — sign_up event on successful registration
+- `SignInPage.tsx` — login event on successful sign-in
+- `DemoPage.tsx` — header, final CTA section
+- `ContactPage.tsx` — header, enterprise_inquiry on form submit
+- `DownloadPage.tsx` — header, create account CTA
+- `ComparePage.tsx` — header CTAs, comparison page CTAs
+- `CostCalculatorPage.tsx` — header CTAs, calculator CTAs, cost_calculator_used event
+- `BlogPage.tsx` — header CTAs, blog CTA section
+
+### Marketing Pages & SEO Infrastructure
+
+Marketing pages live in `src/pages/marketing/` and are public (no auth required).
+
+**Comparison Pages** (`ComparePage.tsx`, route: `/compare/:competitor`):
+- Data-driven dynamic page with 5 competitor configs: `katalon`, `selenium`, `postman`, `cypress`, `tricentis`
+- Each config has: SEO title/description, feature comparison table (14-16 rows), limitations list, switch reasons, and CTAs
+- StatusIcon component (✅ yes / ⚠️ partial / ❌ no) for visual comparison
+- Links from pricing page, cost calculator, and footer
+
+**QA Tool Cost Calculator** (`CostCalculatorPage.tsx`, route: `/tools/cost-calculator`):
+- Interactive savings estimator: users check which of 8 tool categories they use
+- Tool categories: Browser ($15-40K), API ($10-25K), Performance ($15-50K), Visual ($12-30K), Accessibility ($8-20K), Mobile ($20-60K), Salesforce ($25-80K), Test Management ($10-30K)
+- Shows: current annual spend, Flowstral cost, annual savings, per-tool breakdown, hidden savings
+- Tracks `cost_calculator_used` event when ≥2 tools selected
+- Links to comparison pages for detailed competitor analysis
+
+**Blog** (`BlogPage.tsx`, route: `/blog` and `/blog/:slug`):
+- Blog hub with 8 seed posts defined as data (can later be backed by CMS/MDX)
+- Category filtering (All, Best Practices, Migration Guides, Industry Trends, Tutorials, Salesforce, ROI & Strategy)
+- Search across titles and excerpts
+- Featured posts section for posts with `featured: true`
+- Exported `BlogPost` interface and `blogPosts` array for reuse
+
+**SEO Infrastructure:**
+- `index.html` — Enhanced meta tags (title, description, keywords, canonical URL), Open Graph, Twitter Card, Schema.org structured data (`SoftwareApplication` + `Organization`)
+- `public/sitemap.xml` — 28 URLs covering marketing, product, comparison, tools, and legal pages
+- `public/robots.txt` — Allows marketing pages, disallows app routes (/app, /recorder, /test-cases, /dashboard, /api, /performance, /admin), references sitemap
+
+**Social Proof** (in `LandingPage.tsx` `SocialProofSection`):
+- 3 testimonial cards with names, titles, star ratings, and quotes
+- 4 trust indicator badges (SOC 2 Ready, On-Prem Available, 30+ Countries, Growing Community)
+- Metrics: teams using platform, tests run, uptime percentage
 
 ### WebSocket Real-Time
 

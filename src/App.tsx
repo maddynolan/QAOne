@@ -22,7 +22,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 // Use HashRouter in Electron (file:// protocol) since BrowserRouter needs a real server.
 // BrowserRouter uses /path URLs; HashRouter uses #/path URLs which work with file://.
@@ -135,11 +135,26 @@ import DownloadPage from "./pages/marketing/DownloadPage";
 import SignInPage from "./pages/marketing/SignInPage";
 import SignUpPage from "./pages/marketing/SignUpPage";
 import WelcomePage from "./pages/marketing/WelcomePage";
+import ComparePage from "./pages/marketing/ComparePage";
+import CostCalculatorPage from "./pages/marketing/CostCalculatorPage";
+import BlogPage from "./pages/marketing/BlogPage";
 
 // Utilities
 import { dataStorageService } from "./lib/data-storage";
 
+// Web Analytics (GA4 + Clarity) — disabled in Electron
+import { initAnalytics, trackPageView } from "./lib/web-analytics";
+
 const queryClient = new QueryClient();
+
+/** Fires a GA4 page_view on every route change. Must be inside <Router>. */
+function RouteTracker() {
+  const location = useLocation();
+  useEffect(() => {
+    trackPageView(location.pathname);
+  }, [location.pathname]);
+  return null;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ELECTRON DETECTION
@@ -179,6 +194,9 @@ const RootRoute = () => {
 
 const App = () => {
   useEffect(() => {
+    // Initialize web analytics (GA4 + Clarity) — skipped in Electron
+    initAnalytics();
+
     // One-time cleanup: remove old localStorage test data
     // All data now lives in persistent database (/api/db/)
     const cleaned = localStorage.getItem('qaai_localstorage_cleaned_v3');
@@ -214,6 +232,7 @@ const App = () => {
             <Sonner />
             <AuthProvider>
               <Router>
+              <RouteTracker />
               <Routes>
                 {/* ═══════════════════════════════════════════════════════════
                     PUBLIC ROUTES
@@ -239,6 +258,10 @@ const App = () => {
                 <Route path="/signin" element={<SignInPage />} />
                 <Route path="/signup" element={<SignUpPage />} />
                 <Route path="/welcome" element={<WelcomePage />} />
+                <Route path="/compare/:competitor" element={<ComparePage />} />
+                <Route path="/tools/cost-calculator" element={<CostCalculatorPage />} />
+                <Route path="/blog" element={<BlogPage />} />
+                <Route path="/blog/:slug" element={<BlogPage />} />
                 <Route path="/resources/:page" element={<PlaceholderPage />} />
                 <Route path="/company/:page" element={<PlaceholderPage />} />
                 

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- Core Marketing Pages -->
+  <url><loc>https://flowstral.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://flowstral.com/pricing</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://flowstral.com/demo</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://flowstral.com/about</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://flowstral.com/contact</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/download</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/signup</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://flowstral.com/faq</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+
+  <!-- Product Feature Pages -->
+  <url><loc>https://flowstral.com/products/smart-recorder</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/products/visual-builder</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/products/test-management</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/products/api-testing</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/products/performance-testing</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/products/visual-testing</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/products/accessibility-testing</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/products/salesforce</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/products/flowpilot</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/products/mobile-testing</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+
+  <!-- Comparison Pages (SEO) -->
+  <url><loc>https://flowstral.com/compare/katalon</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/compare/selenium</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/compare/postman</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/compare/cypress</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://flowstral.com/compare/tricentis</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+
+  <!-- Tools -->
+  <url><loc>https://flowstral.com/tools/cost-calculator</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+
+  <!-- Legal -->
+  <url><loc>https://flowstral.com/terms</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://flowstral.com/privacy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+</urlset>

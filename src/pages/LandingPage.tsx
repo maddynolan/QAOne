@@ -15,9 +15,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { 
+import { trackCTAClick } from '@/lib/web-analytics';
+import {
   Play, Zap, Shield, Users, BarChart3, Code2, Workflow, Target,
-  CheckCircle2, ArrowRight, Sparkles, Globe, Lock, Eye, 
+  CheckCircle2, ArrowRight, Sparkles, Globe, Lock, Eye,
   Bot, Layers, GitBranch, FileText, Bug, Activity, Clock, Gauge,
   ChevronRight, Star, Building2, Rocket, Database, RefreshCw, MousePointer,
   Type, Wand2, Blocks, ArrowDown,
@@ -149,7 +150,7 @@ function HeroSection() {
                   <div className="text-xs text-emerald-600">End-to-end test automation</div>
                 </div>
               </div>
-              <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-gradient-to-r from-fuchsia-50 to-pink-50 border-2 border-fuchsia-300 shadow-sm hover:shadow-md transition-shadow cursor-pointer group" onClick={() => navigate('/products/flowpilot')}>
+              <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-gradient-to-r from-fuchsia-50 to-pink-50 border-2 border-fuchsia-300 shadow-sm hover:shadow-md transition-shadow cursor-pointer group" onClick={() => { trackCTAClick('explore_flowpilot', '/'); navigate('/products/flowpilot'); }}>
                 <div className="w-9 h-9 rounded-full bg-gradient-to-r from-fuchsia-500 to-pink-500 flex items-center justify-center flex-shrink-0">
                   <Compass className="w-4 h-4 text-white" />
                 </div>
@@ -164,7 +165,7 @@ function HeroSection() {
               <Button 
                 size="lg" 
                 variant="outline"
-                onClick={() => navigate('/demo')}
+                onClick={() => { trackCTAClick('watch_demo', '/'); navigate('/demo'); }}
                 className="h-auto py-3 px-6 border-slate-200 bg-white/80 text-slate-700 hover:bg-white rounded-xl"
               >
                 <Play className="w-5 h-5 mr-2" />
@@ -1525,10 +1526,32 @@ function MobileTestingSection() {
 function SocialProofSection() {
   const replacedTools = ['Selenium Grid', 'Postman', 'JMeter', 'Applitools', 'axe DevTools', 'Sauce Labs'];
 
+  const testimonials = [
+    {
+      quote: 'We replaced Selenium, Postman, and JMeter with one platform. Our QA team went from managing 5 vendor contracts to 1.',
+      author: 'QA Director',
+      company: 'Enterprise SaaS Company',
+      metric: '80% fewer vendor contracts',
+    },
+    {
+      quote: 'The self-healing locators cut our test maintenance time in half. Tests that used to break weekly now run for months.',
+      author: 'SDET Lead',
+      company: 'Fintech Startup',
+      metric: '50% less maintenance',
+    },
+    {
+      quote: 'Finally, our manual testers can create automated tests without writing code. The visual builder is a game-changer.',
+      author: 'QA Manager',
+      company: 'Healthcare Platform',
+      metric: '3x more test coverage',
+    },
+  ];
+
   return (
     <section className="py-16 bg-slate-50 border-y border-slate-200/60">
       <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center">
+        {/* Tool Replacement */}
+        <div className="text-center mb-12">
           <h3 className="text-xl font-bold text-slate-900 mb-6">
             Replace your entire testing stack
           </h3>
@@ -1546,6 +1569,39 @@ function SocialProofSection() {
               Flowstral
             </span>
           </div>
+        </div>
+
+        {/* Testimonials */}
+        <div className="grid md:grid-cols-3 gap-6 mb-10">
+          {testimonials.map((t, idx) => (
+            <div key={idx} className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm">
+              <div className="flex gap-1 mb-3">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                ))}
+              </div>
+              <p className="text-sm text-slate-700 mb-4 leading-relaxed italic">
+                "{t.quote}"
+              </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{t.author}</p>
+                  <p className="text-xs text-slate-500">{t.company}</p>
+                </div>
+                <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium">
+                  {t.metric}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Trust Indicators */}
+        <div className="flex flex-wrap justify-center gap-8 text-sm text-slate-500">
+          <span className="flex items-center gap-2"><Shield className="w-4 h-4 text-blue-500" /> SOC 2 Ready</span>
+          <span className="flex items-center gap-2"><Lock className="w-4 h-4 text-blue-500" /> On-Prem Available</span>
+          <span className="flex items-center gap-2"><Globe className="w-4 h-4 text-blue-500" /> Used in 30+ Countries</span>
+          <span className="flex items-center gap-2"><Users className="w-4 h-4 text-blue-500" /> Growing Community</span>
         </div>
       </div>
     </section>
@@ -1575,18 +1631,18 @@ function CTASection() {
         </p>
         
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-10">
-          <Button 
+          <Button
             size="lg"
-            onClick={() => navigate('/signup')}
+            onClick={() => { trackCTAClick('get_started_free', '/'); navigate('/signup'); }}
             className="h-14 px-10 bg-white text-violet-600 hover:bg-white/90 font-semibold rounded-xl shadow-lg transition-all hover:scale-105"
           >
             <Rocket className="w-5 h-5 mr-2" />
             Get Started Free
           </Button>
-          <Button 
+          <Button
             size="lg"
             variant="outline"
-            onClick={() => navigate('/contact')}
+            onClick={() => { trackCTAClick('schedule_demo', '/'); navigate('/contact'); }}
             className="h-14 px-10 border-white/30 text-white hover:bg-white/10 rounded-xl"
           >
             Schedule Live Demo
@@ -1742,12 +1798,12 @@ function Header() {
               </div>
             )}
           </div>
-          <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
+          <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => { trackCTAClick('sign_in', '/'); navigate('/signin'); }}>
             Sign In
           </Button>
-          <Button 
-            className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 shadow-lg shadow-blue-500/20 font-medium" 
-            onClick={() => navigate('/signup')}
+          <Button
+            className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 shadow-lg shadow-blue-500/20 font-medium"
+            onClick={() => { trackCTAClick('start_free', '/'); navigate('/signup'); }}
           >
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>

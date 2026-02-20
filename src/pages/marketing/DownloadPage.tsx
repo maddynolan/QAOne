@@ -4,8 +4,9 @@
 
 import React, { useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { 
-  ArrowRight, Download, Monitor, Apple, Shield, Zap, 
+import { trackCTAClick, trackDownload } from '@/lib/web-analytics';
+import {
+  ArrowRight, Download, Monitor, Apple, Shield, Zap,
   Lock, UserPlus, CheckCircle2, Rocket
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -27,10 +28,10 @@ export default function DownloadPage() {
             <span className="text-xl font-bold text-slate-800">Flowstral</span>
           </Link>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
+            <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => { trackCTAClick('sign_in', '/download'); navigate('/signin'); }}>
               Sign In
             </Button>
-            <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => navigate('/signup')}>
+            <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => { trackCTAClick('start_free', '/download'); navigate('/signup'); }}>
               Start Free <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
@@ -73,7 +74,7 @@ export default function DownloadPage() {
 
             <Button
               size="lg"
-              onClick={() => navigate('/signup')}
+              onClick={() => { trackCTAClick('create_account_download', '/download'); navigate('/signup'); }}
               className="w-full h-14 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold rounded-xl shadow-lg shadow-emerald-500/20"
             >
               <Rocket className="w-5 h-5 mr-2" />

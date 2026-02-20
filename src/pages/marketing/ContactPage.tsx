@@ -4,7 +4,8 @@
 
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { 
+import { trackCTAClick, trackEnterpriseInquiry } from '@/lib/web-analytics';
+import {
   ArrowRight, Mail, Phone, MapPin, MessageSquare, Send,
   Clock, Globe, Building2
 } from 'lucide-react';
@@ -45,10 +46,10 @@ function MarketingHeader() {
           </nav>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
+          <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => { trackCTAClick('sign_in', '/contact'); navigate('/signin'); }}>
             Sign In
           </Button>
-          <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => navigate('/signup')}>
+          <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => { trackCTAClick('start_free', '/contact'); navigate('/signup'); }}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -68,7 +69,8 @@ export default function ContactPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+    trackEnterpriseInquiry();
+
     // Capture lead for tracking (non-blocking)
     captureContactLead(
       formData.email,

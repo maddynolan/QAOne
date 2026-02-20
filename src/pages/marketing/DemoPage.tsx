@@ -4,8 +4,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { 
-  ArrowRight, Play, Pause, SkipForward, RotateCcw, CheckCircle2, 
+import { trackCTAClick } from '@/lib/web-analytics';
+import {
+  ArrowRight, Play, Pause, SkipForward, RotateCcw, CheckCircle2,
   MousePointer, Type, Eye, Zap, Database, BarChart3, Shield, Workflow,
   ChevronRight, ChevronLeft, Maximize2, Volume2, VolumeX, Code,
   Compass, Map, Sparkles, RefreshCw, Target, Smartphone, Wifi, Globe
@@ -46,10 +47,10 @@ function MarketingHeader() {
           </nav>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
+          <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => { trackCTAClick('sign_in', '/demo'); navigate('/signin'); }}>
             Sign In
           </Button>
-          <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => navigate('/signup')}>
+          <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => { trackCTAClick('start_free', '/demo'); navigate('/signup'); }}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -1032,17 +1033,17 @@ export default function DemoPage() {
             Experience the power of Flowstral firsthand. Start your free trial today.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
-            <Button 
-              size="lg" 
-              onClick={() => navigate('/signup')}
+            <Button
+              size="lg"
+              onClick={() => { trackCTAClick('start_free_trial', '/demo'); navigate('/signup'); }}
               className="h-12 px-8 bg-white text-violet-600 hover:bg-slate-100 shadow-lg"
             >
               Start Free Trial <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
-            <Button 
-              size="lg" 
-              variant="outline" 
-              onClick={() => navigate('/contact')}
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={() => { trackCTAClick('schedule_live_demo', '/demo'); navigate('/contact'); }}
               className="h-12 px-8 border-white/30 text-white hover:bg-white/10"
             >
               Schedule Live Demo
