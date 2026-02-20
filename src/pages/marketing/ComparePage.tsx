@@ -301,12 +301,20 @@ export default function ComparePage() {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/50">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <span className="text-white font-bold text-lg">F</span>
-            </div>
-            <span className="text-xl font-bold text-slate-800">Flowstral</span>
-          </Link>
+          <div className="flex items-center gap-8">
+            <Link to="/" className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                <span className="text-white font-bold text-lg">F</span>
+              </div>
+              <span className="text-xl font-bold text-slate-800">Flowstral</span>
+            </Link>
+            <nav className="hidden md:flex items-center gap-6">
+              <Link to="/pricing" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Pricing</Link>
+              <Link to="/compare/katalon" className="text-sm text-blue-600 font-semibold">Compare</Link>
+              <Link to="/blog" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Blog</Link>
+              <Link to="/about" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">About</Link>
+            </nav>
+          </div>
           <div className="flex items-center gap-3">
             <Button variant="ghost" onClick={() => { trackCTAClick('sign_in', `/compare/${slug}`); navigate('/signin'); }}>Sign In</Button>
             <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => { trackCTAClick('start_free', `/compare/${slug}`); navigate('/signup'); }}>

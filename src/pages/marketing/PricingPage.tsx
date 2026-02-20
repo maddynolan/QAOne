@@ -45,7 +45,8 @@ function MarketingHeader() {
           <nav className="hidden md:flex items-center gap-6">
             <Link to="/#features" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Features</Link>
             <Link to="/pricing" className="text-sm text-blue-600 font-semibold">Pricing</Link>
-            <Link to="/resources/docs" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Docs</Link>
+            <Link to="/compare/katalon" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Compare</Link>
+            <Link to="/blog" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Blog</Link>
             <Link to="/about" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">About</Link>
           </nav>
         </div>
@@ -705,6 +706,30 @@ export default function PricingPage() {
         </div>
       </section>
 
+      {/* Compare Section */}
+      <section className="py-16 px-6 bg-slate-50 border-t border-slate-200">
+        <div className="max-w-5xl mx-auto text-center">
+          <h2 className="text-2xl font-bold text-slate-900 mb-3">See How Flowstral Compares</h2>
+          <p className="text-slate-600 mb-8">Detailed side-by-side comparisons with tools you might be using today</p>
+          <div className="flex flex-wrap justify-center gap-3">
+            {[
+              { name: 'vs Katalon', path: '/compare/katalon' },
+              { name: 'vs Selenium', path: '/compare/selenium' },
+              { name: 'vs Postman', path: '/compare/postman' },
+              { name: 'vs Cypress', path: '/compare/cypress' },
+              { name: 'vs Tricentis', path: '/compare/tricentis' },
+            ].map(comp => (
+              <Button key={comp.path} variant="outline" className="rounded-xl h-11 px-5" onClick={() => navigate(comp.path)}>
+                {comp.name} <ArrowRight className="w-4 h-4 ml-1.5" />
+              </Button>
+            ))}
+          </div>
+          <p className="mt-6 text-sm text-slate-500">
+            Or try our <span className="text-blue-600 cursor-pointer hover:underline font-medium" onClick={() => navigate('/tools/cost-calculator')}>Cost Calculator</span> to see how much you'd save by consolidating
+          </p>
+        </div>
+      </section>
+
       {/* Final CTA */}
       <section className="py-20 px-6 bg-gradient-to-r from-blue-600 via-violet-600 to-blue-600">
         <div className="max-w-4xl mx-auto text-center">
@@ -734,7 +759,16 @@ export default function PricingPage() {
 
       {/* Footer */}
       <footer className="py-8 px-6 bg-slate-900 text-center">
-        <p className="text-slate-400 text-sm">&copy; 2026 Flowstral. All rights reserved.</p>
+        <div className="flex flex-wrap justify-center gap-6 text-sm text-slate-400 mb-4">
+          <Link to="/compare/katalon" className="hover:text-white transition-colors">Compare</Link>
+          <Link to="/tools/cost-calculator" className="hover:text-white transition-colors">Cost Calculator</Link>
+          <Link to="/blog" className="hover:text-white transition-colors">Blog</Link>
+          <Link to="/demo" className="hover:text-white transition-colors">Demo</Link>
+          <Link to="/about" className="hover:text-white transition-colors">About</Link>
+          <Link to="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+          <Link to="/terms" className="hover:text-white transition-colors">Terms</Link>
+        </div>
+        <p className="text-slate-500 text-xs">&copy; {new Date().getFullYear()} Flowstral Inc. All rights reserved.</p>
       </footer>
     </div>
   );

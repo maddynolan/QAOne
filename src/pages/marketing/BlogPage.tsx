@@ -134,6 +134,7 @@ export default function BlogPage() {
           <nav className="hidden md:flex items-center gap-6">
             <Link to="/#features" className="text-sm text-slate-600 hover:text-slate-900 font-medium">Features</Link>
             <Link to="/pricing" className="text-sm text-slate-600 hover:text-slate-900 font-medium">Pricing</Link>
+            <Link to="/compare/katalon" className="text-sm text-slate-600 hover:text-slate-900 font-medium">Compare</Link>
             <Link to="/blog" className="text-sm text-blue-600 font-semibold">Blog</Link>
             <Link to="/about" className="text-sm text-slate-600 hover:text-slate-900 font-medium">About</Link>
           </nav>

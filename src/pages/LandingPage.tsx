@@ -1709,6 +1709,8 @@ function Header() {
           <nav className="hidden md:flex items-center gap-6">
             <a href="#features" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Features</a>
             <span onClick={() => navigate('/pricing')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium cursor-pointer">Pricing</span>
+            <span onClick={() => navigate('/compare/katalon')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium cursor-pointer">Compare</span>
+            <span onClick={() => navigate('/blog')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium cursor-pointer">Blog</span>
             <span onClick={() => navigate('/download')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium cursor-pointer">Download</span>
             <span onClick={() => navigate('/about')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium cursor-pointer">About</span>
           </nav>
@@ -1828,10 +1830,18 @@ function Footer() {
     ],
     Resources: [
       { name: 'Documentation', href: '/resources/docs' },
+      { name: 'Blog', href: '/blog' },
       { name: 'Watch Demo', href: '/demo' },
       { name: 'FAQ', href: '/faq' },
-      { name: 'Community', href: '/resources/community' },
+      { name: 'Cost Calculator', href: '/tools/cost-calculator' },
       { name: 'Support', href: '/contact' },
+    ],
+    Compare: [
+      { name: 'vs Katalon', href: '/compare/katalon' },
+      { name: 'vs Selenium', href: '/compare/selenium' },
+      { name: 'vs Postman', href: '/compare/postman' },
+      { name: 'vs Cypress', href: '/compare/cypress' },
+      { name: 'vs Tricentis', href: '/compare/tricentis' },
     ],
     Company: [
       { name: 'About Us', href: '/about' },
@@ -1845,7 +1855,7 @@ function Footer() {
   return (
     <footer className="bg-slate-900 text-white">
       <div className="max-w-7xl mx-auto px-6 py-16">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
             <div className="flex items-center gap-2.5 mb-4 cursor-pointer" onClick={() => navigate('/')}>
