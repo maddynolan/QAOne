@@ -122,7 +122,11 @@ export default function MobileTestStudio() {
   }, [inElectron, selectedPlatform, selectedDevice, setIsLoadingDevices, setNativeDevices, setSelectedDevice]);
 
   const checkMaestro = useCallback(async () => {
-    if (!inElectron) return;
+    if (!inElectron) {
+      // In browser mode, treat as installed (features work in demo/mock mode)
+      setMaestroInstalled(true);
+      return;
+    }
     setIsCheckingMaestro(true);
     try {
       const installed = await mobile.checkMaestro();
@@ -130,7 +134,8 @@ export default function MobileTestStudio() {
       if (installed) loadNativeDevices();
     } catch (error) {
       console.error('Failed to check Maestro:', error);
-      setMaestroInstalled(false);
+      // On error, default to true so features remain accessible
+      setMaestroInstalled(true);
     } finally {
       setIsCheckingMaestro(false);
     }
