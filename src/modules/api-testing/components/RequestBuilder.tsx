@@ -726,6 +726,28 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
         if (Array.isArray(backendResults) && backendResults.length > 0) {
           setAssertionResults(backendResults.map((r: any, i: number) => {
             const src = assertions[i]; // cross-reference configured assertion by index
+            const op = src?.operator ?? r.operator ?? "";
+            // If backend returned a length operator result, re-evaluate client-side for accuracy
+            if (src?.type === "jsonpath" && (op === "length_equals" || op === "length_greater_than" || op === "length_less_than")) {
+              try {
+                const bodyObj = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+                const val = jsonPathValue(bodyObj, src.path);
+                const len = Array.isArray(val) ? val.length
+                  : typeof val === "string" ? val.length
+                  : (val && typeof val === "object") ? Object.keys(val).length : 0;
+                const expectedLen = parseInt(src.expected) || 0;
+                const passed = op === "length_equals" ? len === expectedLen
+                  : op === "length_greater_than" ? len > expectedLen
+                  : len < expectedLen;
+                return {
+                  passed,
+                  message: `JSONPath "${src.path}" length: ${passed ? "passed" : `expected ${op.replace("length_", "")} ${expectedLen}, got ${len}`}`,
+                  type: "jsonpath", path: src.path,
+                  expected: `${op === "length_equals" ? "==" : op === "length_greater_than" ? ">" : "<"} ${expectedLen}`,
+                  actual: String(len),
+                };
+              } catch { /* fall through to default mapping */ }
+            }
             return {
               passed: !!r.passed,
               message: r.message ?? (r.actual !== undefined || r.expected !== undefined

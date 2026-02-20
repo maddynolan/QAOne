@@ -500,6 +500,36 @@ class EnhancedAssertionEngine:
                     passed = any(float(match) < float(expected) for match in matches)
                 except (ValueError, TypeError):
                     passed = False
+            elif operator in ("length_equals", "length_greater_than", "length_less_than") and expected is not None:
+                # Length operators: get length of array, string, or object keys
+                try:
+                    expected_len = int(expected)
+                except (ValueError, TypeError):
+                    expected_len = 0
+                val = matches[0] if matches else None
+                if isinstance(val, list):
+                    length = len(val)
+                elif isinstance(val, str):
+                    length = len(val)
+                elif isinstance(val, dict):
+                    length = len(val)
+                else:
+                    length = 0
+                if operator == "length_equals":
+                    passed = length == expected_len
+                elif operator == "length_greater_than":
+                    passed = length > expected_len
+                else:
+                    passed = length < expected_len
+                actual = length
+                return AssertionResult(
+                    "jsonpath",
+                    name,
+                    passed,
+                    expected=expected,
+                    actual=length,
+                    message=f"JSONPath '{path}' length: {'matched' if passed else f'expected {operator.replace(\"length_\", \"\")} {expected_len}, got {length}'}"
+                )
             elif expected is not None and expected != "":
                 # Default: equals comparison
                 passed = any(str(match) == str(expected) for match in matches)
