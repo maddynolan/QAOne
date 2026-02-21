@@ -496,7 +496,15 @@ class RequestChainEngine:
         end_time = datetime.utcnow()
         chain_result.total_duration_ms = (end_time - start_time).total_seconds() * 1000
         chain_result.end_time = end_time.isoformat()
-        chain_result.final_variables = dict(self.variables)
+        # Filter out auto-generated step metadata variables (status_code, response_time)
+        # They are kept in self.variables for inter-step references during execution,
+        # but should not clutter the final output — that data is already in step_results.
+        step_ids = {step.id for step in steps}
+        auto_suffixes = ("_status_code", "_response_time")
+        chain_result.final_variables = {
+            k: v for k, v in self.variables.items()
+            if not any(k == f"{sid}{suffix}" for sid in step_ids for suffix in auto_suffixes)
+        }
 
         # Determine overall status
         if chain_result.failed_steps == 0:

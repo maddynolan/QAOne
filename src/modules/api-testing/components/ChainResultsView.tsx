@@ -107,30 +107,40 @@ export default function ChainResultsView({ result }: ChainResultsViewProps) {
         </CardContent>
       </Card>
 
-      {/* Variables panel */}
-      {Object.keys(result.final_variables).length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <ArrowDownToLine className="w-5 h-5" />
-              Final Variables
-            </CardTitle>
-            <CardDescription>Values extracted during chain execution</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {Object.entries(result.final_variables).map(([key, value]) => (
-                <div key={key} className="p-2 bg-muted rounded-lg">
-                  <p className="text-xs font-medium text-muted-foreground">${`{${key}}`}</p>
-                  <p className="text-sm font-mono truncate" title={String(value)}>
-                    {String(value)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Variables panel — only user-defined extractions, filter out auto-generated step metadata */}
+      {(() => {
+        const stepIds = new Set(result.step_results.map((sr) => sr.step_id));
+        const autoSuffixes = ["_status_code", "_response_time"];
+        const userVars = Object.entries(result.final_variables).filter(
+          ([key]) => !Array.from(stepIds).some((sid) =>
+            autoSuffixes.some((suffix) => key === `${sid}${suffix}`)
+          )
+        );
+        if (userVars.length === 0) return null;
+        return (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ArrowDownToLine className="w-5 h-5" />
+                Extracted Variables
+              </CardTitle>
+              <CardDescription>Values extracted during chain execution</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {userVars.map(([key, value]) => (
+                  <div key={key} className="p-2 bg-muted rounded-lg">
+                    <p className="text-xs font-medium text-muted-foreground">${`{${key}}`}</p>
+                    <p className="text-sm font-mono truncate" title={String(value)}>
+                      {String(value)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
     </div>
   );
 }
