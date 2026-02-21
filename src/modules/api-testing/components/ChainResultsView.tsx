@@ -8,7 +8,6 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CheckCircle2, XCircle, Clock, ArrowDownToLine, SkipForward,
@@ -292,11 +291,11 @@ function StepResultRow({ stepResult, index }: { stepResult: ChainStepResult; ind
                   >
                     <Copy className="w-3.5 h-3.5" />
                   </Button>
-                  <ScrollArea className="max-h-[400px] w-full">
-                    <pre className="text-xs font-mono p-3 bg-muted/50 rounded-lg whitespace-pre-wrap break-all overflow-x-auto">
-                      {formatBody(stepResult.response_body)}
+                  <div className="max-h-[400px] overflow-auto rounded-lg border bg-muted/50">
+                    <pre className="text-xs font-mono p-3 whitespace-pre">
+{formatBody(stepResult.response_body)}
                     </pre>
-                  </ScrollArea>
+                  </div>
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground italic p-3">No response body</p>
@@ -322,16 +321,16 @@ function StepResultRow({ stepResult, index }: { stepResult: ChainStepResult; ind
                   >
                     <Copy className="w-3.5 h-3.5" />
                   </Button>
-                  <ScrollArea className="max-h-[300px] w-full">
-                    <div className="space-y-0.5 p-2 bg-muted/50 rounded-lg">
+                  <div className="max-h-[300px] overflow-auto rounded-lg border bg-muted/50">
+                    <div className="space-y-0.5 p-2 min-w-max">
                       {Object.entries(stepResult.response_headers).map(([name, value]) => (
                         <div key={name} className="flex items-start gap-2 py-1 px-2 rounded hover:bg-muted/80 group">
                           <span className="font-mono text-xs font-semibold text-primary whitespace-nowrap">{name}:</span>
-                          <span className="font-mono text-xs text-muted-foreground break-all">{value}</span>
+                          <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">{value}</span>
                         </div>
                       ))}
                     </div>
-                  </ScrollArea>
+                  </div>
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground italic p-3">No response headers</p>

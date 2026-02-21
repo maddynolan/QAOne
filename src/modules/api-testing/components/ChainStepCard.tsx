@@ -16,7 +16,6 @@ import {
   ChevronDown, ChevronUp, Trash2, GripVertical, Plus,
   ArrowDownToLine, CheckCircle2, GitBranch, Settings, FileJson, Copy,
 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import AssertionsPanel from "./AssertionsPanel";
 import {
   HTTP_METHODS,
@@ -502,13 +501,13 @@ export default function ChainStepCard({
                       >
                         <Copy className="w-3.5 h-3.5" />
                       </Button>
-                      <ScrollArea className="max-h-[350px] w-full">
-                        <pre className="text-xs font-mono p-3 bg-muted/50 rounded-lg whitespace-pre-wrap break-all">
-                          {typeof result.response_body === "string"
+                      <div className="max-h-[350px] overflow-auto rounded-lg border bg-muted/50">
+                        <pre className="text-xs font-mono p-3 whitespace-pre">
+{typeof result.response_body === "string"
                             ? (() => { try { return JSON.stringify(JSON.parse(result.response_body), null, 2); } catch { return result.response_body; } })()
                             : JSON.stringify(result.response_body, null, 2)}
                         </pre>
-                      </ScrollArea>
+                      </div>
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground italic">No response body</p>
@@ -536,16 +535,16 @@ export default function ChainStepCard({
                       >
                         <Copy className="w-3.5 h-3.5" />
                       </Button>
-                      <ScrollArea className="max-h-[250px] w-full">
-                        <div className="space-y-0.5 p-2 bg-muted/50 rounded-lg">
+                      <div className="max-h-[250px] overflow-auto rounded-lg border bg-muted/50">
+                        <div className="space-y-0.5 p-2 min-w-max">
                           {Object.entries(result.response_headers).map(([name, value]) => (
                             <div key={name} className="flex items-start gap-2 py-1 px-2 rounded hover:bg-muted/80">
                               <span className="font-mono text-xs font-semibold text-primary whitespace-nowrap">{name}:</span>
-                              <span className="font-mono text-xs text-muted-foreground break-all">{value}</span>
+                              <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">{value}</span>
                             </div>
                           ))}
                         </div>
-                      </ScrollArea>
+                      </div>
                     </div>
                   </div>
                 )}
