@@ -2001,7 +2001,7 @@ export default function Performance() {
                           onClick={async () => {
                             try {
                               toast.info('Generating report...');
-                              const res = await fetch(`${API_BASE_URL}/api/performance/report/generate`, {
+                              const res = await fetch(`${API_BASE_URL}/api/performance/reports/generate`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({

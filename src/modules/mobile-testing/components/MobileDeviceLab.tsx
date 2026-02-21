@@ -108,6 +108,14 @@ export default function MobileDeviceLab() {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [deviceLogs]);
 
+  // Cleanup log listener on unmount
+  useEffect(() => {
+    return () => {
+      (window as any).__mobileLogUnsub?.();
+      mobile.stopLogs().catch(() => {});
+    };
+  }, []);
+
   const handleInstallApp = async () => {
     if (!installPath.trim()) {
       toast.error('Please enter the app path (.apk or .ipa)');

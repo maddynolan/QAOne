@@ -23,7 +23,7 @@ wcag_pipeline = WCAGPipeline()
 accessibility_agent = AccessibilityAgent()
 
 
-async def run_axe_core_scan(url: str, component_selector: Optional[str] = None) -> Dict[str, Any]:
+async def run_axe_core_scan(url: str, component_selector: Optional[str] = None, wcag_level: str = "AA", wcag_version: str = "2.1") -> Dict[str, Any]:
     """
     Run axe-core accessibility scan using Playwright via subprocess.
     Uses subprocess to completely isolate Playwright from uvicorn's event loop
@@ -33,25 +33,23 @@ async def run_axe_core_scan(url: str, component_selector: Optional[str] = None) 
     import sys
     import json
     import os
-    
+
     violations = []
     html_content = ""
-    
+
     try:
         # Path to the scanner script
         script_path = os.path.join(
-            os.path.dirname(__file__), 
+            os.path.dirname(__file__),
             "..", "services", "accessibility", "axe_scanner.py"
         )
         script_path = os.path.abspath(script_path)
-        
+
         logger.info(f"[A11Y] Scanner script path: {script_path}")
         logger.info(f"[A11Y] Script exists: {os.path.exists(script_path)}")
-        
-        # Build command
-        cmd = [sys.executable, script_path, url]
-        if component_selector:
-            cmd.append(component_selector)
+
+        # Build command — pass component_selector (or "None"), wcag_level, wcag_version
+        cmd = [sys.executable, script_path, url, component_selector or "None", wcag_level, wcag_version]
         
         logger.info(f"[A11Y] Running axe-core scan via subprocess: {url}")
         logger.info(f"[A11Y] Command: {' '.join(cmd)}")
@@ -98,6 +96,7 @@ class ScanRequest(BaseModel):
     component_selector: Optional[str] = None
     project_id: Optional[str] = None
     wcag_level: str = "AA"  # A, AA, AAA
+    wcag_version: str = "2.1"  # 2.0, 2.1, 2.2
 
 
 class SiteWideScanRequest(BaseModel):
@@ -175,7 +174,9 @@ async def scan_page(
         # Run actual axe-core scan using Playwright
         axe_result = await run_axe_core_scan(
             url=request.url,
-            component_selector=request.component_selector if request.scan_type == "component" else None
+            component_selector=request.component_selector if request.scan_type == "component" else None,
+            wcag_level=request.wcag_level,
+            wcag_version=request.wcag_version,
         )
         
         axe_violations = axe_result.get("violations", [])
