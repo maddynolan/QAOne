@@ -166,7 +166,7 @@ Create and manage environments with:
 - Variable resolution with `{{var}}` syntax
 - Persisted via API and localStorage
 
-**Database connectivity:** PostgreSQL, MySQL, SQLite, MongoDB, MSSQL for data-driven testing.
+**Database connectivity:** PostgreSQL, MySQL, SQLite, MongoDB, MSSQL for data-driven testing and database assertions. See the [Database Integration](#database-integration) section below for full details.
 
 ### 6. Results (Reports & Export)
 
@@ -191,6 +191,154 @@ The sidebar is the organizational backbone:
 - **Context menu**: right-click for full actions (edit, delete, duplicate, move to folder)
 - **Run buttons**: run single request, run all in folder, run entire collection
 - **Persistence**: immediate save (`_saveCollectionNow`) for user-initiated mutations, debounced save for bulk operations, backend sync with `updated_at` timestamp comparison
+
+## Database Integration
+
+The API testing module includes deep database integration for data-driven testing, post-request assertions, and interactive schema exploration. Supports PostgreSQL, MySQL, SQLite, MongoDB, and MSSQL.
+
+### Database Workbench (Frontend)
+
+**Location:** `src/modules/api-testing/pages/EnhancedAPITesting.tsx` — rendered in the Environments tab, replacing the old minimal DB connection card.
+
+The Database Workbench is a full-featured database interaction panel with 4 sections:
+
+**1. Connection Form** (collapsible via `<details>`):
+- Auto-collapses when active connections exist, open by default when none
+- Fields: Connection ID, DB type (PostgreSQL/MySQL/SQLite/MongoDB/MSSQL), host, port, database name, username, password
+- Connects via `POST /api/v2/testing/database/connect`
+
+**2. Active Connections List:**
+- Shows all active connections with green status dot, connection ID, and DB type badge
+- Per-connection **Disconnect** button (red X) → `DELETE /api/v2/testing/database/{connection_id}`
+- Refresh button to reload connections from `GET /api/v2/testing/database/connections`
+
+**3. Schema Browser** (`DbSchemaBrowser` inline component):
+- Select a connection from dropdown → fetches tables via `GET /api/v2/testing/database/{connection_id}/tables`
+- Displays table list with table name, type (TABLE/VIEW), and estimated row count
+- Click a table → fetches columns via `GET /api/v2/testing/database/{connection_id}/tables/{table_name}/columns`
+- Column details show: column name, data type, nullable status (YES/NO badge), default value, and primary key indicator (key icon)
+
+**4. SQL Query Editor** (`DbQueryEditor` inline component):
+- Connection selector dropdown + SQL query textarea
+- Execute with button or **Ctrl+Enter** keyboard shortcut
+- Shows execution time in milliseconds
+- Results displayed in a scrollable table with column headers auto-detected from response
+- **Copy CSV** and **Copy JSON** buttons for result export
+- **Query History**: collapsible list of last 20 queries per session; click any to reload into textarea
+
+### Database Assertions (12th Assertion Type)
+
+**Constants:** `src/modules/api-testing/components/constants.ts`
+
+The `database` assertion type validates database state after an API call completes. It uses 7 specialized operators defined in `DB_ASSERTION_OPERATORS`:
+
+| Operator | Label | Description |
+|----------|-------|-------------|
+| `equals` | Result Equals | Query result matches expected value |
+| `contains` | Result Contains | Query result contains expected substring |
+| `count` | Row Count Equals | Number of result rows equals expected |
+| `greater_than` | Row Count Greater Than | Row count exceeds threshold |
+| `less_than` | Row Count Less Than | Row count below threshold |
+| `not_empty` | Not Empty | Query returns at least one row |
+| `is_empty` | Is Empty | Query returns zero rows |
+
+**AssertionConfig type** (updated):
+```typescript
+interface AssertionConfig {
+  id: string;
+  type: string;         // "database" for DB assertions
+  name: string;
+  expected: string;
+  path: string;
+  operator: string;
+  schema: string;
+  db_connection_id?: string;  // Which active DB connection to use
+  db_query?: string;          // SQL query to run after API call
+  db_comparison?: string;     // DB_ASSERTION_OPERATORS value
+}
+```
+
+**AssertionsPanel UI** (`src/modules/api-testing/components/AssertionsPanel.tsx`):
+When `type="database"` is selected, the panel shows a specialized form:
+- **Connection selector** dropdown (populated from `dbConnections` prop) with Database icon per option
+- **SQL query** textarea for the assertion query
+- **Comparison mode** dropdown with `DB_ASSERTION_OPERATORS`
+- **Expected value** input (hidden for `not_empty`/`is_empty` operators)
+
+The `dbConnections` prop flows from `EnhancedAPITesting.tsx` → `RequestBuilder.tsx` → `AssertionsPanel.tsx`.
+
+### Data-Driven Testing from Database
+
+**Component:** `src/modules/api-testing/components/DataDrivenPanel.tsx`
+
+The DataDrivenPanel has 3 data source tabs: **File Upload**, **Inline**, and **Database Query**.
+
+**Database Query tab** (`TabsContent value="database"`):
+- Connection selector dropdown (from `dbConnections` prop passed by `EnhancedAPITesting.tsx`)
+- SQL query input for the data extraction query
+- Row limit input (default: 100)
+- **Load Data** button triggers `handleDatabaseQuery()`:
+  1. Calls `POST /api/v2/testing/data-driven/source` with `source_type: "database_query"`, `connection_id`, `query`, `row_limit`
+  2. Backend's `DataDrivenEngine.create_database_source()` executes the query via `DatabaseConnector.extract_test_data()`
+  3. Results wrapped in `InlineDataSource` and returned with preview data
+  4. Frontend displays row count and data preview table
+
+### Backend Services
+
+**DatabaseConnector** (`backend/app/services/api_testing/database_connector.py`):
+
+| Method | Purpose | Returns |
+|--------|---------|---------|
+| `connect(config)` | Establish DB connection | `connection_id` |
+| `execute_query(connection_id, query)` | Run SQL query | `List[Dict]` rows |
+| `extract_test_data(connection_id, query, limit)` | Query with auto-LIMIT | `List[Dict]` rows |
+| `list_tables(connection_id)` | List all tables/collections | `List[{table_name, table_type, row_count}]` |
+| `get_table_columns(connection_id, table_name)` | Get column metadata | `List[{column_name, data_type, is_nullable, column_default, is_primary_key}]` |
+| `assert_database_state(connection_id, query, operator, expected)` | Run assertion query | `{passed, actual, expected, message}` |
+| `disconnect(connection_id)` | Close and remove connection | `bool` |
+| `get_active_connections()` | List active connections | `List[Dict]` |
+
+**Table listing** uses database-specific SQL:
+- **PostgreSQL**: `information_schema.tables` + `pg_stat_user_tables` for row estimates
+- **MySQL**: `information_schema.tables` with `TABLE_ROWS`
+- **SQLite**: `sqlite_master WHERE type='table'`
+- **MongoDB**: `list_collection_names()` with `estimated_document_count()`
+- **MSSQL**: `information_schema.tables` + `sys.dm_db_partition_stats` for row estimates
+
+**Column metadata** uses database-specific queries:
+- **PostgreSQL/MySQL/MSSQL**: `information_schema.columns` joined with constraint info for PK detection
+- **SQLite**: `PRAGMA table_info(table_name)`
+- **MongoDB**: Samples first document and infers field types
+
+**DataDrivenEngine** (`backend/app/services/api_testing/data_driven_engine.py`):
+
+| Method | Purpose |
+|--------|---------|
+| `create_database_source(name, connection_id, query, row_limit)` | Executes query via `DatabaseConnector.extract_test_data()`, wraps result in `InlineDataSource`, returns `source_id` |
+
+### Database API Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/api/v2/testing/database/connect` | Connect to a database (PostgreSQL, MySQL, SQLite, MongoDB, MSSQL) |
+| POST | `/api/v2/testing/database/query` | Execute SQL query against connected DB |
+| POST | `/api/v2/testing/database/assert` | Assert database state (7 operators) |
+| GET | `/api/v2/testing/database/connections` | List all active database connections |
+| DELETE | `/api/v2/testing/database/{connection_id}` | Disconnect from a specific database |
+| GET | `/api/v2/testing/database/{connection_id}/tables` | List tables/collections with types and row estimates |
+| GET | `/api/v2/testing/database/{connection_id}/tables/{table_name}/columns` | Get column metadata (name, type, nullable, default, PK) |
+| POST | `/api/v2/testing/data-driven/source` | Create data source (now accepts `source_type: "database_query"`) |
+
+### Prop Wiring
+
+Database connections are managed as state in `EnhancedAPITesting.tsx` (`dbConnections` state) and passed down to child components:
+
+```
+EnhancedAPITesting.tsx (dbConnections state)
+  ├── RequestBuilder.tsx (dbConnections prop)
+  │     └── AssertionsPanel.tsx (dbConnections prop) — for database assertion type
+  └── DataDrivenPanel.tsx (dbConnections prop) — for database query data source
+```
 
 ## State Management
 
@@ -227,6 +375,24 @@ All demos use real public APIs (no localhost):
 | POST | `/report/generate` | Generate execution report |
 | GET | `/capabilities` | Full capability list |
 | GET | `/protocols` | Supported protocols |
+
+### Database (`/api/v2/testing/database`)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/connect` | Connect to database (PostgreSQL, MySQL, SQLite, MongoDB, MSSQL) |
+| POST | `/query` | Execute SQL query |
+| POST | `/assert` | Assert database state (7 operators) |
+| GET | `/connections` | List active connections |
+| DELETE | `/{connection_id}` | Disconnect from database |
+| GET | `/{connection_id}/tables` | List tables with types and estimated row counts |
+| GET | `/{connection_id}/tables/{table_name}/columns` | Get column metadata (name, type, nullable, default, PK) |
+
+### Data-Driven (`/api/v2/testing/data-driven`)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/source` | Create data source (csv, json, excel, inline, database_query) |
 
 ### Import & Export (`/api/import`)
 
@@ -289,18 +455,21 @@ Both `constants.ts` (used by RequestBuilder, ChainBuilder) and `EnhancedAPITesti
 | `src/modules/api-testing/components/CollectionSidebar.tsx` | Sidebar with folders, requests, drag-drop, run buttons |
 | `src/modules/api-testing/components/RequestBuilder.tsx` | Postman-like request builder with Auto-Assert |
 | `src/modules/api-testing/components/ResponseTreeExplorer.tsx` | Response tree with click-to-assert, resizable panel |
-| `src/modules/api-testing/components/AssertionsPanel.tsx` | Assertion editor (11 types, 13 operators) |
+| `src/modules/api-testing/components/AssertionsPanel.tsx` | Assertion editor (12 types including database, 13 operators + 7 DB operators) |
 | `src/modules/api-testing/components/RequestChainBuilder.tsx` | Multi-step chain builder |
 | `src/modules/api-testing/components/ChainStepCard.tsx` | Chain step UI card |
 | `src/modules/api-testing/components/ChainResultsView.tsx` | Chain results display |
 | `src/modules/api-testing/components/EnvironmentManager.tsx` | Environment management with variable resolution |
-| `src/modules/api-testing/components/constants.ts` | Shared types, constants, API_BASE_URL |
+| `src/modules/api-testing/components/constants.ts` | Shared types, constants, API_BASE_URL, DB_ASSERTION_OPERATORS |
+| `src/modules/api-testing/components/DataDrivenPanel.tsx` | Data-driven testing panel (file, inline, database query sources) |
 | `backend/app/routers/api_testing/enhanced_api_testing_api.py` | FastAPI router (execution, env) |
 | `backend/app/routers/api_testing/api_import_api.py` | Import/export router |
 | `backend/app/routers/api_testing/request_chaining_api.py` | Chain execution router |
 | `backend/app/services/api_testing/test_execution_engine.py` | Real HTTP execution via aiohttp |
 | `backend/app/services/api_testing/request_chaining.py` | Chain engine (httpx, jsonpath_ng) |
 | `backend/app/services/connectors/api_spec_parser.py` | OpenAPI/Postman/WSDL/GraphQL/HAR parser |
+| `backend/app/services/api_testing/database_connector.py` | DatabaseConnector — connect, query, list_tables, get_table_columns, assert, disconnect |
+| `backend/app/services/api_testing/data_driven_engine.py` | DataDrivenEngine — CSV, JSON, Excel, inline, and database_query data sources |
 
 ## Day-to-Day Tester Workflow
 
@@ -321,5 +490,5 @@ The following features were removed from the frontend tabs but their backend end
 
 ---
 
-*Last updated: 2026-02-20*
+*Last updated: 2026-02-21*
 *Generated by code audit of the Flowstral API testing feature.*

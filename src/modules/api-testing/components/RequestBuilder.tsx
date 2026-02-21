@@ -88,9 +88,11 @@ interface RequestBuilderProps {
   /** Tier 2: global variables (resolve order: global → env → collection → saved from response) */
   globalVariables?: Record<string, string>;
   collectionVariables?: Record<string, string>;
+  /** Active database connections for database assertion type */
+  dbConnections?: Array<{ connection_id: string; type: string }>;
 }
 
-export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initialRequest, activeEnvironment, globalVariables = {}, collectionVariables = {} }: RequestBuilderProps) {
+export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initialRequest, activeEnvironment, globalVariables = {}, collectionVariables = {}, dbConnections = [] }: RequestBuilderProps) {
   const { toast } = useToast();
   const [request, setRequest] = useState<RequestConfig>(createEmptyRequest());
   const [assertions, setAssertions] = useState<AssertionConfig[]>([]);
@@ -2172,7 +2174,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
 
             {/* Assertions */}
             <TabsContent value="assertions" className="p-4 mt-0">
-              <AssertionsPanel assertions={assertions} onChange={setAssertions} results={assertionResults.length > 0 ? assertionResults : undefined} currentResponseBody={response?.body} />
+              <AssertionsPanel assertions={assertions} onChange={setAssertions} results={assertionResults.length > 0 ? assertionResults : undefined} currentResponseBody={response?.body} dbConnections={dbConnections} />
               {assertionResults.length > 0 && (
                 <div className="mt-3 overflow-auto max-h-[300px] border rounded-lg">
                   <table className="min-w-max w-full text-xs border-collapse">

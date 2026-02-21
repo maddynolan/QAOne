@@ -2,7 +2,7 @@
 
 > **This file is the starting reference for all Claude sessions working on this codebase.**
 > It must be kept up-to-date whenever changes are made to components, APIs, or architecture.
-> Last updated: 2026-02-20
+> Last updated: 2026-02-21
 
 ---
 
@@ -642,11 +642,12 @@ interface NetworkProfile { id, name, download_kbps, upload_kbps, latency_ms, pac
 | `RequestChainBuilder.tsx` | Chain multiple API calls with variable extraction (JSONPath, regex, headers) |
 | `CollectionSidebar.tsx` | Organize requests into collections/folders, drag-drop reorder, bulk delete, inline rename, run all |
 | `EnvironmentManager.tsx` | Manage environments (dev, staging, prod) with variable substitution |
-| `AssertionsPanel.tsx` | Assertion editor — 11 types, multiple operators, pass/fail display |
+| `AssertionsPanel.tsx` | Assertion editor — 12 types (incl. database), multiple operators, pass/fail display, `dbConnections` prop for DB assertions |
 | `ResponseTreeExplorer.tsx` | JSON response tree viewer with copy-path |
 | `ChainResultsView.tsx` | Chain execution results with per-step detail |
 | `ChainStepCard.tsx` | Individual chain step result card |
-| `constants.ts` | ASSERTION_TYPES, ASSERTION_OPERATORS, AssertionConfig type |
+| `constants.ts` | ASSERTION_TYPES, ASSERTION_OPERATORS, DB_ASSERTION_OPERATORS, AssertionConfig type (incl. `db_connection_id`, `db_query`, `db_comparison`) |
+| `DataDrivenPanel.tsx` | Data-driven test sources — 4 tabs: CSV, JSON, Excel, Database Query; `dbConnections` prop for DB source |
 | `TabErrorBoundary.tsx` | Error boundary for API testing tab |
 
 ### Recent Enhancements (v3.7.0 — v3.10.1)
@@ -688,7 +689,15 @@ interface NetworkProfile { id, name, download_kbps, upload_kbps, latency_ms, pac
 - JSON Schema assertions: schema string is parsed from JSON before `jsonschema.validate()` call
 - Inferred JSON Schema: backend `SchemaInferenceEngine.infer_schema()` auto-generates schema from response
 - "Matches Baseline" (Snapshot): regression testing — stores "known-good" response and compares future responses
-- 11 assertion types: status_code, response_time, jsonpath, schema, contains, not_contains, regex, header, equals, xpath, matches_baseline
+- 12 assertion types: status_code, response_time, jsonpath, schema, contains, not_contains, regex, header, equals, xpath, matches_baseline, database
+- **Database assertions**: connection selector, SQL query input, comparison mode; `DB_ASSERTION_OPERATORS`: equals, contains, count, greater_than, less_than, not_empty, is_empty; `AssertionConfig` extended with `db_connection_id`, `db_query`, `db_comparison` fields
+
+**Database Workbench (v3.12.18+):**
+- `EnhancedAPITesting.tsx` replaces the old DB card with a full Database Workbench featuring `DbSchemaBrowser` and `DbQueryEditor` inline components
+- `DbSchemaBrowser` — browse tables and columns via `GET /api/v2/testing/database/{connection_id}/tables` and `GET .../tables/{table_name}/columns`
+- `DbQueryEditor` — execute SQL queries with query history
+- Disconnect button per connection via `DELETE /api/v2/testing/database/{connection_id}`
+- `DataDrivenPanel` — "Database Query" tab as 4th data source option (alongside CSV, JSON, Excel); uses `dbConnections` prop; backend `POST /api/v2/testing/data-driven/source` accepts `source_type: "database_query"` with `connection_id`, `query`, `row_limit`
 
 **Request URL Handling:**
 - `addRequest()` stores both `url` (full URL with base) and `path` (path only)
@@ -725,14 +734,14 @@ Key actions:
 |---------|---------|
 | `EnhancedAPITestEngine` | Core multi-protocol test execution |
 | `APISpecParser` | Parses OpenAPI/Swagger/Postman/HAR specs; `_extract_base_url()` for base URL |
-| `DatabaseConnector` | Database connectivity for API tests |
+| `DatabaseConnector` | Database connectivity for API tests; `list_tables()` and `get_table_columns()` for schema browsing |
 | `TestExecutionEngine` | Test execution orchestration |
 | `ServiceVirtualization` | Mock service responses |
 | `ReportingEngine` | Test result reporting |
 | `EnvironmentManager` | Environment variable management |
 | `OpenAPIValidator` | OpenAPI spec validation |
 | `SchemaInferenceEngine` | Auto-infer JSON schemas from responses |
-| `DataDrivenEngine` | Data-driven test execution |
+| `DataDrivenEngine` | Data-driven test execution; `create_database_source()` for DB query data sources |
 
 ### Supported Protocols
 
@@ -747,6 +756,10 @@ REST, SOAP/WSDL, GraphQL, gRPC, Kafka, MQTT, WebSocket, AMQP (RabbitMQ)
 - `POST /api/import/har` — Import HAR file
 - `POST /api/import/generate-tests` — Generate tests from API specs
 - `POST /api/chain/execute` — Execute request chain
+- `GET /api/v2/testing/database/{connection_id}/tables` — List tables for a database connection
+- `GET /api/v2/testing/database/{connection_id}/tables/{table_name}/columns` — Get columns for a table
+- `DELETE /api/v2/testing/database/{connection_id}` — Disconnect/remove a database connection
+- `POST /api/v2/testing/data-driven/source` — Create data-driven source (supports `source_type: "database_query"` with `connection_id`, `query`, `row_limit`)
 
 ---
 

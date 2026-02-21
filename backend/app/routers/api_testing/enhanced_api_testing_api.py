@@ -87,10 +87,13 @@ class OpenAPIValidateRequest(BaseModel):
 class DataSourceRequest(BaseModel):
     """Request for data-driven data source"""
     name: str
-    source_type: str  # csv, json, excel, inline
+    source_type: str  # csv, json, excel, inline, database_query
     content: Optional[str] = None  # For CSV/JSON text
     data_path: Optional[str] = None  # For JSON: path to array, e.g. "data.items"
     rows: Optional[List[Dict[str, Any]]] = None  # For inline
+    connection_id: Optional[str] = None  # For database_query
+    query: Optional[str] = None  # For database_query
+    row_limit: int = 100  # For database_query
 
 
 class DataDrivenExecuteRequest(BaseModel):
@@ -187,10 +190,17 @@ async def create_data_source(request: DataSourceRequest):
             )
         elif request.source_type == "inline" and request.rows:
             source_id = data_driven_engine.create_inline_source(request.name, request.rows)
+        elif request.source_type == "database_query" and request.connection_id and request.query:
+            source_id = await data_driven_engine.create_database_source(
+                name=request.name,
+                connection_id=request.connection_id,
+                query=request.query,
+                row_limit=request.row_limit
+            )
         else:
             raise HTTPException(
                 status_code=400,
-                detail="Provide content for csv/json or rows for inline"
+                detail="Provide content for csv/json, rows for inline, or connection_id+query for database_query"
             )
         preview = data_driven_engine.get_data_source_preview(source_id)
         return {"status": "success", "source_id": source_id, "preview": preview}
@@ -313,6 +323,63 @@ async def list_database_connections():
         "status": "success",
         "connections": connections
     }
+
+
+@router.delete("/database/{connection_id}")
+async def disconnect_database(connection_id: str):
+    """Disconnect from a database"""
+    try:
+        success = await db_connector.disconnect(connection_id)
+        if success:
+            return {"status": "success", "message": f"Disconnected from {connection_id}"}
+        else:
+            raise HTTPException(status_code=404, detail=f"Connection {connection_id} not found")
+    except Exception as e:
+        logger.error(f"Database disconnect error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/database/{connection_id}/tables")
+async def list_database_tables(connection_id: str):
+    """
+    List tables/collections in a connected database.
+    Uses information_schema for SQL DBs, listCollections for MongoDB.
+    """
+    try:
+        tables = await db_connector.list_tables(connection_id)
+        return {
+            "status": "success",
+            "connection_id": connection_id,
+            "tables": tables,
+            "count": len(tables)
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"List tables error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/database/{connection_id}/tables/{table_name}/columns")
+async def get_table_columns(connection_id: str, table_name: str):
+    """
+    Get column metadata for a specific table.
+    Returns column name, data type, nullable, default, primary key status.
+    """
+    try:
+        columns = await db_connector.get_table_columns(connection_id, table_name)
+        return {
+            "status": "success",
+            "connection_id": connection_id,
+            "table_name": table_name,
+            "columns": columns,
+            "count": len(columns)
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Get columns error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/execute")

@@ -257,6 +257,37 @@ class DataDrivenEngine:
         """Create and add an inline data source"""
         source = InlineDataSource(name, rows)
         return self.add_data_source(source)
+
+    async def create_database_source(
+        self,
+        name: str,
+        connection_id: str,
+        query: str,
+        row_limit: int = 100
+    ) -> str:
+        """
+        Create a data source from a database query.
+        Uses DatabaseConnector.extract_test_data() to fetch rows,
+        then wraps them in an InlineDataSource.
+        """
+        from app.services.api_testing import get_database_connector
+        db_connector = get_database_connector()
+        rows = await db_connector.extract_test_data(connection_id, query, limit=row_limit)
+        # Serialize non-string values for display
+        clean_rows = []
+        for row in rows:
+            clean = {}
+            for k, v in row.items():
+                if isinstance(v, (dict, list)):
+                    clean[k] = json.dumps(v)
+                elif v is None:
+                    clean[k] = ""
+                else:
+                    clean[k] = str(v) if not isinstance(v, (str, int, float, bool)) else v
+            clean_rows.append(clean)
+        source = InlineDataSource(name, clean_rows)
+        source.source_type = "database_query"
+        return self.add_data_source(source)
         
     def get_data_source(self, source_id: str) -> Optional[DataSource]:
         """Get data source by ID"""

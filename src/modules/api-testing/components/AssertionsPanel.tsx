@@ -11,11 +11,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Trash2, CheckCircle2, XCircle, AlertCircle,
-  Hash, Clock, Target, FileText, Search, X, Code, Mail, Equal, Tag,
+  Hash, Clock, Target, FileText, Search, X, Code, Mail, Equal, Tag, Database,
 } from "lucide-react";
 import {
   ASSERTION_TYPES,
   ASSERTION_OPERATORS,
+  DB_ASSERTION_OPERATORS,
   type AssertionConfig,
   generateId,
 } from "./constants";
@@ -31,12 +32,18 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   MailIcon: <Mail className="w-4 h-4" />,
   EqualIcon: <Equal className="w-4 h-4" />,
   TagIcon: <Tag className="w-4 h-4" />,
+  DatabaseIcon: <Database className="w-4 h-4" />,
 };
 
 interface AssertionResult {
   passed: boolean;
   message: string;
   actual?: string;
+}
+
+interface DbConnection {
+  connection_id: string;
+  type: string;
 }
 
 interface AssertionsPanelProps {
@@ -46,9 +53,11 @@ interface AssertionsPanelProps {
   compact?: boolean;
   /** When set, "Matches baseline" assertions show "Use current as baseline" to fill from last response */
   currentResponseBody?: string;
+  /** Active database connections for database assertion type */
+  dbConnections?: DbConnection[];
 }
 
-export default function AssertionsPanel({ assertions, onChange, results, compact = false, currentResponseBody }: AssertionsPanelProps) {
+export default function AssertionsPanel({ assertions, onChange, results, compact = false, currentResponseBody, dbConnections = [] }: AssertionsPanelProps) {
   const addAssertion = () => {
     onChange([
       ...assertions,
@@ -133,21 +142,39 @@ export default function AssertionsPanel({ assertions, onChange, results, compact
                   </SelectContent>
                 </Select>
 
-                <Select
-                  value={assertion.operator}
-                  onValueChange={v => updateAssertion(assertion.id, "operator", v)}
-                >
-                  <SelectTrigger className="w-[130px] h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ASSERTION_OPERATORS.map(op => (
-                      <SelectItem key={op.value} value={op.value}>
-                        {op.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {assertion.type === "database" ? (
+                  <Select
+                    value={assertion.db_comparison || "equals"}
+                    onValueChange={v => updateAssertion(assertion.id, "db_comparison", v)}
+                  >
+                    <SelectTrigger className="w-[160px] h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DB_ASSERTION_OPERATORS.map(op => (
+                        <SelectItem key={op.value} value={op.value}>
+                          {op.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Select
+                    value={assertion.operator}
+                    onValueChange={v => updateAssertion(assertion.id, "operator", v)}
+                  >
+                    <SelectTrigger className="w-[130px] h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ASSERTION_OPERATORS.map(op => (
+                        <SelectItem key={op.value} value={op.value}>
+                          {op.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
 
                 <div className="flex-1" />
 
@@ -179,71 +206,132 @@ export default function AssertionsPanel({ assertions, onChange, results, compact
                 </Button>
               </div>
 
-              {/* Row 2: Path + Expected */}
-              <div className="flex gap-2">
-                {(assertion.type === "jsonpath" ||
-                  assertion.type === "xpath" ||
-                  assertion.type === "header") && (
-                  <Input
-                    className="h-8 text-xs font-mono flex-1"
-                    placeholder={
-                      assertion.type === "jsonpath"
-                        ? "$.data.id"
-                        : assertion.type === "xpath"
-                          ? "//element/@attr"
-                          : "Content-Type"
-                    }
-                    value={assertion.path}
-                    onChange={e => updateAssertion(assertion.id, "path", e.target.value)}
-                  />
-                )}
+              {/* Row 2: Path + Expected (non-database types) */}
+              {assertion.type !== "database" && (
+                <div className="flex gap-2">
+                  {(assertion.type === "jsonpath" ||
+                    assertion.type === "xpath" ||
+                    assertion.type === "header") && (
+                    <Input
+                      className="h-8 text-xs font-mono flex-1"
+                      placeholder={
+                        assertion.type === "jsonpath"
+                          ? "$.data.id"
+                          : assertion.type === "xpath"
+                            ? "//element/@attr"
+                            : "Content-Type"
+                      }
+                      value={assertion.path}
+                      onChange={e => updateAssertion(assertion.id, "path", e.target.value)}
+                    />
+                  )}
 
-                {assertion.type !== "schema" && assertion.type !== "matches_baseline" && (
-                  <Input
-                    className="h-8 text-xs font-mono flex-1"
-                    placeholder={
-                      assertion.type === "status_code"
-                        ? "200"
-                        : assertion.type === "response_time"
-                          ? "1000"
-                          : "Expected value"
-                    }
-                    value={assertion.expected}
-                    onChange={e => updateAssertion(assertion.id, "expected", e.target.value)}
-                  />
-                )}
+                  {assertion.type !== "schema" && assertion.type !== "matches_baseline" && (
+                    <Input
+                      className="h-8 text-xs font-mono flex-1"
+                      placeholder={
+                        assertion.type === "status_code"
+                          ? "200"
+                          : assertion.type === "response_time"
+                            ? "1000"
+                            : "Expected value"
+                      }
+                      value={assertion.expected}
+                      onChange={e => updateAssertion(assertion.id, "expected", e.target.value)}
+                    />
+                  )}
 
-                {assertion.type === "schema" && (
-                  <Input
-                    className="h-8 text-xs font-mono flex-1"
-                    placeholder='{"type":"object","properties":{...}}'
-                    value={assertion.schema}
-                    onChange={e => updateAssertion(assertion.id, "schema", e.target.value)}
-                  />
-                )}
-
-                {assertion.type === "matches_baseline" && (
-                  <div className="space-y-1.5 w-full">
-                    {currentResponseBody != null && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => updateAssertion(assertion.id, "schema", currentResponseBody)}
-                      >
-                        Use current as baseline
-                      </Button>
-                    )}
-                    <textarea
-                      className="min-h-[80px] w-full rounded border bg-background px-2 py-1.5 text-xs font-mono"
-                      placeholder='Paste baseline JSON (e.g. previous response). In Builder, use "Use current as baseline" after Send.'
+                  {assertion.type === "schema" && (
+                    <Input
+                      className="h-8 text-xs font-mono flex-1"
+                      placeholder='{"type":"object","properties":{...}}'
                       value={assertion.schema}
                       onChange={e => updateAssertion(assertion.id, "schema", e.target.value)}
                     />
+                  )}
+
+                  {assertion.type === "matches_baseline" && (
+                    <div className="space-y-1.5 w-full">
+                      {currentResponseBody != null && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => updateAssertion(assertion.id, "schema", currentResponseBody)}
+                        >
+                          Use current as baseline
+                        </Button>
+                      )}
+                      <textarea
+                        className="min-h-[80px] w-full rounded border bg-background px-2 py-1.5 text-xs font-mono"
+                        placeholder='Paste baseline JSON (e.g. previous response). In Builder, use "Use current as baseline" after Send.'
+                        value={assertion.schema}
+                        onChange={e => updateAssertion(assertion.id, "schema", e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Database Assertion Fields */}
+              {assertion.type === "database" && (
+                <div className="space-y-2 border-t pt-2">
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <Label className="text-[10px] text-muted-foreground mb-1 block">Connection</Label>
+                      <Select
+                        value={assertion.db_connection_id || ""}
+                        onValueChange={v => updateAssertion(assertion.id, "db_connection_id", v)}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Select connection..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {dbConnections.length === 0 ? (
+                            <SelectItem value="_none" disabled>No active connections</SelectItem>
+                          ) : (
+                            dbConnections.map(conn => (
+                              <SelectItem key={conn.connection_id} value={conn.connection_id}>
+                                <span className="flex items-center gap-1.5">
+                                  <Database className="w-3 h-3" />
+                                  {conn.connection_id} ({conn.type})
+                                </span>
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                )}
-              </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground mb-1 block">SQL Query</Label>
+                    <textarea
+                      className="min-h-[60px] w-full rounded border bg-background px-2 py-1.5 text-xs font-mono"
+                      placeholder="SELECT COUNT(*) FROM users WHERE email = '{{email}}'"
+                      value={assertion.db_query || ""}
+                      onChange={e => updateAssertion(assertion.id, "db_query", e.target.value)}
+                    />
+                  </div>
+                  {!["not_empty", "is_empty"].includes(assertion.db_comparison || "") && (
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground mb-1 block">Expected Value</Label>
+                      <Input
+                        className="h-8 text-xs font-mono"
+                        placeholder={
+                          (assertion.db_comparison || "equals") === "count"
+                            ? "1"
+                            : (assertion.db_comparison || "equals") === "greater_than"
+                              ? "0"
+                              : "Expected result"
+                        }
+                        value={assertion.expected}
+                        onChange={e => updateAssertion(assertion.id, "expected", e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Result message */}
               {result && !result.passed && result.message && (

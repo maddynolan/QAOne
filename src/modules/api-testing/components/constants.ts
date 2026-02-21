@@ -55,6 +55,18 @@ export const ASSERTION_TYPES = [
   { value: "equals", label: "Equals", icon: "EqualIcon", description: "Exact value match" },
   { value: "xpath", label: "XPath", icon: "TagIcon", description: "Extract and validate XML values" },
   { value: "matches_baseline", label: "Matches Baseline", icon: "EqualIcon", description: "Regression: compare response to saved baseline JSON" },
+  { value: "database", label: "Database Query", icon: "DatabaseIcon", description: "Assert database state after API call" },
+] as const;
+
+// --- Database Assertion Operators ---
+export const DB_ASSERTION_OPERATORS = [
+  { value: "equals", label: "Result Equals" },
+  { value: "contains", label: "Result Contains" },
+  { value: "count", label: "Row Count Equals" },
+  { value: "greater_than", label: "Row Count Greater Than" },
+  { value: "less_than", label: "Row Count Less Than" },
+  { value: "not_empty", label: "Not Empty" },
+  { value: "is_empty", label: "Is Empty" },
 ] as const;
 
 // --- Assertion Operators ---
@@ -134,6 +146,10 @@ export interface AssertionConfig {
   path: string;
   operator: string;
   schema: string;
+  // Database assertion fields
+  db_connection_id?: string;
+  db_query?: string;
+  db_comparison?: string;
 }
 
 export interface ExtractionConfig {

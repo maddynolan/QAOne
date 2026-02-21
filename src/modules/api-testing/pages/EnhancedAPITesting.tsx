@@ -79,6 +79,266 @@ import {
   loadEnvironments as _loadEnvironments,
 } from "@/modules/api-testing/lib/environment-persistence";
 
+// --- Database Schema Browser (inline) ---
+function DbSchemaBrowser({ connections }: { connections: { connection_id: string; type: string }[] }) {
+  const [selectedConn, setSelectedConn] = React.useState(connections[0]?.connection_id || "");
+  const [tables, setTables] = React.useState<any[]>([]);
+  const [selectedTable, setSelectedTable] = React.useState<string | null>(null);
+  const [columns, setColumns] = React.useState<any[]>([]);
+  const [loadingTables, setLoadingTables] = React.useState(false);
+  const [loadingCols, setLoadingCols] = React.useState(false);
+
+  const loadTables = async (connId: string) => {
+    setLoadingTables(true);
+    setSelectedTable(null);
+    setColumns([]);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v2/testing/database/${connId}/tables`);
+      const data = await res.json();
+      setTables(data.tables || []);
+    } catch { setTables([]); }
+    setLoadingTables(false);
+  };
+
+  const loadColumns = async (connId: string, tableName: string) => {
+    setLoadingCols(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v2/testing/database/${connId}/tables/${tableName}/columns`);
+      const data = await res.json();
+      setColumns(data.columns || []);
+    } catch { setColumns([]); }
+    setLoadingCols(false);
+  };
+
+  React.useEffect(() => {
+    if (selectedConn) loadTables(selectedConn);
+  }, [selectedConn]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Label className="text-xs font-medium">Schema Browser</Label>
+        <Select value={selectedConn} onValueChange={setSelectedConn}>
+          <SelectTrigger className="h-7 w-[180px] text-xs">
+            <SelectValue placeholder="Connection..." />
+          </SelectTrigger>
+          <SelectContent>
+            {connections.map(c => (
+              <SelectItem key={c.connection_id} value={c.connection_id}>
+                {c.connection_id} ({c.type})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => selectedConn && loadTables(selectedConn)}>
+          <RefreshCw className="w-3 h-3" />
+        </Button>
+      </div>
+      {loadingTables ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground py-2"><Loader2 className="w-3 h-3 animate-spin" /> Loading tables...</div>
+      ) : tables.length > 0 ? (
+        <div className="flex gap-3 max-h-[250px]">
+          <ScrollArea className="w-[200px] border rounded-md">
+            <div className="p-1">
+              {tables.map(t => (
+                <button
+                  key={t.table_name}
+                  className={`w-full text-left px-2 py-1 rounded text-xs hover:bg-muted transition-colors flex items-center justify-between ${
+                    selectedTable === t.table_name ? "bg-primary/10 text-primary font-medium" : ""
+                  }`}
+                  onClick={() => { setSelectedTable(t.table_name); loadColumns(selectedConn, t.table_name); }}
+                >
+                  <span className="truncate">{t.table_name}</span>
+                  <span className="text-[10px] text-muted-foreground ml-1">{t.estimated_rows ?? ""}</span>
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
+          {selectedTable && (
+            <div className="flex-1 border rounded-md overflow-auto">
+              <div className="px-2 py-1 bg-muted/50 text-xs font-medium border-b flex items-center gap-2">
+                <Database className="w-3 h-3" />
+                {selectedTable}
+              </div>
+              {loadingCols ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground p-2"><Loader2 className="w-3 h-3 animate-spin" /> Loading...</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-[10px] h-7">Column</TableHead>
+                      <TableHead className="text-[10px] h-7">Type</TableHead>
+                      <TableHead className="text-[10px] h-7">Nullable</TableHead>
+                      <TableHead className="text-[10px] h-7">PK</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {columns.map(col => (
+                      <TableRow key={col.column_name}>
+                        <TableCell className="text-xs font-mono py-1">{col.column_name}</TableCell>
+                        <TableCell className="text-[10px] text-muted-foreground py-1">{col.data_type}</TableCell>
+                        <TableCell className="text-[10px] py-1">{col.is_nullable ? "YES" : "NO"}</TableCell>
+                        <TableCell className="text-[10px] py-1">{col.is_primary_key ? "PK" : ""}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          )}
+        </div>
+      ) : selectedConn ? (
+        <p className="text-xs text-muted-foreground py-1">No tables found. Click refresh to retry.</p>
+      ) : null}
+    </div>
+  );
+}
+
+// --- Database Query Editor (inline) ---
+function DbQueryEditor({ connections }: { connections: { connection_id: string; type: string }[] }) {
+  const { toast } = useToast();
+  const [connId, setConnId] = React.useState(connections[0]?.connection_id || "");
+  const [query, setQuery] = React.useState("");
+  const [results, setResults] = React.useState<any[] | null>(null);
+  const [resultColumns, setResultColumns] = React.useState<string[]>([]);
+  const [running, setRunning] = React.useState(false);
+  const [execTime, setExecTime] = React.useState<number | null>(null);
+  const [queryHistory, setQueryHistory] = React.useState<string[]>([]);
+
+  const executeQuery = async () => {
+    if (!connId || !query.trim()) return;
+    setRunning(true);
+    const start = Date.now();
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v2/testing/database/query?connection_id=${encodeURIComponent(connId)}&query=${encodeURIComponent(query)}`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      setExecTime(Date.now() - start);
+      if (data.results && data.results.length > 0) {
+        setResultColumns(Object.keys(data.results[0]));
+        setResults(data.results);
+      } else {
+        setResultColumns([]);
+        setResults([]);
+      }
+      setQueryHistory(prev => [query, ...prev.filter(q => q !== query)].slice(0, 20));
+    } catch (err: any) {
+      toast({ title: "Query failed", description: err.message, variant: "destructive" });
+      setResults(null);
+    }
+    setRunning(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      executeQuery();
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Label className="text-xs font-medium">SQL Query</Label>
+        <Select value={connId} onValueChange={setConnId}>
+          <SelectTrigger className="h-7 w-[180px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {connections.map(c => (
+              <SelectItem key={c.connection_id} value={c.connection_id}>
+                {c.connection_id} ({c.type})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="relative">
+        <textarea
+          className="min-h-[80px] w-full rounded border bg-background px-3 py-2 text-xs font-mono focus:ring-1 focus:ring-primary"
+          placeholder="SELECT * FROM users WHERE active = true LIMIT 50"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+        <div className="absolute bottom-2 right-2 flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground">Ctrl+Enter to run</span>
+          <Button size="sm" className="h-6 text-xs px-2" onClick={executeQuery} disabled={running || !query.trim()}>
+            {running ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Play className="w-3 h-3 mr-1" />}
+            Run
+          </Button>
+        </div>
+      </div>
+      {queryHistory.length > 0 && (
+        <details className="text-xs">
+          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Query History ({queryHistory.length})</summary>
+          <div className="mt-1 space-y-1 max-h-[100px] overflow-auto">
+            {queryHistory.map((q, i) => (
+              <button key={i} className="w-full text-left px-2 py-0.5 rounded hover:bg-muted font-mono text-[11px] truncate" onClick={() => setQuery(q)}>
+                {q}
+              </button>
+            ))}
+          </div>
+        </details>
+      )}
+      {results !== null && (
+        <div className="border rounded-md overflow-hidden">
+          <div className="px-2 py-1 bg-muted/50 text-[10px] flex items-center justify-between border-b">
+            <span>{results.length} row{results.length !== 1 ? "s" : ""} returned</span>
+            {execTime !== null && <span className="text-muted-foreground">{execTime}ms</span>}
+            <div className="flex gap-1">
+              <Button
+                variant="ghost" size="sm" className="h-5 text-[10px] px-1"
+                onClick={() => {
+                  const csv = [resultColumns.join(","), ...results.map(r => resultColumns.map(c => JSON.stringify(r[c] ?? "")).join(","))].join("\n");
+                  navigator.clipboard.writeText(csv);
+                  toast({ title: "Copied", description: "Results copied as CSV" });
+                }}
+              >
+                <Copy className="w-3 h-3 mr-0.5" /> CSV
+              </Button>
+              <Button
+                variant="ghost" size="sm" className="h-5 text-[10px] px-1"
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(results, null, 2));
+                  toast({ title: "Copied", description: "Results copied as JSON" });
+                }}
+              >
+                <Copy className="w-3 h-3 mr-0.5" /> JSON
+              </Button>
+            </div>
+          </div>
+          <ScrollArea className="max-h-[250px]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-[10px] w-8 h-7">#</TableHead>
+                  {resultColumns.map(col => (
+                    <TableHead key={col} className="text-[10px] font-mono h-7">{col}</TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {results.slice(0, 200).map((row, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="text-[10px] text-muted-foreground py-1">{i + 1}</TableCell>
+                    {resultColumns.map(col => (
+                      <TableCell key={col} className="text-xs font-mono py-1 max-w-[200px] truncate">
+                        {row[col] === null ? <span className="text-muted-foreground italic">null</span> : String(row[col])}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function EnhancedAPITesting() {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -1769,11 +2029,12 @@ export default function EnhancedAPITesting() {
         {/* Builder Tab - Ad-hoc Request Builder */}
         <TabsContent value="builder" className="space-y-4" forceMount>
           <TabErrorBoundary tabName="Builder">
-            <RequestBuilder 
+            <RequestBuilder
               initialRequest={builderInitialRequest}
               activeEnvironment={environments.find(e => e.environment_id === selectedEnvironment) || null}
               globalVariables={globalVariables}
               collectionVariables={collectionVariables}
+              dbConnections={dbConnections}
               onSaveToChain={(req, asserts) => {
                 // Switch to Chains tab and add the request as a new step
                 setActiveTab("chains");
@@ -2895,7 +3156,7 @@ export default function EnhancedAPITesting() {
         {/* Data-Driven Testing Tab */}
         <TabsContent value="data-driven" className="space-y-4">
           <TabErrorBoundary tabName="Data-Driven">
-            <DataDrivenPanel testSuite={testSuite} />
+            <DataDrivenPanel testSuite={testSuite} dbConnections={dbConnections} />
           </TabErrorBoundary>
         </TabsContent>
 
@@ -3041,96 +3302,136 @@ export default function EnhancedAPITesting() {
             }}
           />
 
-          {/* Database Connectivity - moved from standalone tab */}
+          {/* Database Workbench */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Database className="w-5 h-5" />
-                Database Connectivity
+                Database Workbench
               </CardTitle>
               <CardDescription>
-                Connect to databases for data-driven testing and assertions
+                Connect to databases, browse schemas, run queries, and validate data
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Connection ID</Label>
-                  <Input
-                    value={dbConfig.connection_id}
-                    onChange={(e) => setDbConfig({...dbConfig, connection_id: e.target.value})}
-                    placeholder="db1"
-                  />
+              {/* Connection Form */}
+              <details className={dbConnections.length > 0 ? "" : "open"}>
+                <summary className="cursor-pointer text-sm font-medium flex items-center gap-2 py-1">
+                  <Database className="w-4 h-4" />
+                  {dbConnections.length > 0 ? "New Connection" : "Connect to Database"}
+                </summary>
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Connection ID</Label>
+                    <Input
+                      value={dbConfig.connection_id}
+                      onChange={(e) => setDbConfig({...dbConfig, connection_id: e.target.value})}
+                      placeholder="db1"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Database Type</Label>
+                    <Select value={dbConfig.db_type} onValueChange={(v) => setDbConfig({...dbConfig, db_type: v})}>
+                      <SelectTrigger className="h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="postgresql">PostgreSQL</SelectItem>
+                        <SelectItem value="mysql">MySQL</SelectItem>
+                        <SelectItem value="sqlite">SQLite</SelectItem>
+                        <SelectItem value="mongodb">MongoDB</SelectItem>
+                        <SelectItem value="mssql">MSSQL</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Host</Label>
+                    <Input
+                      value={dbConfig.host}
+                      onChange={(e) => setDbConfig({...dbConfig, host: e.target.value})}
+                      placeholder="localhost"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Port</Label>
+                    <Input
+                      type="number"
+                      value={dbConfig.port}
+                      onChange={(e) => setDbConfig({...dbConfig, port: parseInt(e.target.value)})}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Database</Label>
+                    <Input
+                      value={dbConfig.database}
+                      onChange={(e) => setDbConfig({...dbConfig, database: e.target.value})}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">User</Label>
+                    <Input
+                      value={dbConfig.user}
+                      onChange={(e) => setDbConfig({...dbConfig, user: e.target.value})}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1 col-span-2">
+                    <Label className="text-xs">Password</Label>
+                    <Input
+                      type="password"
+                      value={dbConfig.password}
+                      onChange={(e) => setDbConfig({...dbConfig, password: e.target.value})}
+                      className="h-8 text-sm"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Database Type</Label>
-                  <Select value={dbConfig.db_type} onValueChange={(v) => setDbConfig({...dbConfig, db_type: v})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="postgresql">PostgreSQL</SelectItem>
-                      <SelectItem value="mysql">MySQL</SelectItem>
-                      <SelectItem value="sqlite">SQLite</SelectItem>
-                      <SelectItem value="mongodb">MongoDB</SelectItem>
-                      <SelectItem value="mssql">MSSQL</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Host</Label>
-                  <Input
-                    value={dbConfig.host}
-                    onChange={(e) => setDbConfig({...dbConfig, host: e.target.value})}
-                    placeholder="localhost"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Port</Label>
-                  <Input
-                    type="number"
-                    value={dbConfig.port}
-                    onChange={(e) => setDbConfig({...dbConfig, port: parseInt(e.target.value)})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Database</Label>
-                  <Input
-                    value={dbConfig.database}
-                    onChange={(e) => setDbConfig({...dbConfig, database: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>User</Label>
-                  <Input
-                    value={dbConfig.user}
-                    onChange={(e) => setDbConfig({...dbConfig, user: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2 col-span-2">
-                  <Label>Password</Label>
-                  <Input
-                    type="password"
-                    value={dbConfig.password}
-                    onChange={(e) => setDbConfig({...dbConfig, password: e.target.value})}
-                  />
-                </div>
-              </div>
-              <Button onClick={handleConnectDatabase} disabled={loading}>
-                <Database className="w-4 h-4 mr-2" />
-                {loading ? "Connecting..." : "Connect"}
-              </Button>
-              
+                <Button onClick={handleConnectDatabase} disabled={loading} size="sm" className="mt-3">
+                  <Database className="w-4 h-4 mr-2" />
+                  {loading ? "Connecting..." : "Connect"}
+                </Button>
+              </details>
+
+              {/* Active Connections */}
               {dbConnections.length > 0 && (
-                <div className="mt-4">
-                  <Label>Active Connections</Label>
-                  <div className="space-y-2 mt-2">
+                <div className="border rounded-lg p-3 bg-muted/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">Active Connections ({dbConnections.length})</Label>
+                    <Button variant="ghost" size="sm" onClick={loadDbConnections} className="h-7 text-xs">
+                      Refresh
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     {dbConnections.map((conn, idx) => (
-                      <Badge key={idx} variant="outline" className="mr-2">
-                        {conn.connection_id} ({conn.type})
-                      </Badge>
+                      <div key={idx} className="flex items-center gap-1.5 border rounded-md px-2 py-1 bg-background">
+                        <div className="w-2 h-2 rounded-full bg-green-500" />
+                        <span className="text-xs font-medium">{conn.connection_id}</span>
+                        <Badge variant="secondary" className="text-[10px] h-4">{conn.type}</Badge>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await fetch(`${API_BASE_URL}/api/v2/testing/database/${conn.connection_id}`, { method: "DELETE" });
+                              loadDbConnections();
+                              toast({ title: "Disconnected", description: `Disconnected from ${conn.connection_id}` });
+                            } catch {}
+                          }}
+                          className="ml-1 text-muted-foreground hover:text-red-500 transition-colors"
+                          title="Disconnect"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
                     ))}
                   </div>
+
+                  {/* Schema Browser */}
+                  <DbSchemaBrowser connections={dbConnections} />
+
+                  {/* Query Editor */}
+                  <DbQueryEditor connections={dbConnections} />
                 </div>
               )}
             </CardContent>

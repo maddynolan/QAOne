@@ -15,9 +15,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Upload, Play, Loader2, CheckCircle2, AlertCircle, Trash2,
-  FileText, Database, Filter, Shuffle, StopCircle,
+  FileText, Database, Filter, Shuffle, StopCircle, Search,
 } from "lucide-react";
 import { API_BASE_URL } from "./constants";
 
@@ -51,11 +52,17 @@ interface ExecutionResult {
   };
 }
 
-interface DataDrivenPanelProps {
-  testSuite?: any;
+interface DbConnection {
+  connection_id: string;
+  type: string;
 }
 
-export default function DataDrivenPanel({ testSuite }: DataDrivenPanelProps) {
+interface DataDrivenPanelProps {
+  testSuite?: any;
+  dbConnections?: DbConnection[];
+}
+
+export default function DataDrivenPanel({ testSuite, dbConnections = [] }: DataDrivenPanelProps) {
   const { toast } = useToast();
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [loading, setLoading] = useState(false);
@@ -66,6 +73,10 @@ export default function DataDrivenPanel({ testSuite }: DataDrivenPanelProps) {
   const [shuffleRows, setShuffleRows] = useState(false);
   const [stopOnFailure, setStopOnFailure] = useState(false);
   const [inlineData, setInlineData] = useState("");
+  // Database query source
+  const [dbSourceConnId, setDbSourceConnId] = useState("");
+  const [dbSourceQuery, setDbSourceQuery] = useState("");
+  const [dbSourceRowLimit, setDbSourceRowLimit] = useState(100);
 
   // Upload file data source
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -107,6 +118,41 @@ export default function DataDrivenPanel({ testSuite }: DataDrivenPanelProps) {
       setLoading(false);
     }
   }, [toast]);
+
+  // Load data from database query
+  const handleDatabaseQuery = useCallback(async () => {
+    if (!dbSourceConnId || !dbSourceQuery.trim()) return;
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v2/testing/data-driven/source`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `DB Query: ${dbSourceQuery.trim().slice(0, 40)}...`,
+          source_type: "database_query",
+          connection_id: dbSourceConnId,
+          query: dbSourceQuery,
+          row_limit: dbSourceRowLimit,
+        }),
+      });
+      if (!response.ok) throw new Error(`Failed: ${response.statusText}`);
+      const data = await response.json();
+      setDataSource({
+        id: data.source_id,
+        name: `DB Query (${dbSourceConnId})`,
+        type: "database_query",
+        columns: data.preview?.columns || [],
+        total_rows: data.preview?.total_rows || 0,
+        preview_rows: data.preview?.preview_rows || [],
+      });
+      setResult(null);
+      toast({ title: "Data loaded from database", description: `${data.preview?.total_rows || 0} rows fetched` });
+    } catch (err: any) {
+      toast({ title: "Database query failed", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }, [dbSourceConnId, dbSourceQuery, dbSourceRowLimit, toast]);
 
   // Upload inline JSON/CSV data
   const handleInlineData = useCallback(async () => {
@@ -191,36 +237,98 @@ export default function DataDrivenPanel({ testSuite }: DataDrivenPanelProps) {
             <Database className="w-4 h-4" />
             Data Source
           </CardTitle>
-          <CardDescription>Upload CSV, JSON, or Excel to parameterize your API tests</CardDescription>
+          <CardDescription>Upload files or query a database to parameterize your API tests</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <Label className="text-xs">Upload File</Label>
-              <Input
-                type="file"
-                accept=".csv,.json,.xlsx,.xls"
-                className="cursor-pointer mt-1"
-                onChange={handleFileUpload}
-                disabled={loading}
-              />
-            </div>
-            <div className="text-xs text-muted-foreground self-end pb-2">or</div>
-            <div className="flex-1">
-              <Label className="text-xs">Paste Data (CSV/JSON)</Label>
-              <div className="flex gap-2 mt-1">
+          <Tabs defaultValue="file" className="w-full">
+            <TabsList className="grid w-full grid-cols-3 h-8">
+              <TabsTrigger value="file" className="text-xs"><Upload className="w-3 h-3 mr-1" /> File Upload</TabsTrigger>
+              <TabsTrigger value="inline" className="text-xs"><FileText className="w-3 h-3 mr-1" /> Inline Data</TabsTrigger>
+              <TabsTrigger value="database" className="text-xs"><Database className="w-3 h-3 mr-1" /> Database Query</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="file" className="mt-3">
+              <div>
+                <Label className="text-xs">Upload CSV, JSON, or Excel</Label>
                 <Input
-                  placeholder='[{"name":"Test1"},{"name":"Test2"}]'
-                  value={inlineData}
-                  onChange={e => setInlineData(e.target.value)}
-                  className="font-mono text-xs"
+                  type="file"
+                  accept=".csv,.json,.xlsx,.xls"
+                  className="cursor-pointer mt-1"
+                  onChange={handleFileUpload}
+                  disabled={loading}
                 />
-                <Button size="sm" variant="outline" onClick={handleInlineData} disabled={loading || !inlineData.trim()}>
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                </Button>
               </div>
-            </div>
-          </div>
+            </TabsContent>
+
+            <TabsContent value="inline" className="mt-3">
+              <div>
+                <Label className="text-xs">Paste Data (CSV/JSON)</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    placeholder='[{"name":"Test1"},{"name":"Test2"}]'
+                    value={inlineData}
+                    onChange={e => setInlineData(e.target.value)}
+                    className="font-mono text-xs"
+                  />
+                  <Button size="sm" variant="outline" onClick={handleInlineData} disabled={loading || !inlineData.trim()}>
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="database" className="mt-3 space-y-3">
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <Label className="text-xs">Connection</Label>
+                  <Select value={dbSourceConnId} onValueChange={setDbSourceConnId}>
+                    <SelectTrigger className="h-8 text-xs mt-1">
+                      <SelectValue placeholder="Select connection..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {dbConnections.length === 0 ? (
+                        <SelectItem value="_none" disabled>Connect a database in Environments tab first</SelectItem>
+                      ) : (
+                        dbConnections.map(conn => (
+                          <SelectItem key={conn.connection_id} value={conn.connection_id}>
+                            {conn.connection_id} ({conn.type})
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-24">
+                  <Label className="text-xs">Row Limit</Label>
+                  <Input
+                    type="number"
+                    value={dbSourceRowLimit}
+                    onChange={e => setDbSourceRowLimit(parseInt(e.target.value) || 100)}
+                    className="h-8 text-xs mt-1"
+                    min={1}
+                    max={10000}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs">SQL Query</Label>
+                <textarea
+                  className="min-h-[80px] w-full rounded border bg-background px-2 py-1.5 text-xs font-mono mt-1"
+                  placeholder="SELECT id, username, email FROM users WHERE active = true"
+                  value={dbSourceQuery}
+                  onChange={e => setDbSourceQuery(e.target.value)}
+                />
+              </div>
+              <Button
+                size="sm"
+                onClick={handleDatabaseQuery}
+                disabled={loading || !dbSourceConnId || !dbSourceQuery.trim()}
+              >
+                {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+                Load Data
+              </Button>
+            </TabsContent>
+          </Tabs>
 
           {dataSource && (
             <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
