@@ -1,6 +1,7 @@
 /**
  * ChainResultsView - Waterfall display of chain execution results.
- * Shows step-by-step pass/fail, timings, response bodies, extracted values, and assertion results.
+ * Shows step-by-step pass/fail, timings, extracted values, assertion results,
+ * and collapsible response body + headers per step.
  */
 
 import { useState } from "react";
@@ -8,14 +9,30 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { CheckCircle2, XCircle, Clock, ArrowDownToLine, SkipForward, AlertTriangle, ChevronDown, ChevronRight, FileJson, Copy, Check } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  CheckCircle2, XCircle, Clock, ArrowDownToLine, SkipForward,
+  AlertTriangle, ChevronDown, ChevronRight, Copy, FileJson, FileText,
+} from "lucide-react";
 import type { ChainResult, ChainStepResult } from "./constants";
+
+/** Backend returns "success" for passed steps/chains — normalize to "passed" for UI */
+function normalizeStatus(status: string): string {
+  if (status === "success") return "passed";
+  return status;
+}
+
+/** Round response time to clean integer */
+function formatMs(ms: number): string {
+  return Math.round(ms).toString();
+}
 
 interface ChainResultsViewProps {
   result: ChainResult;
 }
 
 export default function ChainResultsView({ result }: ChainResultsViewProps) {
+  const chainStatus = normalizeStatus(result.status);
   const passRate = result.total_steps > 0
     ? ((result.passed_steps / result.total_steps) * 100).toFixed(1)
     : "0.0";
@@ -30,17 +47,17 @@ export default function ChainResultsView({ result }: ChainResultsViewProps) {
               <Badge
                 variant="outline"
                 className={
-                  result.status === "passed"
+                  chainStatus === "passed"
                     ? "border-green-500 text-green-600 bg-green-500/10 text-base px-3 py-1"
                     : "border-red-500 text-red-600 bg-red-500/10 text-base px-3 py-1"
                 }
               >
-                {result.status === "passed" ? (
+                {chainStatus === "passed" ? (
                   <CheckCircle2 className="w-4 h-4 mr-1.5" />
                 ) : (
                   <XCircle className="w-4 h-4 mr-1.5" />
                 )}
-                {result.status.toUpperCase()}
+                {chainStatus.toUpperCase()}
               </Badge>
               <span className="text-sm text-muted-foreground">
                 {result.chain_name}
@@ -69,7 +86,7 @@ export default function ChainResultsView({ result }: ChainResultsViewProps) {
               </div>
               <div className="flex items-center gap-1 text-muted-foreground">
                 <Clock className="w-4 h-4" />
-                <span className="font-mono">{result.total_duration_ms}ms</span>
+                <span className="font-mono">{formatMs(result.total_duration_ms)}ms</span>
               </div>
             </div>
           </div>
@@ -80,16 +97,14 @@ export default function ChainResultsView({ result }: ChainResultsViewProps) {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-lg">Step Results</CardTitle>
-          <CardDescription>Execution timeline with extractions and assertion details</CardDescription>
+          <CardDescription>Execution timeline with response data, extractions, and assertions</CardDescription>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="max-h-[500px]">
-            <div className="space-y-2">
-              {result.step_results.map((sr, idx) => (
-                <StepResultRow key={sr.step_id} stepResult={sr} index={idx} />
-              ))}
-            </div>
-          </ScrollArea>
+          <div className="space-y-2">
+            {result.step_results.map((sr, idx) => (
+              <StepResultRow key={sr.step_id} stepResult={sr} index={idx} />
+            ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -122,14 +137,13 @@ export default function ChainResultsView({ result }: ChainResultsViewProps) {
 }
 
 function StepResultRow({ stepResult, index }: { stepResult: ChainStepResult; index: number }) {
-  const [showResponse, setShowResponse] = useState(false);
-  const [showHeaders, setShowHeaders] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const stepStatus = normalizeStatus(stepResult.status);
 
   const statusIcon =
-    stepResult.status === "passed" ? (
+    stepStatus === "passed" ? (
       <CheckCircle2 className="w-5 h-5 text-green-500" />
-    ) : stepResult.status === "failed" ? (
+    ) : stepStatus === "failed" ? (
       <XCircle className="w-5 h-5 text-red-500" />
     ) : (
       <SkipForward className="w-5 h-5 text-yellow-500" />
@@ -139,40 +153,42 @@ function StepResultRow({ stepResult, index }: { stepResult: ChainStepResult; ind
     ? Math.min(100, Math.max(5, (stepResult.response_time_ms / 2000) * 100))
     : 0;
 
-  const hasResponseBody = stepResult.response_body !== null && stepResult.response_body !== undefined;
-  const hasResponseHeaders = stepResult.response_headers && Object.keys(stepResult.response_headers).length > 0;
+  const hasResponseData = stepResult.response_body != null || (stepResult.response_headers && Object.keys(stepResult.response_headers).length > 0);
 
-  const formatResponseBody = () => {
-    if (!hasResponseBody) return "";
-    try {
-      if (typeof stepResult.response_body === "object") {
-        return JSON.stringify(stepResult.response_body, null, 2);
+  const formatBody = (body: any): string => {
+    if (body == null) return "";
+    if (typeof body === "string") {
+      try {
+        return JSON.stringify(JSON.parse(body), null, 2);
+      } catch {
+        return body;
       }
-      // Try to parse and prettify if it's a JSON string
-      const parsed = JSON.parse(String(stepResult.response_body));
-      return JSON.stringify(parsed, null, 2);
-    } catch {
-      return String(stepResult.response_body);
     }
+    return JSON.stringify(body, null, 2);
   };
 
-  const copyResponse = async () => {
-    try {
-      await navigator.clipboard.writeText(formatResponseBody());
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch { /* ignore */ }
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).catch(() => {});
   };
 
   return (
-    <div className={`p-3 rounded-lg border ${
-      stepResult.status === "passed"
+    <div className={`rounded-lg border ${
+      stepStatus === "passed"
         ? "border-green-500/20 bg-green-500/5"
-        : stepResult.status === "failed"
+        : stepStatus === "failed"
           ? "border-red-500/20 bg-red-500/5"
           : "border-yellow-500/20 bg-yellow-500/5"
     }`}>
-      <div className="flex items-center gap-3">
+      {/* Header row — clickable to expand */}
+      <div
+        className="flex items-center gap-3 p-3 cursor-pointer hover:bg-muted/20 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? (
+          <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+        )}
         <span className="text-xs text-muted-foreground font-mono w-5">{index + 1}</span>
         {statusIcon}
         <span className="text-sm font-medium flex-1">{stepResult.step_name}</span>
@@ -183,91 +199,34 @@ function StepResultRow({ stepResult, index }: { stepResult: ChainStepResult; ind
           </Badge>
         )}
 
+        {hasResponseData && (
+          <Badge variant="secondary" className="text-xs">
+            <FileJson className="w-3 h-3 mr-1" />
+            Response
+          </Badge>
+        )}
+
         <span className="text-xs text-muted-foreground font-mono flex items-center gap-1">
           <Clock className="w-3 h-3" />
-          {stepResult.response_time_ms}ms
+          {formatMs(stepResult.response_time_ms)}ms
         </span>
       </div>
 
       {/* Timing bar */}
       {barWidth > 0 && (
-        <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
+        <div className="mx-3 mb-2 h-1.5 bg-muted rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all ${
-              stepResult.status === "passed" ? "bg-green-500" : "bg-red-500"
+              stepStatus === "passed" ? "bg-green-500" : "bg-red-500"
             }`}
             style={{ width: `${barWidth}%` }}
           />
         </div>
       )}
 
-      {/* Response Body toggle */}
-      {hasResponseBody && (
-        <div className="mt-2">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs gap-1.5 px-2 text-muted-foreground hover:text-foreground"
-              onClick={() => setShowResponse(!showResponse)}
-            >
-              {showResponse ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-              <FileJson className="w-3.5 h-3.5" />
-              Response Body
-            </Button>
-            {hasResponseHeaders && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs gap-1.5 px-2 text-muted-foreground hover:text-foreground"
-                onClick={() => setShowHeaders(!showHeaders)}
-              >
-                {showHeaders ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                Headers ({Object.keys(stepResult.response_headers).length})
-              </Button>
-            )}
-          </div>
-
-          {/* Response Body content */}
-          {showResponse && (
-            <div className="mt-1.5 relative group">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute top-2 right-2 h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                onClick={copyResponse}
-                title="Copy response"
-              >
-                {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-              </Button>
-              <ScrollArea className="max-h-[300px]">
-                <pre className="text-xs font-mono bg-muted/60 border rounded-md p-3 overflow-x-auto whitespace-pre-wrap break-words">
-                  {formatResponseBody()}
-                </pre>
-              </ScrollArea>
-            </div>
-          )}
-
-          {/* Response Headers content */}
-          {showHeaders && (
-            <div className="mt-1.5">
-              <div className="text-xs font-mono bg-muted/60 border rounded-md p-3 space-y-0.5">
-                {Object.entries(stepResult.response_headers).map(([key, value]) => (
-                  <div key={key}>
-                    <span className="text-blue-600 dark:text-blue-400">{key}</span>
-                    <span className="text-muted-foreground">: </span>
-                    <span>{String(value)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Extracted values */}
+      {/* Extracted values — always visible */}
       {Object.keys(stepResult.extracted_values || {}).length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1">
+        <div className="mx-3 mb-2 flex flex-wrap gap-1">
           {Object.entries(stepResult.extracted_values).map(([key, value]) => (
             <Badge key={key} variant="secondary" className="text-xs font-mono">
               {key} = {String(value).substring(0, 30)}
@@ -277,9 +236,9 @@ function StepResultRow({ stepResult, index }: { stepResult: ChainStepResult; ind
         </div>
       )}
 
-      {/* Assertion results */}
+      {/* Assertion results — always visible */}
       {stepResult.assertion_results && stepResult.assertion_results.length > 0 && (
-        <div className="mt-2 space-y-1">
+        <div className="mx-3 mb-2 space-y-1">
           {stepResult.assertion_results.map((ar, i) => (
             <div key={i} className="flex items-center gap-2 text-xs">
               {ar.passed ? (
@@ -295,11 +254,97 @@ function StepResultRow({ stepResult, index }: { stepResult: ChainStepResult; ind
         </div>
       )}
 
-      {/* Error */}
+      {/* Error — always visible */}
       {stepResult.error && (
-        <div className="mt-2 flex items-start gap-2 text-xs text-red-600">
+        <div className="mx-3 mb-2 flex items-start gap-2 text-xs text-red-600">
           <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
           <span>{stepResult.error}</span>
+        </div>
+      )}
+
+      {/* Expanded: Response Body & Headers */}
+      {expanded && hasResponseData && (
+        <div className="border-t mx-3 mb-3 pt-3">
+          <Tabs defaultValue="body" className="w-full">
+            <TabsList className="h-8">
+              <TabsTrigger value="body" className="text-xs h-7 gap-1">
+                <FileJson className="w-3 h-3" />
+                Response Body
+              </TabsTrigger>
+              <TabsTrigger value="headers" className="text-xs h-7 gap-1">
+                <FileText className="w-3 h-3" />
+                Headers {stepResult.response_headers ? `(${Object.keys(stepResult.response_headers).length})` : ""}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="body" className="mt-2">
+              {stepResult.response_body != null ? (
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-1 right-1 z-10 h-7 w-7 p-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyToClipboard(formatBody(stepResult.response_body));
+                    }}
+                    title="Copy response body"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </Button>
+                  <ScrollArea className="max-h-[400px] w-full">
+                    <pre className="text-xs font-mono p-3 bg-muted/50 rounded-lg whitespace-pre-wrap break-all overflow-x-auto">
+                      {formatBody(stepResult.response_body)}
+                    </pre>
+                  </ScrollArea>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic p-3">No response body</p>
+              )}
+            </TabsContent>
+
+            <TabsContent value="headers" className="mt-2">
+              {stepResult.response_headers && Object.keys(stepResult.response_headers).length > 0 ? (
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-1 right-1 z-10 h-7 w-7 p-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyToClipboard(
+                        Object.entries(stepResult.response_headers)
+                          .map(([k, v]) => `${k}: ${v}`)
+                          .join("\n")
+                      );
+                    }}
+                    title="Copy headers"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </Button>
+                  <ScrollArea className="max-h-[300px] w-full">
+                    <div className="space-y-0.5 p-2 bg-muted/50 rounded-lg">
+                      {Object.entries(stepResult.response_headers).map(([name, value]) => (
+                        <div key={name} className="flex items-start gap-2 py-1 px-2 rounded hover:bg-muted/80 group">
+                          <span className="font-mono text-xs font-semibold text-primary whitespace-nowrap">{name}:</span>
+                          <span className="font-mono text-xs text-muted-foreground break-all">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic p-3">No response headers</p>
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
+      )}
+
+      {/* Click hint when not expanded and has data */}
+      {!expanded && hasResponseData && (
+        <div className="mx-3 mb-2">
+          <p className="text-xs text-muted-foreground italic">Click to expand response body & headers</p>
         </div>
       )}
     </div>

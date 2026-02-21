@@ -14,8 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ChevronDown, ChevronUp, Trash2, GripVertical, Plus,
-  ArrowDownToLine, CheckCircle2, GitBranch, Settings,
+  ArrowDownToLine, CheckCircle2, GitBranch, Settings, FileJson, Copy,
 } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import AssertionsPanel from "./AssertionsPanel";
 import {
   HTTP_METHODS,
@@ -45,6 +46,8 @@ interface ChainStepCardProps {
     status: string;
     status_code: number;
     response_time_ms: number;
+    response_body?: any;
+    response_headers?: Record<string, string>;
     error: string | null;
   };
 }
@@ -133,10 +136,11 @@ export default function ChainStepCard({
   };
 
   const methodColor = getMethodColor(step.request.method);
+  const resultStatus = result ? (result.status === "success" ? "passed" : result.status) : "";
   const statusColor = result
-    ? result.status === "passed"
+    ? resultStatus === "passed"
       ? "border-green-500/40 bg-green-500/5"
-      : result.status === "failed"
+      : resultStatus === "failed"
         ? "border-red-500/40 bg-red-500/5"
         : "border-yellow-500/40 bg-yellow-500/5"
     : "border-border";
@@ -192,14 +196,14 @@ export default function ChainStepCard({
           <Badge
             variant="outline"
             className={
-              result.status === "passed"
+              resultStatus === "passed"
                 ? "border-green-500 text-green-600"
-                : result.status === "failed"
+                : resultStatus === "failed"
                   ? "border-red-500 text-red-600"
                   : "border-yellow-500 text-yellow-600"
             }
           >
-            {result.status_code} - {result.response_time_ms}ms
+            {result.status_code} - {Math.round(result.response_time_ms)}ms
           </Badge>
         )}
 
@@ -247,7 +251,7 @@ export default function ChainStepCard({
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-5 h-8">
+            <TabsList className={`grid h-8 ${result?.response_body != null || (result?.response_headers && Object.keys(result.response_headers).length > 0) ? "grid-cols-6" : "grid-cols-5"}`}>
               <TabsTrigger value="request" className="text-xs h-7">Request</TabsTrigger>
               <TabsTrigger value="body" className="text-xs h-7">Body</TabsTrigger>
               <TabsTrigger value="extract" className="text-xs h-7">
@@ -259,6 +263,12 @@ export default function ChainStepCard({
               <TabsTrigger value="condition" className="text-xs h-7">
                 Cond {step.conditions.length > 0 && `(${step.conditions.length})`}
               </TabsTrigger>
+              {(result?.response_body != null || (result?.response_headers && Object.keys(result.response_headers).length > 0)) && (
+                <TabsTrigger value="response" className="text-xs h-7 gap-1">
+                  <FileJson className="w-3 h-3" />
+                  Response
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {/* Request tab */}
@@ -470,6 +480,77 @@ export default function ChainStepCard({
                 <Plus className="w-3 h-3 mr-1" /> Add Condition
               </Button>
             </TabsContent>
+
+            {/* Response tab — shown when execution result has response data */}
+            {(result?.response_body != null || (result?.response_headers && Object.keys(result.response_headers).length > 0)) && (
+              <TabsContent value="response" className="mt-3 space-y-3">
+                {/* Response Body */}
+                <div>
+                  <Label className="text-xs mb-1 block">Response Body</Label>
+                  {result.response_body != null ? (
+                    <div className="relative">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="absolute top-1 right-1 z-10 h-7 w-7 p-0"
+                        onClick={() => {
+                          const body = result.response_body;
+                          const text = typeof body === "string" ? body : JSON.stringify(body, null, 2);
+                          navigator.clipboard.writeText(text).catch(() => {});
+                        }}
+                        title="Copy response body"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </Button>
+                      <ScrollArea className="max-h-[350px] w-full">
+                        <pre className="text-xs font-mono p-3 bg-muted/50 rounded-lg whitespace-pre-wrap break-all">
+                          {typeof result.response_body === "string"
+                            ? (() => { try { return JSON.stringify(JSON.parse(result.response_body), null, 2); } catch { return result.response_body; } })()
+                            : JSON.stringify(result.response_body, null, 2)}
+                        </pre>
+                      </ScrollArea>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">No response body</p>
+                  )}
+                </div>
+
+                {/* Response Headers */}
+                {result.response_headers && Object.keys(result.response_headers).length > 0 && (
+                  <div>
+                    <Label className="text-xs mb-1 block">
+                      Response Headers ({Object.keys(result.response_headers).length})
+                    </Label>
+                    <div className="relative">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="absolute top-1 right-1 z-10 h-7 w-7 p-0"
+                        onClick={() => {
+                          const text = Object.entries(result.response_headers!)
+                            .map(([k, v]) => `${k}: ${v}`)
+                            .join("\n");
+                          navigator.clipboard.writeText(text).catch(() => {});
+                        }}
+                        title="Copy headers"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </Button>
+                      <ScrollArea className="max-h-[250px] w-full">
+                        <div className="space-y-0.5 p-2 bg-muted/50 rounded-lg">
+                          {Object.entries(result.response_headers).map(([name, value]) => (
+                            <div key={name} className="flex items-start gap-2 py-1 px-2 rounded hover:bg-muted/80">
+                              <span className="font-mono text-xs font-semibold text-primary whitespace-nowrap">{name}:</span>
+                              <span className="font-mono text-xs text-muted-foreground break-all">{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+            )}
           </Tabs>
         </CardContent>
       )}
