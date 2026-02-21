@@ -188,6 +188,8 @@ export interface ChainStepResult {
   status: string;
   status_code: number;
   response_time_ms: number;
+  response_body: any;
+  response_headers: Record<string, string>;
   extracted_values: Record<string, any>;
   assertion_results: Array<{ passed: boolean; message: string }>;
   error: string | null;

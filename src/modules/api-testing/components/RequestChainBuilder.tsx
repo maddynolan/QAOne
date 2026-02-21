@@ -207,10 +207,11 @@ export default function RequestChainBuilder() {
         if (data.result.final_variables) {
           setVariables(prev => ({ ...prev, ...data.result.final_variables }));
         }
+        const chainPassed = data.result.status === "passed" || data.result.status === "success";
         toast({
-          title: data.result.status === "passed" ? "Chain Passed" : "Chain Failed",
-          description: `${data.result.passed_steps}/${data.result.total_steps} steps passed in ${data.result.total_duration_ms}ms`,
-          variant: data.result.status === "passed" ? "default" : "destructive",
+          title: chainPassed ? "Chain Passed" : "Chain Failed",
+          description: `${data.result.passed_steps}/${data.result.total_steps} steps passed in ${Math.round(data.result.total_duration_ms)}ms`,
+          variant: chainPassed ? "default" : "destructive",
         });
       }
     } catch (err: any) {

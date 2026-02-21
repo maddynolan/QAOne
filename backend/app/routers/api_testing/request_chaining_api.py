@@ -213,6 +213,8 @@ async def execute_chain(request: ExecuteChainRequest):
                         "status": sr.status,
                         "status_code": sr.status_code,
                         "response_time_ms": sr.response_time_ms,
+                        "response_body": sr.response_body,
+                        "response_headers": sr.response_headers,
                         "extracted_values": sr.extracted_values,
                         "assertion_results": sr.assertion_results,
                         "error": sr.error
