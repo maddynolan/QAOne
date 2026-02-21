@@ -1,12 +1,14 @@
 /**
  * ChainResultsView - Waterfall display of chain execution results.
- * Shows step-by-step pass/fail, timings, extracted values, and assertion results.
+ * Shows step-by-step pass/fail, timings, response bodies, extracted values, and assertion results.
  */
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { CheckCircle2, XCircle, Clock, ArrowDownToLine, SkipForward, AlertTriangle } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, ArrowDownToLine, SkipForward, AlertTriangle, ChevronDown, ChevronRight, FileJson, Copy, Check } from "lucide-react";
 import type { ChainResult, ChainStepResult } from "./constants";
 
 interface ChainResultsViewProps {
@@ -120,6 +122,10 @@ export default function ChainResultsView({ result }: ChainResultsViewProps) {
 }
 
 function StepResultRow({ stepResult, index }: { stepResult: ChainStepResult; index: number }) {
+  const [showResponse, setShowResponse] = useState(false);
+  const [showHeaders, setShowHeaders] = useState(false);
+  const [copied, setCopied] = useState(false);
+
   const statusIcon =
     stepResult.status === "passed" ? (
       <CheckCircle2 className="w-5 h-5 text-green-500" />
@@ -132,6 +138,31 @@ function StepResultRow({ stepResult, index }: { stepResult: ChainStepResult; ind
   const barWidth = stepResult.response_time_ms > 0
     ? Math.min(100, Math.max(5, (stepResult.response_time_ms / 2000) * 100))
     : 0;
+
+  const hasResponseBody = stepResult.response_body !== null && stepResult.response_body !== undefined;
+  const hasResponseHeaders = stepResult.response_headers && Object.keys(stepResult.response_headers).length > 0;
+
+  const formatResponseBody = () => {
+    if (!hasResponseBody) return "";
+    try {
+      if (typeof stepResult.response_body === "object") {
+        return JSON.stringify(stepResult.response_body, null, 2);
+      }
+      // Try to parse and prettify if it's a JSON string
+      const parsed = JSON.parse(String(stepResult.response_body));
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return String(stepResult.response_body);
+    }
+  };
+
+  const copyResponse = async () => {
+    try {
+      await navigator.clipboard.writeText(formatResponseBody());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* ignore */ }
+  };
 
   return (
     <div className={`p-3 rounded-lg border ${
@@ -167,6 +198,70 @@ function StepResultRow({ stepResult, index }: { stepResult: ChainStepResult; ind
             }`}
             style={{ width: `${barWidth}%` }}
           />
+        </div>
+      )}
+
+      {/* Response Body toggle */}
+      {hasResponseBody && (
+        <div className="mt-2">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs gap-1.5 px-2 text-muted-foreground hover:text-foreground"
+              onClick={() => setShowResponse(!showResponse)}
+            >
+              {showResponse ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+              <FileJson className="w-3.5 h-3.5" />
+              Response Body
+            </Button>
+            {hasResponseHeaders && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1.5 px-2 text-muted-foreground hover:text-foreground"
+                onClick={() => setShowHeaders(!showHeaders)}
+              >
+                {showHeaders ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                Headers ({Object.keys(stepResult.response_headers).length})
+              </Button>
+            )}
+          </div>
+
+          {/* Response Body content */}
+          {showResponse && (
+            <div className="mt-1.5 relative group">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute top-2 right-2 h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                onClick={copyResponse}
+                title="Copy response"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+              </Button>
+              <ScrollArea className="max-h-[300px]">
+                <pre className="text-xs font-mono bg-muted/60 border rounded-md p-3 overflow-x-auto whitespace-pre-wrap break-words">
+                  {formatResponseBody()}
+                </pre>
+              </ScrollArea>
+            </div>
+          )}
+
+          {/* Response Headers content */}
+          {showHeaders && (
+            <div className="mt-1.5">
+              <div className="text-xs font-mono bg-muted/60 border rounded-md p-3 space-y-0.5">
+                {Object.entries(stepResult.response_headers).map(([key, value]) => (
+                  <div key={key}>
+                    <span className="text-blue-600 dark:text-blue-400">{key}</span>
+                    <span className="text-muted-foreground">: </span>
+                    <span>{String(value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
