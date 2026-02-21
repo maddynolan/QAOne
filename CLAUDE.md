@@ -955,6 +955,89 @@ interface ComparisonResult { passed, diff_percentage, diff_pixel_count, total_pi
 
 ---
 
+## Component 9: AI Testing & Flowpilot
+
+> AI-powered testing agents — natural language test generation, autonomous exploration, application mapping, and self-healing test execution via real Playwright browser automation.
+
+### Frontend
+
+| File | Size | Purpose |
+|------|------|---------|
+| `src/modules/ai-testing/pages/FlowpilotPage.tsx` | ~1,044 lines | Goal-based agentic testing hub with 4 real agents |
+| `src/modules/ai-testing/pages/AITestingPage.tsx` | ~78 lines | Landing page with 4-step intro cards |
+| `src/modules/ai-testing/components/AIChatTesting.tsx` | ~729 lines | NLP input → real SSE test execution |
+| `src/modules/ai-testing/components/AIExplorerAgent.tsx` | ~693 lines | Autonomous element discovery (Electron IPC) |
+| `src/modules/ai-testing/components/AIFlowExplorer.tsx` | ~960 lines | 5-tab app mapping + goal execution (Electron IPC) |
+
+### 4 Flowpilot Agents (v3.12.18+)
+
+| Agent | Backend Endpoint | Protocol | Purpose |
+|-------|-----------------|----------|---------|
+| **Generator** | `POST /api/ai-testing/start` → AgenticOrchestrator v2.0 | SSE streaming | NLP → real browser test with auto-heal |
+| **Self-Healer** | `POST /api/ai-testing/rerun-with-fix` | SSE streaming | Re-run failed tests with AI selector fixes |
+| **Explorer** | `POST /api/blaze/start` + `GET /api/blaze/status/{id}` | REST + polling (2s) | Autonomous crawling, defect detection, NO AI dependency |
+| **Flowmap** | `POST /api/exploration/start` | REST | BFS site crawling, capability mapping, LLM analysis |
+
+**SSE Event Types:** `phase`, `intent`, `step`, `screenshot`, `test_complete`, `plan`, `complete`, `error`
+
+**Features:**
+- Live browser screenshots during test execution
+- Expandable test results with per-step pass/fail, selector method, confidence %, healing status
+- Explorer defect cards with severity badges (critical/high/medium)
+- Flowmap application map with pages, buttons, forms, entities
+- **Save as Test Case** → persists to `/test-cases` endpoint
+- **Re-run with Healer** button on failed tests → auto-switches agent
+- Stop button with AbortController (SSE) and clearInterval (polling)
+
+### Backend — AI Testing
+
+**Routers** (`backend/app/routers/ai/`):
+
+| File | Lines | Prefix | Purpose |
+|------|-------|--------|---------|
+| `ai_testing.py` | 358 | `/api/ai-testing` | SSE streaming test execution (4 endpoints) |
+| `ai_generation_api.py` | 2,858 | `/ai` | Test generation, triage, ingest (28 endpoints) |
+| `ai_automation_api.py` | 474 | `/ai-automation` | Element resolution, failure analysis |
+| `ai_enhancements_api.py` | 867 | `/api/ai/enhancements` | Auto-fix, false positives, flaky detection, manual assist |
+| `agents_api.py` | 95 | `/agents` | Agent registry & health |
+| `vision_healing_api.py` | — | `/api/vision` | Vision-based selector healing |
+| `llm_api.py` | — | `/api/llm` | LLM gateway |
+
+**Exploration Routers** (`backend/app/routers/exploration/`):
+
+| File | Prefix | Purpose |
+|------|--------|---------|
+| `blaze_api.py` | `/api/blaze` | Autonomous crawling: start, start-sync, status, stop, sessions, health |
+| `exploration_api.py` | `/api/exploration` | App mapping: start, status, compare-requirements, runs, health |
+
+### Backend — AI Services
+
+| File | Purpose |
+|------|---------|
+| `backend/app/services/ai_testing/agentic_orchestrator.py` | AgenticOrchestrator v2.0 — 6-phase execution (understand → launch → navigate → plan → execute → cleanup) |
+| `backend/app/services/ai_testing/ai_testing_orchestrator.py` | v1.0 legacy (kept for backward compat) |
+| `backend/app/services/ai_testing/human_element_finder.py` | Playwright getByRole/getByText/getByLabel strategies |
+| `backend/app/services/ai_testing/page_scanner.py` | DOM analysis — element extraction, accessibility tree |
+| `backend/app/services/exploration/blaze_explorer.py` | BlazeExplorer — autonomous crawling, no AI dependency |
+| `backend/app/services/llm/model_gateway.py` | Routes to correct LLM provider |
+| `backend/app/services/llm/openai_service.py` | OpenAI gpt-4o-mini (primary) |
+| `backend/app/services/llm/cached_claude_service.py` | Anthropic Claude with prompt caching |
+
+### Key API Endpoints
+
+- `POST /api/ai-testing/start` — Start AI testing with SSE streaming (AgenticOrchestrator v2.0)
+- `GET /api/ai-testing/status` — Check service readiness
+- `POST /api/ai-testing/explain` — Analyze test failure with AI
+- `POST /api/ai-testing/rerun-with-fix` — Re-run with AI selector fixes (SSE)
+- `POST /api/blaze/start` — Start autonomous exploration session
+- `GET /api/blaze/status/{session_id}` — Poll exploration progress
+- `POST /api/blaze/stop/{session_id}` — Stop exploration
+- `POST /api/exploration/start` — Start app capability mapping
+- `GET /api/exploration/status/{run_id}` — Get mapping progress
+- `POST /api/exploration/compare-requirements` — Compare app vs requirements
+
+---
+
 ## Cross-Cutting Concerns
 
 ### Authentication & Authorization
@@ -1135,17 +1218,18 @@ PostgreSQL (primary) with **in-memory fallback**:
 | | ai_automation_api | `/ai-automation` | Element resolution, failure analysis |
 | | ai_enhancements_api | `/api/ai/enhancements` | False positives, flaky detection |
 | | vision_healing_api | `/api/vision` | Vision-based healing |
-| | ai_testing | `/api/ai-testing` | AI testing |
+| | ai_testing | `/api/ai-testing` | SSE streaming test execution (4 endpoints) |
 | | llm_api | `/api/llm` | LLM gateway |
+| | agents_api | `/agents` | Agent registry & health |
 | **accessibility/** | accessibility_api | `/api/accessibility` | A11y scans (10 endpoints) |
 | | accessibility_scan_api | `/api/a11y` | A11y v2 with reports |
 | | compliance_api | `/api/compliance` | Compliance checking |
 | **visual_testing/** | visual_testing_api | `/api/visual-testing` | Visual regression (15 endpoints) |
 | **salesforce/** | salesforce_api | `/api/salesforce` | Salesforce integration |
 | | salesforce_auth | `/api/salesforce/auth` | Salesforce OAuth2 |
-| **exploration/** | exploration_api | `/exploration` | Autonomous exploration |
+| **exploration/** | exploration_api | `/api/exploration` | App capability mapping |
 | | nexus_exploratory_api | `/api/nexus` | Nexus testing |
-| | blaze_api | `/api/blaze` | Blaze testing |
+| | blaze_api | `/api/blaze` | Autonomous crawling, defect detection |
 | **platform/** | health_api | `/health` | Health checks |
 | | dashboard_api | `/dashboard` | Dashboard metrics |
 | | license_api | `/api/license` | License management |
@@ -1156,6 +1240,31 @@ PostgreSQL (primary) with **in-memory fallback**:
 | | project_management_api | `/api/projects` | Project management |
 | | framework_analyzer_api | `/api/framework` | Framework detection |
 | | code_alchemy_api | `/api/code-alchemy` | Repository import |
+
+---
+
+## Documentation Update Procedure
+
+**When the user mentions a feature name, update the corresponding FEATURE-*.md doc** (just like "push" triggers the release pipeline). Feature docs live in `docs/`:
+
+| Feature | Document |
+|---------|----------|
+| Recording / Recorder | `docs/FEATURE-RECORDING.md` |
+| Test Builder / Build | `docs/FEATURE-TEST-BUILDING.md` |
+| Test Execution / Runs | `docs/FEATURE-TEST-EXECUTION.md` |
+| API Testing | `docs/FEATURE-API-TESTING.md` |
+| Performance Testing | `docs/FEATURE-PERFORMANCE-TESTING.md` |
+| Mobile Testing | `docs/FEATURE-MOBILE-TESTING.md` |
+| Accessibility / Visual | `docs/FEATURE-ACCESSIBILITY-VISUAL.md` |
+| AI Testing / Flowpilot | `docs/FEATURE-AI-TESTING.md` |
+| Salesforce | `docs/FEATURE-SALESFORCE.md` |
+| Marketing / Analytics / SEO | `docs/FEATURE-MARKETING-ANALYTICS.md` |
+| Platform Master | `docs/PLATFORM_MASTER_DOCUMENT.md` |
+
+**When updating feature docs:**
+1. Update the relevant `FEATURE-*.md` with new/changed functionality
+2. Update `PLATFORM_MASTER_DOCUMENT.md` if architecture changes
+3. Update this `CLAUDE.md` file with new endpoints, files, or patterns
 
 ---
 

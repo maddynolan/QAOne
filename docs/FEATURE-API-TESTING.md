@@ -1,6 +1,6 @@
 # Feature: API Testing
 
-Flowstral's API Testing module is a response-driven API testing platform comparable to Postman, ReadyAPI, and SoapUI. It supports REST, SOAP, GraphQL, and WebSocket protocols with real HTTP execution, click-to-assert from live responses, request chaining, and multi-format import/export.
+Flowstral's API Testing module is a response-driven API testing platform comparable to Postman, ReadyAPI, and SoapUI. It supports REST, SOAP/WSDL, GraphQL, gRPC, Kafka, MQTT, WebSocket, and AMQP (RabbitMQ) protocols with real HTTP execution, click-to-assert from live responses, request chaining, and multi-format import/export.
 
 ## Architecture (Post-Redesign Feb 2026)
 
@@ -57,7 +57,7 @@ This matches how professional testers actually work: assertions built from **rea
 
 ### 1. Builder (Default Tab)
 
-**Component:** `src/components/api-testing/RequestBuilder.tsx`
+**Component:** `src/modules/api-testing/components/RequestBuilder.tsx`
 
 A full-featured HTTP request builder (Postman-like):
 - URL bar with method selector (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS)
@@ -124,7 +124,7 @@ A full-featured HTTP request builder (Postman-like):
 
 ### 3. Chains (Request Chain Builder)
 
-**Component:** `src/components/api-testing/RequestChainBuilder.tsx`
+**Component:** `src/modules/api-testing/components/RequestChainBuilder.tsx`
 
 Multi-step request chaining (like ReadyAPI TestSuites):
 - Name a chain, add steps (each step is a full request with extractions/assertions/conditions)
@@ -179,9 +179,9 @@ Five report format views:
 
 ## Collection Sidebar
 
-**Component:** `src/components/api-testing/CollectionSidebar.tsx`
+**Component:** `src/modules/api-testing/components/CollectionSidebar.tsx`
 
-**State:** `src/stores/apiTestingStore.ts` (Zustand with immer + persist)
+**State:** `src/modules/api-testing/store/apiTestingStore.ts` (Zustand with immer + persist)
 
 The sidebar is the organizational backbone:
 - **Collections**: create, rename, delete, import from spec
@@ -284,20 +284,20 @@ Both `constants.ts` (used by RequestBuilder, ChainBuilder) and `EnhancedAPITesti
 
 | File | Purpose |
 |------|---------|
-| `src/pages/EnhancedAPITesting.tsx` | Main page (6 tabs, ~4077 lines) |
-| `src/stores/apiTestingStore.ts` | Zustand store (collections, folders, requests, execution) |
-| `src/components/api-testing/CollectionSidebar.tsx` | Sidebar with folders, requests, drag-drop, run buttons |
-| `src/components/api-testing/RequestBuilder.tsx` | Postman-like request builder with Auto-Assert |
-| `src/components/api-testing/ResponseTreeExplorer.tsx` | Response tree with click-to-assert, resizable panel |
-| `src/components/api-testing/AssertionsPanel.tsx` | Assertion editor (10 types, 13 operators) |
-| `src/components/api-testing/RequestChainBuilder.tsx` | Multi-step chain builder |
-| `src/components/api-testing/ChainStepCard.tsx` | Chain step UI card |
-| `src/components/api-testing/ChainResultsView.tsx` | Chain results display |
-| `src/components/api-testing/EnvironmentManager.tsx` | Environment management with variable resolution |
-| `src/components/api-testing/constants.ts` | Shared types, constants, API_BASE_URL |
-| `backend/app/routers/enhanced_api_testing_api.py` | FastAPI router (execution, env) |
-| `backend/app/routers/api_import_api.py` | Import/export router |
-| `backend/app/routers/request_chaining_api.py` | Chain execution router |
+| `src/modules/api-testing/pages/EnhancedAPITesting.tsx` | Main page (6 tabs, ~4077 lines) |
+| `src/modules/api-testing/store/apiTestingStore.ts` | Zustand store (collections, folders, requests, execution) |
+| `src/modules/api-testing/components/CollectionSidebar.tsx` | Sidebar with folders, requests, drag-drop, run buttons |
+| `src/modules/api-testing/components/RequestBuilder.tsx` | Postman-like request builder with Auto-Assert |
+| `src/modules/api-testing/components/ResponseTreeExplorer.tsx` | Response tree with click-to-assert, resizable panel |
+| `src/modules/api-testing/components/AssertionsPanel.tsx` | Assertion editor (11 types, 13 operators) |
+| `src/modules/api-testing/components/RequestChainBuilder.tsx` | Multi-step chain builder |
+| `src/modules/api-testing/components/ChainStepCard.tsx` | Chain step UI card |
+| `src/modules/api-testing/components/ChainResultsView.tsx` | Chain results display |
+| `src/modules/api-testing/components/EnvironmentManager.tsx` | Environment management with variable resolution |
+| `src/modules/api-testing/components/constants.ts` | Shared types, constants, API_BASE_URL |
+| `backend/app/routers/api_testing/enhanced_api_testing_api.py` | FastAPI router (execution, env) |
+| `backend/app/routers/api_testing/api_import_api.py` | Import/export router |
+| `backend/app/routers/api_testing/request_chaining_api.py` | Chain execution router |
 | `backend/app/services/api_testing/test_execution_engine.py` | Real HTTP execution via aiohttp |
 | `backend/app/services/api_testing/request_chaining.py` | Chain engine (httpx, jsonpath_ng) |
 | `backend/app/services/connectors/api_spec_parser.py` | OpenAPI/Postman/WSDL/GraphQL/HAR parser |
@@ -318,3 +318,8 @@ The following features were removed from the frontend tabs but their backend end
 - **OWASP Security Scanner**: `POST /api/v2/testing/security/scan` - still works for programmatic use
 - **Mock Server**: `POST /api/v2/testing/mock/server` - still works for programmatic use
 - **Auto-Generated Test Categories**: Backend engine (`EnhancedAPITestEngine`) still exists but is no longer called from the import flow
+
+---
+
+*Last updated: 2026-02-20*
+*Generated by code audit of the Flowstral API testing feature.*

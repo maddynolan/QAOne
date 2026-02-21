@@ -70,7 +70,7 @@ MobileTestingPage.tsx (952 lines)
 
 | File | Lines | Status | Role |
 |------|-------|--------|------|
-| `src/pages/MobileTestingPage.tsx` | 952 | **Fully implemented (frontend)** | Native app testing: Maestro check, device listing, YAML flow editor, test execution, Maestro Studio recording. Navigation cards to mobile web and PWA testing. |
+| `src/modules/mobile-testing/pages/MobileTestingPage.tsx` | 952 | **Fully implemented (frontend)** | Native app testing: Maestro check, device listing, YAML flow editor, test execution, Maestro Studio recording. Navigation cards to mobile web and PWA testing. |
 
 **Key State Variables:**
 - `maestroInstalled`, `devices` (iOS/Android emulators), `selectedDevice`, `selectedPlatform`
@@ -89,7 +89,7 @@ MobileTestingPage.tsx (952 lines)
 
 | File | Lines | Status | Role |
 |------|-------|--------|------|
-| `src/components/MobileDeviceSelector.tsx` | 532 | **Fully implemented** | Reusable device selector: categorized device dropdown, network throttling (None/5G/4G/3G/Slow 3G/Offline), Maestro status indicator. Compact and full display modes. |
+| `src/modules/mobile-testing/components/MobileDeviceSelector.tsx` | 532 | **Fully implemented** | Reusable device selector: categorized device dropdown, network throttling (None/5G/4G/3G/Slow 3G/Offline), Maestro status indicator. Compact and full display modes. |
 
 ### Libraries
 
@@ -209,7 +209,40 @@ All mobile functionality goes through `window.flowstral.mobile.*`:
 
 ---
 
-## 8. Known Gaps & TODOs
+## 8. 6-Tab Hub (v3.11.6+)
+
+MobileTestingPage is now a hub with 6 tabs:
+
+| Tab | Component | Purpose |
+|-----|-----------|---------|
+| Studio | `MobileTestStudio.tsx` | Maestro Studio recording, YAML editor, real-time console |
+| Flows | `MobileTestFlows.tsx` | Saved flow CRUD, folders, import/export YAML, templates |
+| Device Lab | `MobileDeviceLab.tsx` | Screenshots, log streaming, app install/uninstall |
+| Runs | `MobileTestRuns.tsx` | Execution history, stats, filtering, re-run |
+| Inspector | `MobileInspector.tsx` | Element hierarchy via uiautomator dump XML |
+| Tools | `MobileAdvancedTools.tsx` | Deep links, push, biometrics, geo, network, orientation, appearance, locale, font scale |
+
+### 20+ IPC Handlers (v3.11.6+)
+
+All mobile operations flow through: MaestroRunner -> IPC handler -> preload -> electron-bridge -> React component.
+
+**MaestroRunner** (`flowstral-desktop/src/main/lib/maestro-integration.js`): 14 device methods including takeScreenshot, startLogCapture, installApp, uninstallApp, getElementHierarchy, openDeepLink, sendPushNotification, simulateBiometric, setGeoLocation, setNetworkCondition, setOrientation, setAppearance, setLocale, setFontScale.
+
+**IPC Channels:** mobile-check-maestro, mobile-run-native-test, mobile-get-native-devices, mobile-start-studio, mobile-stop-studio, mobile-studio-status, mobile-screenshot, mobile-start-logs, mobile-stop-logs, mobile-install-app, mobile-uninstall-app, mobile-browse-app, mobile-get-hierarchy, mobile-open-deep-link, mobile-send-push, mobile-simulate-biometric, mobile-set-geolocation, mobile-set-network, mobile-set-orientation, mobile-set-appearance, mobile-set-locale, mobile-set-font-scale.
+
+### Zustand Store
+
+`src/modules/mobile-testing/store/mobileTestingStore.ts` with persist middleware -> localStorage.
+
+Key state: activeTab, isStudioRunning, maestroInstalled, nativeDevices, selectedPlatform, selectedDevice, appBundleId, flows, folders, testRuns, studioOutput, deepLinks, savedLocations, networkProfiles, activeNetworkProfile, currentLocation, pushNotificationPayload.
+
+### Advanced Tools (ALL Fully Implemented)
+
+Deep links, push notifications, biometrics, geolocation, network conditioning, orientation, appearance (dark/light), locale, font scale -- all wired to real device commands via adb (Android) and xcrun simctl (iOS).
+
+---
+
+## 9. Known Gaps & TODOs
 
 ### What's Real vs. Aspirational
 
@@ -222,9 +255,9 @@ All mobile functionality goes through `window.flowstral.mobile.*`:
 | **Maestro Studio recording** | **Real (if Maestro installed)** | Launches studio, captures YAML |
 | **Real device testing** | **Not implemented** | Listed as "Coming Soon" |
 | **Appium integration** | **Not implemented** | Listed as "Coming Soon" |
-| **Push notification testing** | **Not implemented** | Listed as "Coming Soon" |
-| **Biometric mocking** | **Not implemented** | Listed as "Coming Soon" |
-| **Deep link testing** | **Not implemented** | Listed as "Coming Soon" |
+| **Push notification testing** | **Fully implemented (v3.11.6)** | Wired to adb broadcast / xcrun simctl push |
+| **Biometric mocking** | **Fully implemented (v3.11.6)** | Wired to adb broadcast / xcrun simctl notifyutil |
+| **Deep link testing** | **Fully implemented (v3.11.6)** | Wired to adb am start / xcrun simctl openurl |
 | **Mobile accessibility** | **Not implemented** | Listed as "Coming Soon" |
 
 ### Architecture Concerns
@@ -239,5 +272,5 @@ All mobile functionality goes through `window.flowstral.mobile.*`:
 
 ---
 
-*Last updated: 2026-02-08*
+*Last updated: 2026-02-20*
 *Generated by code audit of the Flowstral mobile testing feature.*

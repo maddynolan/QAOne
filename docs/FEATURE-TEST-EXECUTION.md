@@ -104,35 +104,35 @@ Test Case (from Builder or Recording)
 
 | File | Lines | Status | Role |
 |------|-------|--------|------|
-| `src/pages/TestCaseExecution.tsx` | 1,223 | **Fully implemented** | Manual step-by-step execution with evidence capture, defect filing, execution history |
-| `src/pages/TestRuns.tsx` | 366 | **Fully implemented** | Test run list, create, execute via backend |
-| `src/pages/TestRunDetail.tsx` | 1,081 | **Fully implemented** | Run detail: step marking, screenshots, defects, comments, traceability |
-| `src/pages/CreateTestRun.tsx` | 280 | **Fully implemented** | Wizard step 1: name, plan, environment, branch, tags |
-| `src/pages/TestSuites.tsx` | 587 | **Fully implemented** | Suite CRUD with backend + localStorage fallback |
-| `src/pages/TestPlans.tsx` | 147 | **Fully implemented** | Plan list with AI expansion |
-| `src/pages/CreateTestPlan.tsx` | ~200 | **Fully implemented** | Create test plans |
-| `src/pages/TestPlanDetail.tsx` | ~300 | **Fully implemented** | Plan detail with progress tracking |
-| `src/pages/EditTestPlan.tsx` | ~200 | **Fully implemented** | Edit test plans |
-| `src/pages/ScheduledRuns.tsx` | 848 | **Frontend-only stub** | CRUD for schedules, but "Run Now" is simulated (`Math.random()`). No backend integration. |
+| `src/modules/test-management/pages/TestCaseExecution.tsx` | 1,223 | **Fully implemented** | Manual step-by-step execution with evidence capture, defect filing, execution history |
+| `src/modules/test-management/pages/TestRuns.tsx` | 366 | **Fully implemented** | Test run list, create, execute via backend |
+| `src/modules/test-management/pages/TestRunDetail.tsx` | 1,081 | **Fully implemented** | Run detail: step marking, screenshots, defects, comments, traceability |
+| `src/modules/test-management/pages/CreateTestRun.tsx` | 280 | **Fully implemented** | Wizard step 1: name, plan, environment, branch, tags |
+| `src/modules/test-management/pages/TestSuites.tsx` | 587 | **Fully implemented** | Suite CRUD with backend + localStorage fallback |
+| `src/modules/test-management/pages/TestPlans.tsx` | 147 | **Fully implemented** | Plan list with AI expansion |
+| `src/modules/test-management/pages/CreateTestPlan.tsx` | ~200 | **Fully implemented** | Create test plans |
+| `src/modules/test-management/pages/TestPlanDetail.tsx` | ~300 | **Fully implemented** | Plan detail with progress tracking |
+| `src/modules/test-management/pages/EditTestPlan.tsx` | ~200 | **Fully implemented** | Edit test plans |
+| `src/modules/test-management/pages/ScheduledRuns.tsx` | 848 | **Frontend-only stub** | CRUD for schedules, but "Run Now" is simulated (`Math.random()`). No backend integration. |
 
 ### Libraries & Hooks
 
 | File | Lines | Status | Role |
 |------|-------|--------|------|
 | `src/hooks/useExecutionWebSocket.ts` | 274 | **Fully implemented** | WebSocket hook for real-time progress (step_start, step_complete, self_healing, screenshot, log, execution_complete) |
-| `src/lib/test-execution-service.ts` | 195 | **Partial** | `runGeneratedTest()` calls backend. `convertTestCaseToCode()` is **hardcoded stub** (SauceDemo-specific). |
-| `src/lib/self-healing-service.ts` | 366 | **Partial** | Rule engine for failure analysis and fix suggestions. `executeHealingAction()` is **random stub** (`Math.random() > 0.3`). In-memory only. |
-| `src/lib/failureClassification.ts` | 182 | **Fully implemented** | Classifies Playwright/backend errors into user-friendly types for no-code UX |
-| `src/lib/results-ingestion-service.ts` | 179 | **Fully implemented** | localStorage-based results storage (keeps last 100). Per-project and per-org analytics. |
+| `src/modules/test-management/lib/test-execution-service.ts` | 195 | **Partial** | `runGeneratedTest()` calls backend. `convertTestCaseToCode()` is **hardcoded stub** (SauceDemo-specific). |
+| `src/modules/test-management/lib/self-healing-service.ts` | 366 | **Partial** | Rule engine for failure analysis and fix suggestions. `executeHealingAction()` is **random stub** (`Math.random() > 0.3`). In-memory only. |
+| `src/modules/recorder/lib/failureClassification.ts` | 182 | **Fully implemented** | Classifies Playwright/backend errors into user-friendly types for no-code UX |
+| `src/modules/test-management/lib/results-ingestion-service.ts` | 179 | **Fully implemented** | localStorage-based results storage (keeps last 100). Per-project and per-org analytics. |
 
 ### Verification Components
 
 | File | Lines | Status | Role |
 |------|-------|--------|------|
-| `src/components/verifications/ComplexVerificationService.ts` | ~100 | **Fully implemented** | Calls backend `/api/complex-verify/*` endpoints |
-| `src/components/verifications/EmailVerifyStepConfig.tsx` | ~150 | **Fully implemented** | Email verification step config UI |
-| `src/components/verifications/PDFVerifyStepConfig.tsx` | ~150 | **Fully implemented** | PDF verification step config UI |
-| `src/components/verifications/FileVerifyStepConfig.tsx` | ~150 | **Fully implemented** | File verification step config UI |
+| `src/modules/test-management/components/verifications/ComplexVerificationService.ts` | ~100 | **Fully implemented** | Calls backend `/api/complex-verify/*` endpoints |
+| `src/modules/test-management/components/verifications/EmailVerifyStepConfig.tsx` | ~150 | **Fully implemented** | Email verification step config UI |
+| `src/modules/test-management/components/verifications/PDFVerifyStepConfig.tsx` | ~150 | **Fully implemented** | PDF verification step config UI |
+| `src/modules/test-management/components/verifications/FileVerifyStepConfig.tsx` | ~150 | **Fully implemented** | File verification step config UI |
 
 ---
 
@@ -142,9 +142,9 @@ Test Case (from Builder or Recording)
 
 | File | Lines | Prefix | Endpoints | Status |
 |------|-------|--------|-----------|--------|
-| `backend/app/routers/test_runs_api.py` | 1,123 | `/test-runs` | 15 (REST) + 1 (WS) | **Fully implemented** (dead code in create) |
-| `backend/app/routers/automation_api.py` | 217 | `/automation` | 5 | **Fully implemented** |
-| `backend/app/routers/complex_verifications.py` | 650 | `/api/complex-verify` | 10 | **Fully implemented** |
+| `backend/app/routers/test_management/test_runs_api.py` | 1,123 | `/test-runs` | 15 (REST) + 1 (WS) | **Fully implemented** (dead code in create) |
+| `backend/app/routers/test_management/automation_api.py` | 217 | `/automation` | 5 | **Fully implemented** |
+| `backend/app/routers/test_management/complex_verifications.py` | 650 | `/api/complex-verify` | 10 | **Fully implemented** |
 
 ### Executor Services
 
@@ -389,7 +389,27 @@ The `failureClassification.ts` module converts raw Playwright errors into user-f
 
 ---
 
-## 11. Known Gaps & TODOs
+## 11. HealingOrchestrator (v3.10.1+)
+
+**File:** `backend/app/services/automation/healing_orchestrator.py`
+
+Chains all healing services with early-return-on-first-success:
+
+| Layer | Service | Speed | Requires |
+|-------|---------|-------|----------|
+| 1 | `SelfHealingController.get_healing_suggestions()` | 0ms | Nothing (JSON lookup) |
+| 2 | `_generate_alternative_selectors()` | 0ms | Nothing (string transforms) |
+| 3 | `VisionSelfHealingService.heal_broken_selector()` | 2-5s | Screenshot + OPENAI_API_KEY |
+| 4 | OCR `find_text_in_screenshot()` | 500ms | Screenshot + Tesseract |
+
+- Budget-controlled: max 3 AI calls per run
+- Records successes for future runs (knowledge reuse)
+- WebSocket events: `healing_chain_start`, `healing_layer_attempt`, `healing_chain_complete`
+- Heartbeat/pong keep-alive: 25s interval
+
+---
+
+## 12. Known Gaps & TODOs
 
 ### Stubs & Incomplete
 
@@ -419,5 +439,5 @@ The `failureClassification.ts` module converts raw Playwright errors into user-f
 
 ---
 
-*Last updated: 2026-02-08*
+*Last updated: 2026-02-20*
 *Generated by code audit of the Flowstral test execution feature.*

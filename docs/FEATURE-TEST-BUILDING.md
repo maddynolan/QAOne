@@ -108,38 +108,38 @@ Inputs:
 
 | File | Lines | Status | Role |
 |------|-------|--------|------|
-| `src/pages/UnifiedWorkflowEditor.tsx` | ~11,694 | **Fully implemented** | Primary builder: 60+ step types, no-code/code modes, recording integration, variables, modules, assertions, Playwright codegen |
-| `src/pages/TestRepository.tsx` | ~7,027 | **Fully implemented** | Folder tree, test case list (grid/list), suites, releases, plans, runs, defects, import/export, bulk ops, drag-and-drop |
-| `src/pages/TestCases.tsx` | 858 | **Fully implemented** | Test case list/dashboard with stats, search, filter, quick-run, execution history |
-| `src/pages/CreateTestCase.tsx` | 908 | **Fully implemented** | Templates (Login, CRUD, API, E2E, Blank), Flowstral import, step import, metadata sidebar |
-| `src/pages/EditTestCase.tsx` | 498 | **Fully implemented** | Edit test case by ID, load from API or Flowstral fallback |
-| `src/pages/TestPlayground.tsx` | 1,858 | **Fully implemented** | 10-tab demo page (Products, Cart, Tables, Forms, Login, Interactions, Frames, Downloads, Alerts, Advanced) |
-| `src/pages/EnterpriseTestRepository.tsx` | 328 | **Partial** | Enterprise wrapper using Zustand + React Query. Runs tab is placeholder. |
+| `src/modules/test-management/pages/UnifiedWorkflowEditor.tsx` | ~11,694 | **Fully implemented** | Primary builder: 60+ step types, no-code/code modes, recording integration, variables, modules, assertions, Playwright codegen |
+| `src/modules/test-management/pages/TestRepository.tsx` | ~7,027 | **Fully implemented** | Folder tree, test case list (grid/list), suites, releases, plans, runs, defects, import/export, bulk ops, drag-and-drop |
+| `src/modules/test-management/pages/TestCases.tsx` | 858 | **Fully implemented** | Test case list/dashboard with stats, search, filter, quick-run, execution history |
+| `src/modules/test-management/pages/CreateTestCase.tsx` | 908 | **Fully implemented** | Templates (Login, CRUD, API, E2E, Blank), Flowstral import, step import, metadata sidebar |
+| `src/modules/test-management/pages/EditTestCase.tsx` | 498 | **Fully implemented** | Edit test case by ID, load from API or Flowstral fallback |
+| `src/modules/test-management/pages/TestPlayground.tsx` | 1,858 | **Fully implemented** | 10-tab demo page (Products, Cart, Tables, Forms, Login, Interactions, Frames, Downloads, Alerts, Advanced) |
+| `src/modules/test-management/pages/EnterpriseTestRepository.tsx` | 328 | **Partial** | Enterprise wrapper using Zustand + React Query. Runs tab is placeholder. |
 
 ### Components
 
 | File | Lines | Status | Role |
 |------|-------|--------|------|
-| `src/components/FlowstralWorkflowEditor/FlowstralWorkflowEditor.tsx` | 2,242 | **Fully implemented** | Visual canvas editor with zoom/pan, node drag, import/export, Playwright code gen |
-| `src/components/FlowstralWorkflowEditor/WorkflowNodes.tsx` | 660 | **Fully implemented** | 19 node types with editors: API Request, DB Query, Variable, Loop, Condition, Screenshot, Wait, Import Element, Call Workflow |
-| `src/components/FlowstralWorkflowEditor/LocatorBuilder.tsx` | 690 | **Fully implemented** | Strategy-based locator generation: auto, role, text, label, testid, css. Salesforce-aware. |
-| `src/components/FlowstralWorkflowEditor/VariableStore.tsx` | 676 | **Fully implemented** | Manage variables (string/number/boolean/object/array/secret) and data sources (CSV/JSON/Excel/API) |
-| `src/components/FlowstralWorkflowEditor/TestRunner.tsx` | 347 | **Fully implemented** | Execute Playwright scripts via backend, show results with logs/screenshots/video |
-| `src/components/FlowstralWorkflowEditor/TestSuiteManager.tsx` | 660 | **Fully implemented** | Suite CRUD, workflow enable/disable, environment management. Runs are simulated. |
-| `src/components/FlowstralWorkflowEditor/ScheduleManager.tsx` | 570 | **Fully implemented** | Cron/interval/one-time scheduling. Client-side only (no backend scheduler). |
-| `src/components/FlowstralWorkflowEditor/CICDExporter.tsx` | 706 | **Fully implemented** | Generate GitHub Actions, GitLab CI, Jenkins, Azure Pipelines, Bitbucket configs |
-| `src/components/SimpleStepEditor.tsx` | 868 | **Fully implemented** | Failed-step repair modal with browser picker, visual selector cards, manual fallback |
-| `src/components/ReusableModulesManager.tsx` | 559 | **Fully implemented** | Save/load reusable step modules (login, navigation, data_entry, verification, cleanup) |
-| `src/components/TestCaseGenerator/TestCaseGenerator.tsx` | 555 | **Fully implemented** | Generate test cases from Flowstral action graphs with quality validation |
-| `src/components/StepAutomationLinker.tsx` | 922 | **Fully implemented** | Link manual steps ↔ recorded actions. 3 link modes (document/replace/hybrid), auto-advance. |
+| `src/modules/test-management/components/FlowstralWorkflowEditor/FlowstralWorkflowEditor.tsx` | 2,242 | **Fully implemented** | Visual canvas editor with zoom/pan, node drag, import/export, Playwright code gen |
+| `src/modules/test-management/components/FlowstralWorkflowEditor/WorkflowNodes.tsx` | 660 | **Fully implemented** | 19 node types with editors: API Request, DB Query, Variable, Loop, Condition, Screenshot, Wait, Import Element, Call Workflow |
+| `src/modules/test-management/components/FlowstralWorkflowEditor/LocatorBuilder.tsx` | 690 | **Fully implemented** | Strategy-based locator generation: auto, role, text, label, testid, css. Salesforce-aware. |
+| `src/modules/test-management/components/FlowstralWorkflowEditor/VariableStore.tsx` | 676 | **Fully implemented** | Manage variables (string/number/boolean/object/array/secret) and data sources (CSV/JSON/Excel/API) |
+| `src/modules/test-management/components/FlowstralWorkflowEditor/TestRunner.tsx` | 347 | **Fully implemented** | Execute Playwright scripts via backend, show results with logs/screenshots/video |
+| `src/modules/test-management/components/FlowstralWorkflowEditor/TestSuiteManager.tsx` | 660 | **Fully implemented** | Suite CRUD, workflow enable/disable, environment management. Runs are simulated. |
+| `src/modules/test-management/components/FlowstralWorkflowEditor/ScheduleManager.tsx` | 570 | **Fully implemented** | Cron/interval/one-time scheduling. Client-side only (no backend scheduler). |
+| `src/modules/test-management/components/FlowstralWorkflowEditor/CICDExporter.tsx` | 706 | **Fully implemented** | Generate GitHub Actions, GitLab CI, Jenkins, Azure Pipelines, Bitbucket configs |
+| `src/modules/test-management/components/SimpleStepEditor.tsx` | 868 | **Fully implemented** | Failed-step repair modal with browser picker, visual selector cards, manual fallback |
+| `src/modules/test-management/components/ReusableModulesManager.tsx` | 559 | **Fully implemented** | Save/load reusable step modules (login, navigation, data_entry, verification, cleanup) |
+| `src/modules/test-management/components/TestCaseGenerator/TestCaseGenerator.tsx` | 555 | **Fully implemented** | Generate test cases from Flowstral action graphs with quality validation |
+| `src/modules/test-management/components/StepAutomationLinker.tsx` | 922 | **Fully implemented** | Link manual steps ↔ recorded actions. 3 link modes (document/replace/hybrid), auto-advance. |
 
 ### Libraries
 
 | File | Lines | Status | Role |
 |------|-------|--------|------|
-| `src/lib/test-management-service.ts` | 589 | **Fully implemented** | Singleton with 30s cache. Combines PostgreSQL + Flowstral + localStorage. Default backend: `qaone-production.up.railway.app` |
-| `src/lib/hardening-service.ts` | 543 | **Fully implemented** | In-memory bug reports, test executions, bug bash sessions. Simulated 90% pass rate. No persistence. |
-| `src/lib/automation-linking.ts` | 637 | **Fully implemented** | Core linking system: 30+ description templates, step matching heuristics, coverage calculation |
+| `src/modules/test-management/lib/test-management-service.ts` | 589 | **Fully implemented** | Singleton with 30s cache. Combines PostgreSQL + Flowstral + localStorage. Default backend: `qaone-production.up.railway.app` |
+| `src/modules/test-management/lib/hardening-service.ts` | 543 | **Fully implemented** | In-memory bug reports, test executions, bug bash sessions. Simulated 90% pass rate. No persistence. |
+| `src/modules/recorder/lib/automation-linking.ts` | 637 | **Fully implemented** | Core linking system: 30+ description templates, step matching heuristics, coverage calculation |
 
 ---
 
@@ -149,12 +149,12 @@ Inputs:
 
 | File | Lines | Prefix | Endpoints | Status |
 |------|-------|--------|-----------|--------|
-| `backend/app/routers/test_case_api.py` | 186 | `/api/test-cases` | 3 | **Fully implemented** |
-| `backend/app/routers/test_cases_crud_api.py` | 999 | `/test-cases` | 16 | **Fully implemented** |
-| `backend/app/routers/test_case_rewrite_api.py` | 94 | `/rewrite-test-case` | 1 | **Fully implemented** |
-| `backend/app/routers/gherkin_api.py` | 224 | `/api/gherkin` | 3 | **Fully implemented** |
-| `backend/app/routers/ai_generation_api.py` | ~2,934 | `/ai` | 28 | **Mostly real** (2 stubs) |
-| `backend/app/routers/requirement_to_testcase_api.py` | 395 | `/requirements` | 2 | **Fully implemented** (170 lines dead code) |
+| `backend/app/routers/test_management/test_case_api.py` | 186 | `/api/test-cases` | 3 | **Fully implemented** |
+| `backend/app/routers/test_management/test_cases_crud_api.py` | 999 | `/test-cases` | 16 | **Fully implemented** |
+| `backend/app/routers/test_management/test_case_rewrite_api.py` | 94 | `/rewrite-test-case` | 1 | **Fully implemented** |
+| `backend/app/routers/test_management/gherkin_api.py` | 224 | `/api/gherkin` | 3 | **Fully implemented** |
+| `backend/app/routers/ai/ai_generation_api.py` | ~2,934 | `/ai` | 28 | **Mostly real** (2 stubs) |
+| `backend/app/routers/test_management/requirement_to_testcase_api.py` | 395 | `/requirements` | 2 | **Fully implemented** (170 lines dead code) |
 
 ### Services — Engine Layer (deterministic)
 
@@ -579,5 +579,5 @@ Output: Polished, deduplicated test cases
 
 ---
 
-*Last updated: 2026-02-08*
+*Last updated: 2026-02-20*
 *Generated by code audit of the Flowstral test building feature.*

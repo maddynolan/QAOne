@@ -98,8 +98,8 @@ Input Sources:
 
 | File | Lines | Status | Role |
 |------|-------|--------|------|
-| `src/pages/Performance.tsx` | 1,991 | **Fully implemented** | Main page: 8 tabs (Quick Start, Record, Live Test, Config, History, System, Lighthouse, Setup). 6 quick-start scenarios. In-browser load runner (max 20 VUs). Protocol capture integration. Server monitoring. Lighthouse runner. Full pipeline button. Run comparison. |
-| `src/pages/VirtualUserGenerator.tsx` | 2,730 | **Fully implemented** | Virtual user scenario builder: 8 load patterns, 3 user personas, step builder with HTTP config, import from test cases/Flowstral/HAR, live test execution with real-time metrics polling. |
+| `src/modules/performance/pages/Performance.tsx` | 1,991 | **Fully implemented** | Main page: 8 tabs (Quick Start, Record, Live Test, Config, History, System, Lighthouse, Setup). 6 quick-start scenarios. In-browser load runner (max 20 VUs). Protocol capture integration. Server monitoring. Lighthouse runner. Full pipeline button. Run comparison. |
+| `src/modules/performance/pages/VirtualUserGenerator.tsx` | 2,730 | **Fully implemented** | Virtual user scenario builder: 8 load patterns, 3 user personas, step builder with HTTP config, import from test cases/Flowstral/HAR, live test execution with real-time metrics polling. |
 
 ### Performance.tsx Key Features
 
@@ -127,10 +127,10 @@ Input Sources:
 
 | File | Lines | Prefix | Endpoints | Status |
 |------|-------|--------|-----------|--------|
-| `backend/app/routers/performance_api.py` | 2,411 | `/api/performance` | 64+ | **Fully implemented** |
-| `backend/app/routers/scale_api.py` | 158 | `/api/v2` | 8 | **Fully implemented** (not perf-specific) |
-| `backend/app/routers/server_monitoring_api.py` | 406 | `/api/srm` | 12 | **Fully implemented** |
-| `backend/app/routers/system_monitoring_api.py` | 305 | `/api/monitoring` | 7 | **Fully implemented** |
+| `backend/app/routers/performance/performance_api.py` | 2,411 | `/api/performance` | 64+ | **Fully implemented** |
+| `backend/app/routers/performance/scale_api.py` | 158 | `/api/v2` | 8 | **Fully implemented** (not perf-specific) |
+| `backend/app/routers/performance/server_monitoring_api.py` | 406 | `/api/srm` | 12 | **Fully implemented** |
+| `backend/app/routers/performance/system_monitoring_api.py` | 305 | `/api/monitoring` | 7 | **Fully implemented** |
 
 ### Services
 
@@ -138,7 +138,7 @@ Input Sources:
 |------|-------|--------|------|
 | `backend/app/services/performance/performance_engine.py` | 465 | **Fully implemented** | Main orchestrator: instantiates all subsystems, runs load tests (background task), scenario mix, distributed support |
 | `backend/app/services/performance/load_generator.py` | 502 | **Fully implemented** | Core VU engine: VirtualUser tasks with staggered ramp-up, protocol handler, correlation, think time, metrics collection (1s polling), percentile calculation (p50-p99) |
-| `backend/app/services/performance/load_profiles.py` | 293 | **Fully implemented** | 7 load profiles: linear, step, spike, stress, endurance, capacity, custom. Factory methods for each pattern. |
+| `backend/app/services/performance/load_profiles.py` | 293 | **Fully implemented** | 8 load profiles: linear, step, spike, stress, endurance, capacity, wave, custom. Factory methods for each pattern. |
 | `backend/app/services/performance/scenario_compiler.py` | 547 | **Fully implemented** | Compiles HAR, recordings, builder steps, and API requests into `CompiledScenario` JSON. Auto-generates token/ID extractors. |
 | `backend/app/services/performance/go_runner_client.py` | 437 | **Fully implemented** | HTTP-based communication with Go runner binary. Local process management, capacity-aware distributed VU splitting, metric aggregation. |
 | `backend/app/services/performance/lighthouse_service.py` | 318 | **Fully implemented** | Runs `npx lighthouse` via subprocess. Extracts Performance/Accessibility/BestPractices/SEO scores + Core Web Vitals (LCP, FCP, CLS, TBT, TTI). Hardened mode (N runs, median). In-memory reports. |
@@ -334,6 +334,7 @@ For quick demos and small-scale tests:
 | **Stress** | Ramp to target, then 50% overload |
 | **Endurance** | Sustained load for extended duration |
 | **Capacity** | Gradual increase until failure |
+| **Wave** | Oscillating load pattern |
 | **Custom** | User-defined VU schedule |
 
 ### Run Manager State Machine
@@ -383,7 +384,31 @@ Default thresholds:
 
 ---
 
-## 10. Known Gaps & TODOs
+## 10. Server-Side Execution (v3.11.6+)
+
+Two execution modes:
+
+| Mode | VU Limit | How |
+|------|----------|-----|
+| In-browser (default) | 20 VUs | `fetch()` calls from browser |
+| Server-side ("Run on Server" toggle) | 10,000 VUs | Backend `PerformanceEngine` via REST API |
+
+Server-side flow:
+1. `POST /api/performance/scenarios` -- Create scenario
+2. `POST /api/performance/scenarios/{id}/steps` -- Add HTTP request steps
+3. `POST /api/performance/tests/run` -- Start test
+4. Poll `GET /api/performance/tests/{id}/status` every 2 seconds
+5. Results added to test history on completion
+
+State: `useServerRunner` toggle, `serverTestId`, `serverPollRef` (useRef for cleanup), `testHistory` persisted to localStorage key `flowstral-perf-history` (max 50 entries)
+
+### HAR Import (v3.11.6+)
+
+HAR file import card in Custom Config tab. Uploads via `POST /api/import/har` (FormData), extracts requests, auto-sets base URL from first entry.
+
+---
+
+## 11. Known Gaps & TODOs
 
 ### Stubs
 
@@ -407,5 +432,5 @@ Default thresholds:
 
 ---
 
-*Last updated: 2026-02-08*
+*Last updated: 2026-02-20*
 *Generated by code audit of the Flowstral performance testing feature.*

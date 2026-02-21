@@ -112,7 +112,7 @@ User Browser (with extension)
 
 | File | Lines | Status | Role |
 |------|-------|--------|------|
-| `src/pages/PlaywrightRecorderPage.tsx` | ~10,354 | **Fully implemented** | Main recording/playback page — ~80 useState hooks, recording flow, playback with step-by-step debug, step editing, merge with existing tests, Salesforce tools, AI features, false positive workflow |
+| `src/modules/recorder/pages/PlaywrightRecorderPage.tsx` | ~10,354 | **Fully implemented** | Main recording/playback page — ~80 useState hooks, recording flow, playback with step-by-step debug, step editing, merge with existing tests, Salesforce tools, AI features, false positive workflow |
 
 **Key state groups in PlaywrightRecorderPage:**
 - **Recording:** `url`, `isRecording`, `isPaused`, `actions[]`, `recordingTime`
@@ -129,13 +129,13 @@ User Browser (with extension)
 
 | File | Lines | Status | Role |
 |------|-------|--------|------|
-| `src/components/confidence/ConfidenceBadge.tsx` | 79 | **Fully implemented** | Color-coded badge (green/amber/red) with shield icon and % score |
-| `src/components/confidence/MatchCountBadge.tsx` | 89 | **Fully implemented** | Shows "N matches found, position #M used" with risk warnings |
-| `src/components/confidence/StepConfidenceIndicator.tsx` | 67 | **Fully implemented** | Composite — renders MatchCount + Confidence, hides when HIGH |
-| `src/components/QuickRerecordModal.tsx` | 450 | **Fully implemented** | 3-step wizard: enter URL → pick element → review & save |
-| `src/components/BlackboxLocatorStrategies.tsx` | 834 | **Mostly implemented** | 7 fallback locator types (OCR, image, coords, relative, AI, region, color). **Image Capture/Upload buttons are stubs** (no onClick handlers) |
-| `src/components/ElementRepairWizard.tsx` | 1,445 | **Fully implemented** | 4-tab repair: Manual / Pick / Debug / AI. Full fix-retry-resume cycle |
-| `src/components/MobileDeviceSelector.tsx` | 532 | **Fully implemented** | Device dropdown, network throttling, Maestro status |
+| `src/modules/recorder/components/confidence/ConfidenceBadge.tsx` | 79 | **Fully implemented** | Color-coded badge (green/amber/red) with shield icon and % score |
+| `src/modules/recorder/components/confidence/MatchCountBadge.tsx` | 89 | **Fully implemented** | Shows "N matches found, position #M used" with risk warnings |
+| `src/modules/recorder/components/confidence/StepConfidenceIndicator.tsx` | 67 | **Fully implemented** | Composite — renders MatchCount + Confidence, hides when HIGH |
+| `src/modules/recorder/components/QuickRerecordModal.tsx` | 450 | **Fully implemented** | 3-step wizard: enter URL → pick element → review & save |
+| `src/modules/recorder/components/BlackboxLocatorStrategies.tsx` | 834 | **Mostly implemented** | 7 fallback locator types (OCR, image, coords, relative, AI, region, color). **Image Capture/Upload buttons are stubs** (no onClick handlers) |
+| `src/modules/recorder/components/ElementRepairWizard.tsx` | 1,445 | **Fully implemented** | 4-tab repair: Manual / Pick / Debug / AI. Full fix-retry-resume cycle |
+| `src/modules/mobile-testing/components/MobileDeviceSelector.tsx` | 532 | **Fully implemented** | Device dropdown, network throttling, Maestro status |
 
 ### Libraries
 
@@ -152,12 +152,12 @@ User Browser (with extension)
 
 | File | Lines | Prefix | Endpoints | Status |
 |------|-------|--------|-----------|--------|
-| `backend/app/routers/cdp_recorder_api.py` | ~445 | `/cdp-recorder` | 13 (REST) + 1 (WS) | **Fully implemented** |
-| `backend/app/routers/playwright_recorder_api.py` | ~3,517 | `/api/flowstral` | 42 | **Fully implemented** |
-| `backend/app/routers/protocol_recording_api.py` | ~523 | `/api/protocol-recording` | 13 (REST) + 1 (WS) | **Fully implemented** |
-| `backend/app/routers/flowstral_api.py` | ~840 | `/api/flowstral` | 10 (REST) + 1 (WS) | **Fully implemented** |
-| `backend/app/routers/flowstral_config_api.py` | ~168 | `/api/flowstral/projects` | 4 | **Fully implemented** |
-| `backend/app/routers/flowstral_engine_api.py` | ~550 | `/flowstral` | 11 | **Fully implemented** |
+| `backend/app/routers/recorder/cdp_recorder_api.py` | ~445 | `/cdp-recorder` | 13 (REST) + 1 (WS) | **Fully implemented** |
+| `backend/app/routers/recorder/playwright_recorder_api.py` | ~3,517 | `/api/flowstral` | 42 | **Fully implemented** |
+| `backend/app/routers/performance/protocol_recording_api.py` | ~523 | `/api/protocol-recording` | 13 (REST) + 1 (WS) | **Fully implemented** |
+| `backend/app/routers/recorder/flowstral_api.py` | ~840 | `/api/flowstral` | 10 (REST) + 1 (WS) | **Fully implemented** |
+| `backend/app/routers/recorder/flowstral_config_api.py` | ~168 | `/api/flowstral/projects` | 4 | **Fully implemented** |
+| `backend/app/routers/recorder/flowstral_engine_api.py` | ~550 | `/flowstral` | 11 | **Fully implemented** |
 
 **Warning — Route prefix collision:** Both `playwright_recorder_api.py` and `flowstral_api.py` share the `/api/flowstral` prefix with overlapping paths (`/start`, `/stop`, `/sessions`, `/session/{id}/status`, `/session/{id}/artifacts`). Whichever router is registered last in `main.py` shadows the other.
 
@@ -578,7 +578,30 @@ When standard selectors fail, 7 fallback strategies are available:
 
 ---
 
-## 11. Known Gaps & TODOs
+## 11. Cross-Browser Recording (v3.11.6+)
+
+The Recorder supports Chromium, Firefox, and WebKit (Safari) via a browser selection dropdown in the toolbar.
+
+**Frontend:**
+- `PlaywrightRecorderPage.tsx` — `selectedBrowser` state (`'chromium' | 'firefox' | 'webkit'`), passed as `browserType` in IPC/backend calls
+- `RecordingControlsPanel.tsx` — `<Select>` dropdown with Globe icon for browser engine selection
+
+**Electron:**
+- `playwright-recorder.js` — imports `chromium`, `firefox`, `webkit` from `playwright`; `launchBrowserWithFallback()` accepts `browserType` parameter
+- `index.js` — `playwright-recorder-start` handler extracts `browserType` from args
+
+### Extension-Desktop Sync (v3.10.5+)
+
+- All URLs centralized via `api-config.js` (no more hardcoded localhost)
+- Actions have unique `id` field for AI healing chain compatibility
+- 5 visible tabs: Record, Suggest, SF, Script, Run
+- Per-step AI buttons: Fix, Flag, Manual (same as desktop)
+- Inline Manual Assist card: Paste Element + Enter Selector modes
+- "Open in Desktop" button saves session and opens `PlaywrightRecorderPage?sessionId=...`
+
+---
+
+## 12. Known Gaps & TODOs
 
 ### Critical Issues
 
@@ -609,5 +632,5 @@ When standard selectors fail, 7 fallback strategies are available:
 
 ---
 
-*Last updated: 2026-02-08*
+*Last updated: 2026-02-20*
 *Generated by code audit of the Flowstral recording feature.*

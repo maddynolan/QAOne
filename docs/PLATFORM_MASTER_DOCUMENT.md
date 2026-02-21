@@ -4,7 +4,7 @@
 
 **Product Name:** QAAI (QA + AI) / Flowstral
 **Tagline:** AI-Powered Quality Assurance & Test Automation Platform
-**Version:** Backend v3.4.0 | Desktop v3.3.3 | Engine v1.0.0
+**Version:** v3.12.18 | Last Updated: 2026-02-20
 **Repository:** github.com/maddynolan/QAOne
 **Production API:** qaone-production.up.railway.app
 **Frontend:** Deployed via Vercel
@@ -19,13 +19,15 @@ QAAI/Flowstral is a comprehensive, AI-driven quality assurance and test automati
 - **AI-Powered Test Generation** (from requirements, Jira tickets, URLs, natural language)
 - **Record & Playback** (browser extension + Electron desktop app with self-healing locators)
 - **API Testing** (Postman-level with collections, chaining, assertions, OpenAPI/HAR import)
-- **Performance Testing** (load testing with Go-based runner, protocol-level recording)
-- **Accessibility Testing** (WCAG 2.1 AA/AAA scanning, VPAT generation)
-- **Visual Testing** (screenshot comparison, pixel-diff)
-- **Mobile Testing** (device lab, Appium integration)
-- **Salesforce-Specific Testing** (Lightning, SOQL, Apex, shadow DOM)
-- **CI/CD Integration** (GitHub Actions, Azure DevOps, Jenkins, GitLab)
-- **Flowstral Engine** (action graph intelligence for real-time capture and analysis)
+- **Performance Testing** (load testing with in-browser + server-side execution up to 10K VUs, 8 load patterns, HAR import)
+- **Accessibility Testing** (WCAG 2.1 AA/AAA scanning via axe-core v4.8.4, AI-powered analysis)
+- **Visual Testing** (6 comparison modes: pixel-perfect, anti-aliased, perceptual hash, SSIM, layout, AI semantic)
+- **Mobile Testing** (Maestro CLI, 20+ IPC handlers for device control, deep links, push, biometrics, geolocation)
+- **Salesforce-Specific Testing** (multi-org, SOQL, Apex, metadata validation, test data factory, 20 components, 39 API endpoints)
+- **AI Testing & Flowpilot** (4 agents: Generator, Explorer, Flowmap, Self-Healer — real Playwright browser automation with SSE streaming)
+- **CI/CD Integration** (GitHub Actions, Azure DevOps, Jenkins, GitLab, Azure Pipelines)
+- **Flowstral Engine** (action graph intelligence, cross-browser recording: Chromium/Firefox/WebKit)
+- **Marketing & Analytics** (GA4, Clarity, Crisp live chat, UTM tracking, 18 marketing pages, SEO infrastructure)
 
 The platform supports both **SaaS** (hosted) and **on-premises** deployment models, with multi-tenant architecture and enterprise-grade features (RBAC, secrets vault, license management).
 
@@ -70,11 +72,13 @@ The platform supports both **SaaS** (hosted) and **on-premises** deployment mode
 | **Frontend** | React 18, TypeScript, Vite, Tailwind CSS, Radix UI, Zustand, TanStack Query, Monaco Editor, React Router v6 |
 | **Backend** | Python, FastAPI, Pydantic, asyncio, WebSockets |
 | **Database** | PostgreSQL 16 (primary), Supabase (auth + cloud storage), SQLite (desktop/offline) |
-| **AI/LLM** | OpenAI GPT-4o-mini (cloud), Ollama (local, qa-expert:7b fine-tuned model), configurable provider switching |
-| **Test Engine** | Playwright (core automation), Flowstral Engine (TypeScript recording + healing) |
-| **Desktop** | Electron 28, electron-builder (Win/Mac/Linux), electron-store, better-sqlite3 |
-| **Extension** | Chrome Manifest V3, side panel, content scripts, service worker |
-| **Performance** | Go-based load runner, protocol-level recording |
+| **AI/LLM** | OpenAI gpt-4o-mini (active), Anthropic Claude (prompt caching, dev), Ollama (disabled), ModelGateway routing |
+| **Test Engine** | Playwright 1.48 (core automation, cross-browser: Chromium/Firefox/WebKit), Flowstral Engine (TypeScript recording + healing) |
+| **Desktop** | Electron 28, electron-builder (Win/Mac/Linux), electron-store, better-sqlite3, 20+ mobile IPC handlers |
+| **Extension** | Chrome Manifest V3, side panel (5 tabs), content scripts, service worker, centralized api-config.js |
+| **Performance** | Python VUs (in-browser, 20 max) + Server-side PerformanceEngine (10K VUs), 8 load patterns, HAR import |
+| **Mobile** | Maestro CLI, MaestroRunner (14 device methods), adb/xcrun integration |
+| **Analytics** | Google Analytics 4, Microsoft Clarity, Crisp Live Chat, UTM tracking |
 | **Infrastructure** | Railway (API hosting), Vercel (frontend), Docker, Kubernetes/Helm, Grafana + Prometheus |
 | **CI/CD** | GitHub Actions, support for Jenkins/Azure DevOps/GitLab |
 
@@ -85,19 +89,36 @@ QAAI/
   backend/              # FastAPI Python backend
     app/
       config/           # LLM configuration
-      decorators/       # Route decorators
-      middleware/        # Auth, CORS, rate limiting
-      routers/          # 67 API router files
+      middleware/        # RBAC, tenant, trace logging
+      routers/          # Domain-grouped subdirectories (10 groups)
+        recorder/       # CDP, Playwright, Flowstral recording
+        test_management/# Test cases, runs, plans, automation
+        api_testing/    # Multi-protocol API testing
+        performance/    # Load testing, protocol recording
+        ai/             # AI generation, automation, enhancements, testing
+        accessibility/  # WCAG scanning, compliance
+        visual_testing/ # Visual regression
+        salesforce/     # Salesforce integration, auth
+        exploration/    # Autonomous exploration, Blaze
+        platform/       # Health, dashboard, license, settings
       schemas/          # Pydantic models
-      services/         # 30+ service directories
-      utils/            # Shared utilities
+      services/         # 295+ services across 26 subdirectories
   src/                  # React frontend (Vite SPA)
-    components/         # 150+ React components
-    contexts/           # React contexts
-    hooks/              # Custom hooks (WebSocket, test data)
-    integrations/       # Third-party integrations
-    lib/                # Services layer (35+ service files)
-    pages/              # 60+ page components
+    modules/            # 11 domain-separated feature modules
+      recorder/         # Browser recording, self-healing
+      test-management/  # Test cases, builder, execution, runs
+      api-testing/      # Multi-protocol API testing
+      performance/      # Load testing, virtual users
+      mobile-testing/   # Mobile testing via Maestro
+      accessibility/    # WCAG compliance scanning
+      visual-testing/   # Visual regression testing
+      salesforce/       # Salesforce-specific tools (20 components)
+      ai-testing/       # AI testing, Flowpilot (4 agents)
+      dashboard/        # Dashboard & analytics
+      platform/         # Settings, integrations, cross-cutting
+    pages/              # Landing page + 17 marketing pages
+    components/         # Shared layout & UI (49 shadcn/ui primitives)
+    lib/                # Shared utilities (api-config, electron-bridge, web-analytics)
     stores/             # Zustand state management
     types/              # TypeScript type definitions
   flowstral-engine/     # TypeScript test recording engine
