@@ -45,7 +45,7 @@ export default function SignInPage() {
   const handleDemoLogin = async () => {
     setLoading(true);
     try {
-      await signIn('demo@flowstral.com', 'demo123');
+      await signIn('demo@qaone.com', 'demo123');
       toast.success('Welcome! Logged in with demo account.');
       navigate('/dashboard');
     } catch (error: any) {
@@ -176,7 +176,7 @@ export default function SignInPage() {
             {[
               { icon: CheckCircle2, text: 'Smart Recorder with intelligent element recognition' },
               { icon: Shield, text: 'Enterprise-grade security & compliance' },
-              { icon: Users, text: 'Trusted by 500+ QA teams worldwide' },
+              { icon: Users, text: 'Built for QA teams of all sizes' },
             ].map((item, idx) => (
               <div key={idx} className="flex items-center gap-3 text-blue-100">
                 <item.icon className="w-5 h-5 text-blue-300" />

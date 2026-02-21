@@ -122,14 +122,14 @@ export default function DownloadPage() {
 
           {/* Platform Preview */}
           <div className="bg-slate-900 rounded-2xl p-8 text-white">
-            <h3 className="text-xl font-bold mb-6">Available for All Platforms</h3>
+            <h3 className="text-xl font-bold mb-6">Desktop App</h3>
             <div className="flex justify-center gap-8">
               {[
-                { icon: Monitor, name: 'Windows', size: '145 MB' },
-                { icon: Apple, name: 'macOS', size: '152 MB' },
-                { icon: Monitor, name: 'Linux', size: '148 MB' },
+                { icon: Monitor, name: 'Windows', size: '~80 MB', available: true },
+                { icon: Apple, name: 'macOS', size: 'Coming Soon', available: false },
+                { icon: Monitor, name: 'Linux', size: 'Coming Soon', available: false },
               ].map((platform, idx) => (
-                <div key={idx} className="text-center">
+                <div key={idx} className={cn("text-center", !platform.available && "opacity-50")}>
                   <div className="w-16 h-16 rounded-xl bg-white/10 flex items-center justify-center mx-auto mb-3">
                     <platform.icon className="w-8 h-8 text-white" />
                   </div>
@@ -139,7 +139,7 @@ export default function DownloadPage() {
               ))}
             </div>
             <p className="text-slate-400 text-sm mt-6">
-              One-click installer • No dependencies • Browser included
+              One-click installer • No dependencies • Chromium included
             </p>
           </div>
         </div>
@@ -154,7 +154,7 @@ export default function DownloadPage() {
           <span>•</span>
           <Link to="/contact" className="hover:text-slate-700">Support</Link>
         </div>
-        <p className="text-xs text-slate-400 mt-2">© 2025 Flowstral Inc. All rights reserved.</p>
+        <p className="text-xs text-slate-400 mt-2">© {new Date().getFullYear()} Flowstral Inc. All rights reserved.</p>
       </footer>
     </div>
   );

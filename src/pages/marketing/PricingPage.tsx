@@ -66,10 +66,10 @@ function MarketingHeader() {
 // 8 Testing Packs
 const testingPacks = [
   { name: 'Automation', icon: TestTube, color: 'blue', desc: 'Record, build & run tests' },
-  { name: 'Flowpilot', icon: Compass, color: 'fuchsia', desc: 'Goal-based AI agents', isNew: true },
-  { name: 'Mobile', icon: Smartphone, color: 'sky', desc: '50+ devices & throttling', isNew: true },
+  { name: 'Flowpilot', icon: Compass, color: 'fuchsia', desc: 'AI exploratory testing (Preview)', isNew: true },
+  { name: 'Mobile', icon: Smartphone, color: 'sky', desc: '40+ devices & throttling', isNew: true },
   { name: 'Performance', icon: Gauge, color: 'orange', desc: 'Load & stress testing' },
-  { name: 'API', icon: Code, color: 'emerald', desc: 'REST, GraphQL, gRPC, SOAP' },
+  { name: 'API', icon: Code, color: 'emerald', desc: 'REST, GraphQL & more' },
   { name: 'Visual', icon: Eye, color: 'purple', desc: 'Visual regression testing' },
   { name: 'Accessibility', icon: Accessibility, color: 'pink', desc: 'WCAG compliance' },
   { name: 'Salesforce', icon: Cloud, color: 'cyan', desc: '20+ native SF tools' },
@@ -111,7 +111,7 @@ const faqs = [
   },
   {
     q: 'What kind of support does the Free tier include?',
-    a: 'Free tier users get access to our Discord community, GitHub issues, and comprehensive documentation. Enterprise customers receive a dedicated Customer Success Manager, 24/7 priority support, and quarterly business reviews.',
+    a: 'Free tier users get access to GitHub issues and comprehensive documentation. Enterprise customers receive a dedicated Customer Success Manager, 24/7 priority support, and quarterly business reviews.',
   },
   {
     q: 'How does the self-healing work across tiers?',
@@ -239,7 +239,7 @@ const comparisonSections = [
     isNew: true,
     rows: [
       { feature: 'Native App Testing (Maestro)', free: false, enterprise: true },
-      { feature: '50+ Device Profiles', free: false, enterprise: true },
+      { feature: '40+ Device Profiles', free: false, enterprise: true },
       { feature: 'Network Throttling', free: false, enterprise: true },
       { feature: 'Touch Gestures', free: false, enterprise: true },
       { feature: 'Device Cloud Integration', free: false, enterprise: true },
@@ -266,10 +266,10 @@ const comparisonSections = [
     iconBg: 'bg-slate-100',
     iconColor: 'text-slate-700',
     rows: [
-      { feature: 'Community Support (Discord / GitHub)', free: true, enterprise: true },
+      { feature: 'Community Support (GitHub)', free: true, enterprise: true },
       { feature: 'Dedicated Customer Success Manager', free: false, enterprise: true },
       { feature: '24/7 Priority Support', free: false, enterprise: true },
-      { feature: 'SSO / SAML / SCIM', free: false, enterprise: true },
+      { feature: 'SSO / SAML / SCIM (Roadmap)', free: false, enterprise: true },
       { feature: 'RBAC & Multi-Tenancy', free: false, enterprise: true },
       { feature: 'On-Premise / Air-Gapped Deployment', free: false, enterprise: true },
       { feature: 'Custom SLA (99.9%)', free: false, enterprise: true },
@@ -433,7 +433,7 @@ export default function PricingPage() {
                   'Basic Reports',
                   'Desktop App (full)',
                   'Chrome Extension (full)',
-                  'Community Support (Discord / GitHub)',
+                  'Community Support (GitHub)',
                 ].map((feature, i) => (
                   <div key={i} className="flex items-center gap-3">
                     <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
@@ -486,15 +486,15 @@ export default function PricingPage() {
                   'Unlimited parallel executions',
                   'Full AI Self-Healing (4-layer: Vision AI + OCR)',
                   'AI Test Generation (JIRA, text, Gherkin)',
-                  'Flowpilot (goal-based agentic testing)',
-                  'Full API Testing (8 protocols + chaining + mocks)',
-                  'Performance & Load Testing (10,000+ VUs)',
+                  'Flowpilot AI Exploration (Preview)',
+                  'Full API Testing (REST, GraphQL + chaining + mocks)',
+                  'Performance & Load Testing (100+ VUs, server-side)',
                   'Visual Testing (unlimited, 6 modes + AI semantic)',
                   'Full WCAG 2.1 AAA + compliance reports',
-                  'Mobile Testing (50+ devices, Maestro, device cloud)',
+                  'Mobile Testing (40+ devices, Maestro)',
                   'Salesforce Pack (20+ tools, SOQL, Apex, Data Factory)',
                   'On-Premise / Air-Gapped deployment',
-                  'SSO / SAML / SCIM',
+                  'SSO / SAML / SCIM (Roadmap)',
                   'RBAC & Multi-Tenancy',
                   'Custom CI/CD Integrations',
                   'Dedicated Success Manager',
@@ -579,29 +579,29 @@ export default function PricingPage() {
             {[
               {
                 icon: Shield,
-                title: 'SOC 2 Type II',
-                desc: 'Annual audits ensure your data is protected with industry-standard controls.',
+                title: 'RBAC & Multi-Tenant',
+                desc: 'Role-based access control with tenant isolation, JWT auth, and audit logging built in.',
                 gradient: 'from-blue-100 to-blue-200',
                 iconColor: 'text-blue-600',
               },
               {
                 icon: Lock,
-                title: 'SSO & SCIM',
-                desc: 'SAML 2.0 single sign-on with automated user provisioning and deprovisioning.',
+                title: 'SSO & SCIM (Roadmap)',
+                desc: 'SAML 2.0 single sign-on and SCIM provisioning are on our enterprise roadmap.',
                 gradient: 'from-violet-100 to-violet-200',
                 iconColor: 'text-violet-600',
               },
               {
                 icon: Server,
                 title: 'On-Premise Deploy',
-                desc: 'Air-gapped, private cloud, or hybrid deployments with Docker and Kubernetes.',
+                desc: 'Air-gapped, private cloud, or hybrid deployments with Docker and Kubernetes Helm charts.',
                 gradient: 'from-emerald-100 to-emerald-200',
                 iconColor: 'text-emerald-600',
               },
               {
                 icon: Globe,
-                title: 'Multi-Region',
-                desc: 'Data residency options across US, EU, and APAC regions for compliance.',
+                title: 'Self-Hosted Flexibility',
+                desc: 'Deploy anywhere your infrastructure lives. Works with Ollama for fully offline AI.',
                 gradient: 'from-orange-100 to-orange-200',
                 iconColor: 'text-orange-600',
               },
@@ -616,15 +616,14 @@ export default function PricingPage() {
             ))}
           </div>
 
-          {/* Trust logos placeholder */}
+          {/* Built for enterprise teams */}
           <div className="mt-14 text-center">
-            <p className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-6">Trusted by engineering teams at</p>
-            <div className="flex flex-wrap justify-center gap-10 opacity-40">
-              {['Fortune 500', 'Global 2000', 'Enterprise', 'Scale-Up', 'Fintech', 'Healthcare'].map((label, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-slate-200" />
-                  <span className="text-sm font-medium text-slate-500">{label}</span>
-                </div>
+            <p className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Built for teams in</p>
+            <div className="flex flex-wrap justify-center gap-6">
+              {['SaaS', 'Fintech', 'Healthcare', 'Insurance', 'Salesforce Orgs', 'Government'].map((label, i) => (
+                <span key={i} className="px-4 py-2 rounded-full bg-slate-100 text-sm font-medium text-slate-600 border border-slate-200">
+                  {label}
+                </span>
               ))}
             </div>
           </div>

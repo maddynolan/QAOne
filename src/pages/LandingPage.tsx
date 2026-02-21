@@ -127,10 +127,10 @@ function HeroSection() {
             {/* Stats Row */}
             <div className="flex flex-wrap justify-center lg:justify-start gap-x-8 gap-y-4">
               {[
-                { value: '8', label: 'Testing Types' },
-                { value: '10k+', label: 'Virtual Users' },
+                { value: '7+', label: 'Testing Types' },
+                { value: '100+', label: 'Virtual Users' },
                 { value: '0', label: 'Code Required' },
-                { value: '60+', label: 'Step Types' },
+                { value: '59', label: 'Step Types' },
               ].map((stat, idx) => (
                 <div key={idx} className="text-center lg:text-left">
                   <div className="text-2xl font-bold text-slate-800">{stat.value}</div>
@@ -158,7 +158,7 @@ function HeroSection() {
                   <div className="text-sm font-bold text-fuchsia-800 flex items-center gap-1">
                     Flowpilot
                   </div>
-                  <div className="text-xs text-fuchsia-600">Goal-based AI agents that test for you</div>
+                  <div className="text-xs text-fuchsia-600">AI-assisted exploratory testing (Preview)</div>
                 </div>
                 <ArrowRight className="w-4 h-4 text-fuchsia-400 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -1109,7 +1109,7 @@ function VisualA11ySection() {
             </div>
 
             <div className="grid grid-cols-3 gap-2">
-              {['Strict', 'Layout', 'Content', 'Anti-Alias', 'Colors', 'Zones'].map((m, i) => (
+              {['Pixel-Perfect', 'Anti-Aliased', 'Perceptual', 'Structural', 'Layout', 'AI Semantic'].map((m, i) => (
                 <Badge key={i} className={cn(
                   "text-xs justify-center border-0",
                   i === 0 ? "bg-indigo-100 text-indigo-700" : "bg-white text-slate-600"
@@ -1526,24 +1526,21 @@ function MobileTestingSection() {
 function SocialProofSection() {
   const replacedTools = ['Selenium Grid', 'Postman', 'JMeter', 'Applitools', 'axe DevTools', 'Sauce Labs'];
 
-  const testimonials = [
+  const valueProps = [
     {
-      quote: 'We replaced Selenium, Postman, and JMeter with one platform. Our QA team went from managing 5 vendor contracts to 1.',
-      author: 'QA Director',
-      company: 'Enterprise SaaS Company',
-      metric: '80% fewer vendor contracts',
+      title: 'Consolidate Your QA Stack',
+      description: 'Replace 5-8 separate testing tools with one unified platform. Browser, API, performance, visual, accessibility, mobile, and Salesforce testing — all in one place.',
+      metric: 'Up to 8 tools replaced',
     },
     {
-      quote: 'The self-healing locators cut our test maintenance time in half. Tests that used to break weekly now run for months.',
-      author: 'SDET Lead',
-      company: 'Fintech Startup',
-      metric: '50% less maintenance',
+      title: 'Self-Healing Locators',
+      description: 'A 4-layer healing chain (Knowledge, Deterministic, Vision AI, OCR) automatically fixes broken selectors so tests stay green without manual maintenance.',
+      metric: '4-layer healing chain',
     },
     {
-      quote: 'Finally, our manual testers can create automated tests without writing code. The visual builder is a game-changer.',
-      author: 'QA Manager',
-      company: 'Healthcare Platform',
-      metric: '3x more test coverage',
+      title: 'No-Code Visual Builder',
+      description: 'Record browser interactions or drag-and-drop from 59 step types. Manual testers and SDETs alike can build automated tests — zero code required.',
+      metric: '59 step types',
     },
   ];
 
@@ -1571,37 +1568,30 @@ function SocialProofSection() {
           </div>
         </div>
 
-        {/* Testimonials */}
+        {/* Value Propositions */}
         <div className="grid md:grid-cols-3 gap-6 mb-10">
-          {testimonials.map((t, idx) => (
+          {valueProps.map((v, idx) => (
             <div key={idx} className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm">
-              <div className="flex gap-1 mb-3">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
-                ))}
-              </div>
-              <p className="text-sm text-slate-700 mb-4 leading-relaxed italic">
-                "{t.quote}"
-              </p>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">{t.author}</p>
-                  <p className="text-xs text-slate-500">{t.company}</p>
-                </div>
+              <div className="flex items-center gap-2 mb-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                 <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium">
-                  {t.metric}
+                  {v.metric}
                 </span>
               </div>
+              <h4 className="text-base font-bold text-slate-900 mb-2">{v.title}</h4>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                {v.description}
+              </p>
             </div>
           ))}
         </div>
 
         {/* Trust Indicators */}
         <div className="flex flex-wrap justify-center gap-8 text-sm text-slate-500">
-          <span className="flex items-center gap-2"><Shield className="w-4 h-4 text-blue-500" /> SOC 2 Ready</span>
-          <span className="flex items-center gap-2"><Lock className="w-4 h-4 text-blue-500" /> On-Prem Available</span>
-          <span className="flex items-center gap-2"><Globe className="w-4 h-4 text-blue-500" /> Used in 30+ Countries</span>
-          <span className="flex items-center gap-2"><Users className="w-4 h-4 text-blue-500" /> Growing Community</span>
+          <span className="flex items-center gap-2"><Lock className="w-4 h-4 text-blue-500" /> On-Prem / Air-Gapped Ready</span>
+          <span className="flex items-center gap-2"><Shield className="w-4 h-4 text-blue-500" /> RBAC & Multi-Tenant</span>
+          <span className="flex items-center gap-2"><Globe className="w-4 h-4 text-blue-500" /> Docker + Kubernetes</span>
+          <span className="flex items-center gap-2"><Zap className="w-4 h-4 text-blue-500" /> Free Forever Plan</span>
         </div>
       </div>
     </section>

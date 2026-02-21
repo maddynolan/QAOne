@@ -7,11 +7,11 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { trackCTAClick } from '@/lib/web-analytics';
 import {
   ArrowRight, BookOpen, Clock, Tag, Search,
-  ChevronRight, Rocket
+  ChevronRight, Rocket, ArrowLeft
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -105,8 +105,68 @@ const categories = ['All', ...Array.from(new Set(blogPosts.map(p => p.category))
 
 export default function BlogPage() {
   const navigate = useNavigate();
+  const { slug } = useParams<{ slug?: string }>();
   const [activeCategory, setActiveCategory] = useState('All');
   const [search, setSearch] = useState('');
+
+  // If a slug is provided, show the blog post detail view
+  const selectedPost = slug ? blogPosts.find(p => p.slug === slug) : null;
+
+  if (selectedPost) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50">
+        {/* Header */}
+        <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/50">
+          <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+            <Link to="/" className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                <span className="text-white font-bold text-lg">F</span>
+              </div>
+              <span className="text-xl font-bold text-slate-800">Flowstral</span>
+            </Link>
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" onClick={() => navigate('/blog')}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> All Posts
+              </Button>
+              <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => navigate('/signup')}>
+                Start Free <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        {/* Post Content */}
+        <article className="py-16 px-6">
+          <div className="max-w-3xl mx-auto">
+            <Button variant="ghost" className="mb-6 text-slate-500" onClick={() => navigate('/blog')}>
+              <ArrowLeft className="w-4 h-4 mr-1" /> Back to Blog
+            </Button>
+            <Badge className="mb-4 bg-blue-50 text-blue-700 border-blue-200">{selectedPost.category}</Badge>
+            <h1 className="text-3xl lg:text-4xl font-bold text-slate-900 mb-4">{selectedPost.title}</h1>
+            <div className="flex items-center gap-4 text-sm text-slate-500 mb-8">
+              <span className="flex items-center gap-1"><Clock className="w-4 h-4" /> {selectedPost.readTime} read</span>
+              <span>{new Date(selectedPost.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+            </div>
+            <div className="prose prose-slate max-w-none">
+              <p className="text-lg text-slate-700 leading-relaxed mb-6">{selectedPost.excerpt}</p>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
+                <p className="text-blue-800 font-medium mb-3">This article is coming soon.</p>
+                <p className="text-blue-600 text-sm mb-4">We are actively writing in-depth content for our blog. Check back soon for the full article.</p>
+                <Button onClick={() => navigate('/signup')} className="bg-blue-600 hover:bg-blue-700">
+                  Get Notified When Published <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        {/* Footer */}
+        <footer className="py-8 px-6 bg-slate-900 text-center">
+          <p className="text-xs text-slate-500">&copy; {new Date().getFullYear()} Flowstral Inc. All rights reserved.</p>
+        </footer>
+      </div>
+    );
+  }
 
   const filtered = useMemo(() => {
     return blogPosts.filter(post => {

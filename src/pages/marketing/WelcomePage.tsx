@@ -342,7 +342,7 @@ export default function WelcomePage() {
           <span>•</span>
           <Link to="/contact" className="hover:text-slate-700">Support</Link>
         </div>
-        <p className="text-xs text-slate-400 mt-2">© 2025 Flowstral Inc. All rights reserved.</p>
+        <p className="text-xs text-slate-400 mt-2">&copy; {new Date().getFullYear()} Flowstral Inc. All rights reserved.</p>
       </footer>
     </div>
   );

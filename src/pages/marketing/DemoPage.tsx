@@ -1062,7 +1062,7 @@ export default function DemoPage() {
           <span className="text-slate-300">•</span>
           <Link to="/contact" className="text-slate-500 hover:text-slate-800 transition-colors">Contact</Link>
         </div>
-        <p className="text-slate-400 text-xs mt-4">© 2025 Flowstral Inc. All rights reserved.</p>
+        <p className="text-slate-400 text-xs mt-4">© {new Date().getFullYear()} Flowstral Inc. All rights reserved.</p>
       </footer>
     </div>
   );

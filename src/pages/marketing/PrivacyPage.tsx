@@ -368,7 +368,7 @@ export default function PrivacyPage() {
           <span className="text-slate-600">•</span>
           <Link to="/contact" className="text-slate-400 hover:text-white transition-colors">Contact</Link>
         </div>
-        <p className="text-slate-500 text-xs mt-4">© 2025 Flowstral Inc. All rights reserved.</p>
+        <p className="text-slate-500 text-xs mt-4">&copy; {new Date().getFullYear()} Flowstral Inc. All rights reserved.</p>
       </footer>
     </div>
   );
