@@ -511,9 +511,13 @@ export default function FlowpilotPage() {
 
       if (response.ok) {
         setCurrentStep(`Saved "${test.name}" as test case`);
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setCurrentStep(`Failed to save: ${errData.detail || response.statusText}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Flowpilot] Failed to save test case:', err);
+      setCurrentStep(`Save failed: ${err.message || 'Network error'}`);
     }
   }, [goal]);
 

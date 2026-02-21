@@ -707,12 +707,29 @@ Examples:
                 rows={2}
                 className="flex-1"
               />
-              <Button 
-                onClick={() => {
-                  if (chatInput.trim()) {
-                    setChatMessages(prev => [...prev, { role: 'user', content: chatInput }]);
-                    setChatInput('');
-                    // TODO: Call AI
+              <Button
+                onClick={async () => {
+                  if (!chatInput.trim()) return;
+                  const userMsg = chatInput.trim();
+                  setChatMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+                  setChatInput('');
+                  try {
+                    const context = results.length > 0
+                      ? `Test results: ${results.map(r => `${r.name}: ${r.status} (${r.steps.length} steps)`).join('; ')}`
+                      : 'No test results yet.';
+                    const res = await fetch(`${API_BASE}/api/ai-testing/explain`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ question: userMsg, context }),
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      setChatMessages(prev => [...prev, { role: 'ai', content: data.explanation || data.answer || 'No response from AI.' }]);
+                    } else {
+                      setChatMessages(prev => [...prev, { role: 'ai', content: 'Sorry, AI analysis is not available right now. Please check your backend connection.' }]);
+                    }
+                  } catch {
+                    setChatMessages(prev => [...prev, { role: 'ai', content: 'Failed to reach AI service. Make sure the backend is running.' }]);
                   }
                 }}
               >

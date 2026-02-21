@@ -255,6 +255,7 @@ export default function VisualTestingPage() {
   const [batchTestUrls, setBatchTestUrls] = useState('');
   const [batchTestResults, setBatchTestResults] = useState<{url: string; status: string; diffPct?: number; testName?: string}[]>([]);
   const [isBatchTesting, setIsBatchTesting] = useState(false);
+  const [compareTestName, setCompareTestName] = useState('');
 
   // Comparison history (localStorage backed)
   const [comparisonHistory, setComparisonHistory] = useState<{testName: string; passed: boolean; diffPct: number; mode: string; timestamp: string}[]>(() => {
@@ -1048,7 +1049,7 @@ export default function VisualTestingPage() {
                           await axios.post(`${API_BASE}/capture`, { url, test_name: testName, viewport_width: 1920, viewport_height: 1080 });
                           // Compare against baseline
                           try {
-                            const cmpRes = await axios.post(`${API_BASE}/compare-by-name`, { test_name: testName, mode: comparisonMode, threshold });
+                            const cmpRes = await axios.post(`${API_BASE}/compare-by-name`, { test_name: testName, mode: compareMode, threshold });
                             results.push({ url, status: cmpRes.data.passed ? 'passed' : 'failed', diffPct: cmpRes.data.diff_percentage, testName });
                           } catch {
                             results.push({ url, status: 'new-baseline', testName });
@@ -1209,7 +1210,25 @@ export default function VisualTestingPage() {
                               <Eye className="w-4 h-4 mr-2" />
                               View
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="">
+                            <DropdownMenuItem className=""
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  const res = await axios.get(`${API_BASE}/baselines/${baseline.test_name}`, { responseType: 'json' });
+                                  const b64 = res.data.image_base64;
+                                  if (b64) {
+                                    const a = document.createElement('a');
+                                    a.href = `data:image/png;base64,${b64}`;
+                                    a.download = `${baseline.test_name}.png`;
+                                    a.click();
+                                    toast.success('Baseline downloaded');
+                                  } else {
+                                    toast.error('No image data available');
+                                  }
+                                } catch {
+                                  toast.error('Failed to download baseline');
+                                }
+                              }}>
                               <Download className="w-4 h-4 mr-2" />
                               Download
                             </DropdownMenuItem>
@@ -1311,11 +1330,17 @@ export default function VisualTestingPage() {
                               className={approval === 'accepted' ? 'bg-green-600 hover:bg-green-500' : 'text-green-600 border-green-300 hover:bg-green-50 dark:border-green-700'}
                               onClick={async () => {
                                 setApprovedDiffs(prev => ({ ...prev, [diff.filename]: 'accepted' }));
-                                // Try to update baseline from the actual image
+                                // Try to fetch the actual image and promote it to baseline
                                 try {
                                   const testName = diff.filename.replace(/^diff_/, '').replace(/\.png$/, '').replace(/_\d+$/, '');
-                                  await axios.post(`${API_BASE}/baselines`, { test_name: testName, image: null, update_from_diff: diff.filename });
-                                  toast.success('Accepted as new baseline');
+                                  const actualRes = await axios.get(`${API_BASE}/baselines/${testName}`);
+                                  if (actualRes.data?.image_base64) {
+                                    await axios.post(`${API_BASE}/baselines`, { test_name: testName, image: actualRes.data.image_base64 });
+                                    toast.success('Accepted as new baseline');
+                                    loadBaselines();
+                                  } else {
+                                    toast.success('Marked as accepted');
+                                  }
                                 } catch {
                                   toast.success('Marked as accepted');
                                 }
