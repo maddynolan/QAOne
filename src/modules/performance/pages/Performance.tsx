@@ -41,6 +41,8 @@ import { API_BASE_URL } from "@/lib/api-config";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { TestMetrics, LiveTestData, ServerCpuMetrics, ProtocolRecording } from "@/modules/performance/types/performance-types";
 import { ECOMMERCE_TEST_URL, MAX_BROWSER_VUS, QUICK_START_SCENARIOS } from "@/modules/performance/constants/performance-constants";
+import PerformanceCharts from "@/modules/performance/components/PerformanceCharts";
+import PerformanceAnalytics from "@/modules/performance/components/PerformanceAnalytics";
 
 export default function Performance() {
   const navigate = useNavigate();
@@ -923,7 +925,7 @@ export default function Performance() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-8">
+        <TabsList className="grid w-full grid-cols-9">
           <TabsTrigger value="quickstart">
             <Rocket className="w-4 h-4 mr-2" />
             Quick Start
@@ -940,6 +942,10 @@ export default function Performance() {
           <TabsTrigger value="config">
             <Settings className="w-4 h-4 mr-2" />
             Config
+          </TabsTrigger>
+          <TabsTrigger value="analytics">
+            <TrendingUp className="w-4 h-4 mr-2" />
+            Analytics
           </TabsTrigger>
           <TabsTrigger value="history">
             <BarChart3 className="w-4 h-4 mr-2" />
@@ -1419,10 +1425,10 @@ export default function Performance() {
                 </Card>
               </div>
 
-              {/* Response Time Distribution */}
+              {/* Percentile Summary Cards */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Response Time Distribution</CardTitle>
+                  <CardTitle className="text-lg">Response Time Percentiles</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-4 gap-4">
@@ -1446,119 +1452,8 @@ export default function Performance() {
                 </CardContent>
               </Card>
 
-              {/* Live Charts (Simplified) */}
-              <div className="grid grid-cols-2 gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Response Time History</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-32 flex items-end gap-1">
-                      {currentTest.responseTimeHistory.map((rt, i) => (
-                        <div
-                          key={i}
-                          className="flex-1 bg-blue-500 rounded-t transition-all"
-                          style={{ 
-                            height: `${Math.min(100, (rt / Math.max(...currentTest.responseTimeHistory, 1)) * 100)}%`,
-                            minHeight: "4px"
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Requests/sec History</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-32 flex items-end gap-1">
-                      {currentTest.rpsHistory.map((rps, i) => (
-                        <div
-                          key={i}
-                          className="flex-1 bg-green-500 rounded-t transition-all"
-                          style={{ 
-                            height: `${Math.min(100, (rps / Math.max(...currentTest.rpsHistory, 1)) * 100)}%`,
-                            minHeight: "4px"
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Server Resource Charts - CPU & Memory */}
-              {serverMonitoringEnabled && currentTest.cpuHistory && currentTest.cpuHistory.length > 0 && (
-                <div className="grid grid-cols-2 gap-4">
-                  <Card className="border-orange-500/50">
-                    <CardHeader>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Cpu className="w-5 h-5 text-orange-500" />
-                        Server CPU History
-                        {serverCpuMetrics && (
-                          <Badge variant={serverCpuMetrics.cpu_percent > 80 ? "destructive" : "secondary"}>
-                            {serverCpuMetrics.cpu_percent.toFixed(1)}%
-                          </Badge>
-                        )}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="h-32 flex items-end gap-1">
-                        {currentTest.cpuHistory.map((cpu, i) => (
-                          <div
-                            key={i}
-                            className={`flex-1 rounded-t transition-all ${cpu > 80 ? 'bg-red-500' : cpu > 60 ? 'bg-orange-500' : 'bg-green-500'}`}
-                            style={{ 
-                              height: `${Math.min(100, cpu)}%`,
-                              minHeight: "4px"
-                            }}
-                          />
-                        ))}
-                      </div>
-                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                        <span>0%</span>
-                        <span className="text-orange-500">80% threshold</span>
-                        <span>100%</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-purple-500/50">
-                    <CardHeader>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <HardDrive className="w-5 h-5 text-purple-500" />
-                        Server Memory History
-                        {serverCpuMetrics && (
-                          <Badge variant={serverCpuMetrics.memory_percent > 85 ? "destructive" : "secondary"}>
-                            {serverCpuMetrics.memory_percent.toFixed(1)}%
-                          </Badge>
-                        )}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="h-32 flex items-end gap-1">
-                        {currentTest.memoryHistory.map((mem, i) => (
-                          <div
-                            key={i}
-                            className={`flex-1 rounded-t transition-all ${mem > 85 ? 'bg-red-500' : mem > 70 ? 'bg-purple-500' : 'bg-blue-500'}`}
-                            style={{ 
-                              height: `${Math.min(100, mem)}%`,
-                              minHeight: "4px"
-                            }}
-                          />
-                        ))}
-                      </div>
-                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                        <span>0%</span>
-                        <span className="text-purple-500">85% threshold</span>
-                        <span>100%</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
+              {/* Rich Recharts-based visualizations */}
+              <PerformanceCharts testData={currentTest} serverMonitoring={serverMonitoringEnabled} />
 
               {/* Server Health Warnings during test */}
               {isRunning && serverHealthWarnings.length > 0 && (
@@ -1925,6 +1820,11 @@ export default function Performance() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Analytics Tab — Trends, Comparison, Script Export, Reports, Load Zones */}
+        <TabsContent value="analytics" className="space-y-4">
+          <PerformanceAnalytics testHistory={testHistory} customConfig={customConfig} />
         </TabsContent>
 
         {/* History Tab */}
