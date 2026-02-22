@@ -1,14 +1,16 @@
 /**
  * MobileTestingPage - Full Mobile App Testing Suite
- * 
- * A comprehensive mobile testing hub with 6 integrated sub-modules:
- * 
+ *
+ * A comprehensive mobile testing hub with 8 integrated sub-modules:
+ *
  * 1. TEST STUDIO - Maestro Studio recording, YAML editor, run tests
  * 2. TEST FLOWS - Saved test flow management (CRUD, folders, import/export)
  * 3. DEVICE LAB - Device management, app install, screenshots, logs
  * 4. TEST RUNS - Execution history, reports, pass/fail analytics
  * 5. INSPECTOR - Element hierarchy viewer & selector generator
  * 6. ADVANCED TOOLS - Deep links, push notifications, biometrics, network, geolocation
+ * 7. APP PROFILER - CPU/memory/battery/FPS monitoring, crash logs, media injection
+ * 8. DEVICE MATRIX - Parallel testing across device/OS combinations
  */
 
 import React, { useMemo, useCallback } from 'react';
@@ -25,6 +27,8 @@ import {
   MobileTestRuns,
   MobileInspector,
   MobileAdvancedTools,
+  MobileAppProfiler,
+  MobileDeviceMatrix,
 } from '@/modules/mobile-testing/components';
 import {
   MonitorSmartphone,
@@ -37,6 +41,8 @@ import {
   CheckCircle2,
   XCircle,
   CircleDot,
+  Gauge,
+  Grid3X3,
 } from 'lucide-react';
 
 interface TabConfig {
@@ -68,6 +74,8 @@ export default function MobileTestingPage() {
     { id: 'runs' as const, label: 'Test Runs', icon: Activity, description: 'Execution history & reports' },
     { id: 'inspector' as const, label: 'Inspector', icon: Layers, description: 'Element hierarchy & selectors' },
     { id: 'tools' as const, label: 'Advanced Tools', icon: Wrench, description: 'Deep links, notifications & more' },
+    { id: 'profiler' as const, label: 'App Profiler', icon: Gauge, description: 'CPU, memory, battery, FPS monitoring' },
+    { id: 'device-matrix' as const, label: 'Device Matrix', icon: Grid3X3, description: 'Parallel testing across devices' },
   ], []);
 
   const renderBadge = useCallback((tabId: MobileTab) => {
@@ -101,6 +109,8 @@ export default function MobileTestingPage() {
       case 'runs': return <MobileTestRuns />;
       case 'inspector': return <MobileInspector />;
       case 'tools': return <MobileAdvancedTools />;
+      case 'profiler': return <MobileAppProfiler />;
+      case 'device-matrix': return <MobileDeviceMatrix />;
       default: return <MobileTestStudio />;
     }
   }, [activeTab]);

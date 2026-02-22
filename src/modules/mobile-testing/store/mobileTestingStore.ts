@@ -21,7 +21,7 @@ import { shallow } from 'zustand/shallow';
 // TYPES
 // ============================================================================
 
-export type MobileTab = 'studio' | 'flows' | 'device-lab' | 'runs' | 'inspector' | 'tools';
+export type MobileTab = 'studio' | 'flows' | 'device-lab' | 'runs' | 'inspector' | 'tools' | 'profiler' | 'device-matrix';
 export type MobilePlatform = 'ios' | 'android';
 export type TestRunStatus = 'passed' | 'failed' | 'running' | 'skipped' | 'error';
 export type FlowPriority = 'critical' | 'high' | 'medium' | 'low';

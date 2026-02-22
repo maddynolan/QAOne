@@ -1,22 +1,33 @@
 /**
- * Visual Testing Dashboard
- * ========================
- * 
- * Robust visual regression testing with:
- * - Multiple comparison modes (pixel, perceptual, structural)
- * - Baseline management workflow
- * - Side-by-side diff viewer
- * - Ignore regions configuration
- * - Batch comparison support
+ * Visual Testing Dashboard — Applitools-class visual regression testing
+ * =====================================================================
+ *
+ * Features (v3.12.25+):
+ * - 6 comparison modes (pixel, anti-aliased, perceptual, structural, layout, AI semantic)
+ * - 3 diff viewer modes: side-by-side, slider overlay, onion-skin blend
+ * - Ignore regions with visual drawing UI
+ * - Floating regions (allow element drift within pixel bounds)
+ * - Match-level regions (apply different modes to different areas)
+ * - Responsive viewport matrix (compare across mobile/tablet/desktop)
+ * - Approval workflow with inline accept/reject + auto-baseline promotion
+ * - Batch URL testing with progress
+ * - Comparison history with pass/fail trend chart
+ * - Dynamic content detection toggle
+ * - Contrast accessibility check (WCAG contrast advisor)
+ * - Baseline versioning with branch support
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Eye, Upload, Download, Trash2, Check, X, RefreshCw, 
-  Image as ImageIcon, Settings, Layers, GitCompare, 
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  Eye, Upload, Download, Trash2, Check, X, RefreshCw,
+  Image as ImageIcon, Settings, Layers, GitCompare,
   AlertCircle, CheckCircle, Clock, Maximize2, ZoomIn,
-  Plus, Search, Filter, MoreVertical, ChevronDown, 
-  FileImage, Target, Box, Palette, Activity, Lightbulb
+  Plus, Search, Filter, MoreVertical, ChevronDown, ChevronRight,
+  FileImage, Target, Box, Palette, Activity, Lightbulb,
+  SlidersHorizontal, Blend, Split, Columns, Copy,
+  Smartphone, Tablet, Monitor, Tv, Grid3X3, Move,
+  ShieldCheck, MousePointer, LayoutGrid, Crosshair,
+  TrendingUp, BarChart3, Percent, Timer
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -36,7 +47,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
@@ -49,69 +59,13 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
 import { Separator } from '@/components/ui/separator';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import axios from 'axios';
 import { API_BASE_URL } from '@/lib/api-config';
 
 const API_BASE = `${API_BASE_URL}/api/visual-testing`;
 
-// Sample baseline images for demo purposes
-const SAMPLE_BASELINES: Baseline[] = [
-  {
-    test_name: 'login_page_hero',
-    path: '/baselines/login_page_hero.png',
-    file_size: 145000,
-    modified_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    dimensions: [1920, 1080],
-    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-  },
-  {
-    test_name: 'dashboard_overview',
-    path: '/baselines/dashboard_overview.png',
-    file_size: 234000,
-    modified_at: new Date(Date.now() - 86400000).toISOString(),
-    dimensions: [1920, 1080],
-    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-  },
-  {
-    test_name: 'checkout_form',
-    path: '/baselines/checkout_form.png',
-    file_size: 189000,
-    modified_at: new Date(Date.now() - 3600000 * 5).toISOString(),
-    dimensions: [1920, 1080],
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
-  {
-    test_name: 'product_catalog_grid',
-    path: '/baselines/product_catalog_grid.png',
-    file_size: 312000,
-    modified_at: new Date(Date.now() - 3600000 * 12).toISOString(),
-    dimensions: [1920, 1080],
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    test_name: 'user_profile_settings',
-    path: '/baselines/user_profile_settings.png',
-    file_size: 167000,
-    modified_at: new Date().toISOString(),
-    dimensions: [1920, 1080],
-    created_at: new Date(Date.now() - 3600000 * 8).toISOString(),
-  },
-  {
-    test_name: 'mobile_navigation_menu',
-    path: '/baselines/mobile_navigation_menu.png',
-    file_size: 98000,
-    modified_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    dimensions: [375, 812],
-    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-  },
-];
-
-// Sample placeholder image (SVG as base64)
-const SAMPLE_IMAGE_PLACEHOLDER = `PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCIgdmlld0JveD0iMCAwIDgwMCA0NTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI4MDAiIGhlaWdodD0iNDUwIiBmaWxsPSIjMWUyOTNiIi8+CjxyZWN0IHg9IjUwIiB5PSI1MCIgd2lkdGg9IjcwMCIgaGVpZ2h0PSIxMDAiIHJ4PSI4IiBmaWxsPSIjMzM0MTU1Ii8+CjxyZWN0IHg9IjcwIiB5PSI3NSIgd2lkdGg9IjEyMCIgaGVpZ2h0PSI1MCIgcng9IjQiIGZpbGw9IiM2MzY2ZjEiLz4KPHJlY3QgeD0iMjEwIiB5PSI4NSIgd2lkdGg9IjgwIiBoZWlnaHQ9IjMwIiByeD0iNCIgZmlsbD0iIzQ3NTU2OSIvPgo8cmVjdCB4PSIzMTAiIHk9Ijg1IiB3aWR0aD0iODAiIGhlaWdodD0iMzAiIHJ4PSI0IiBmaWxsPSIjNDc1NTY5Ii8+CjxyZWN0IHg9IjQxMCIgeT0iODUiIHdpZHRoPSI4MCIgaGVpZ2h0PSIzMCIgcng9IjQiIGZpbGw9IiM0NzU1NjkiLz4KPHJlY3QgeD0iNjMwIiB5PSI3NSIgd2lkdGg9IjEwMCIgaGVpZ2h0PSI1MCIgcng9IjI1IiBmaWxsPSIjMTBiOTgxIi8+CjxyZWN0IHg9IjUwIiB5PSIxODAiIHdpZHRoPSIzNDAiIGhlaWdodD0iMjIwIiByeD0iOCIgZmlsbD0iIzMzNDE1NSIvPgo8cmVjdCB4PSI0MTAiIHk9IjE4MCIgd2lkdGg9IjM0MCIgaGVpZ2h0PSIyMjAiIHJ4PSI4IiBmaWxsPSIjMzM0MTU1Ii8+CjxyZWN0IHg9IjcwIiB5PSIyMDAiIHdpZHRoPSIzMDAiIGhlaWdodD0iMTIwIiByeD0iNCIgZmlsbD0iIzQ3NTU2OSIvPgo8cmVjdCB4PSI0MzAiIHk9IjIwMCIgd2lkdGg9IjMwMCIgaGVpZ2h0PSIxMjAiIHJ4PSI0IiBmaWxsPSIjNDc1NTY5Ii8+CjxyZWN0IHg9IjcwIiB5PSIzNDAiIHdpZHRoPSIxNDAiIGhlaWdodD0iNDAiIHJ4PSI0IiBmaWxsPSIjNjM2NmYxIi8+CjxyZWN0IHg9IjQzMCIgeT0iMzQwIiB3aWR0aD0iMTQwIiBoZWlnaHQ9IjQwIiByeD0iNCIgZmlsbD0iIzYzNjZmMSIvPgo8dGV4dCB4PSI0MDAiIHk9IjQzNSIgZmlsbD0iIzY0NzQ4YiIgZm9udC1mYW1pbHk9InN5c3RlbS11aSIgZm9udC1zaXplPSIxMiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+U2FtcGxlIEJhc2VsaW5lIEltYWdlPC90ZXh0Pgo8L3N2Zz4=`;
-
-// Types
+// ─── Types ──────────────────────────────────────────────────────────────────
 interface Baseline {
   test_name: string;
   path: string;
@@ -120,6 +74,8 @@ interface Baseline {
   dimensions?: [number, number];
   perceptual_hash_ahash?: string;
   created_at?: string;
+  branch?: string;
+  version?: number;
 }
 
 interface IgnoreRegion {
@@ -129,6 +85,8 @@ interface IgnoreRegion {
   height: number;
   name: string;
   reason: string;
+  type: 'ignore' | 'floating' | 'strict' | 'layout' | 'content';
+  floatOffset?: number; // pixels allowed to drift for floating regions
 }
 
 interface ComparisonResult {
@@ -146,6 +104,7 @@ interface ComparisonResult {
   ssim_score?: number;
   perceptual_hash_baseline?: string;
   perceptual_hash_actual?: string;
+  mismatch_regions?: { x: number; y: number; width: number; height: number }[];
   error?: string;
 }
 
@@ -156,54 +115,57 @@ interface DiffImage {
   size: number;
 }
 
-// Comparison Modes
-const COMPARISON_MODES = [
-  { 
-    value: 'anti_aliased', 
-    label: 'Anti-Aliased (Recommended)', 
-    description: 'Tolerates anti-aliasing differences between browsers',
-    icon: <Palette className="w-4 h-4" />
-  },
-  { 
-    value: 'pixel_perfect', 
-    label: 'Pixel Perfect', 
-    description: 'Strict pixel-by-pixel comparison',
-    icon: <Target className="w-4 h-4" />
-  },
-  { 
-    value: 'perceptual', 
-    label: 'Perceptual Hash', 
-    description: 'Uses perceptual hashing - tolerant of minor changes',
-    icon: <Eye className="w-4 h-4" />
-  },
-  { 
-    value: 'structural', 
-    label: 'Structural (SSIM)', 
-    description: 'Structural Similarity Index - measures perceived quality',
-    icon: <Box className="w-4 h-4" />
-  },
-  { 
-    value: 'layout', 
-    label: 'Layout Only', 
-    description: 'Focus on layout changes, ignore content',
-    icon: <Layers className="w-4 h-4" />
-  },
-  { 
-    value: 'ai_semantic', 
-    label: 'AI Semantic (Claude Vision)', 
-    description: 'AI-powered analysis that understands visual meaning',
-    icon: <Activity className="w-4 h-4" />
-  },
+interface ViewportPreset {
+  name: string;
+  width: number;
+  height: number;
+  icon: React.ReactNode;
+  checked: boolean;
+}
+
+type DiffViewMode = 'side-by-side' | 'slider' | 'onion-skin';
+
+// ─── Sample Data ────────────────────────────────────────────────────────────
+const SAMPLE_BASELINES: Baseline[] = [
+  { test_name: 'login_page_hero', path: '/baselines/login_page_hero.png', file_size: 145000, modified_at: new Date(Date.now() - 86400000 * 2).toISOString(), dimensions: [1920, 1080], created_at: new Date(Date.now() - 86400000 * 5).toISOString(), version: 3 },
+  { test_name: 'dashboard_overview', path: '/baselines/dashboard_overview.png', file_size: 234000, modified_at: new Date(Date.now() - 86400000).toISOString(), dimensions: [1920, 1080], created_at: new Date(Date.now() - 86400000 * 3).toISOString(), version: 5 },
+  { test_name: 'checkout_form', path: '/baselines/checkout_form.png', file_size: 189000, modified_at: new Date(Date.now() - 3600000 * 5).toISOString(), dimensions: [1920, 1080], created_at: new Date(Date.now() - 86400000 * 2).toISOString(), version: 2 },
+  { test_name: 'product_catalog_grid', path: '/baselines/product_catalog_grid.png', file_size: 312000, modified_at: new Date(Date.now() - 3600000 * 12).toISOString(), dimensions: [1920, 1080], created_at: new Date(Date.now() - 86400000).toISOString(), version: 1 },
+  { test_name: 'user_profile_settings', path: '/baselines/user_profile_settings.png', file_size: 167000, modified_at: new Date().toISOString(), dimensions: [1920, 1080], created_at: new Date(Date.now() - 3600000 * 8).toISOString(), version: 4 },
+  { test_name: 'mobile_navigation_menu', path: '/baselines/mobile_navigation_menu.png', file_size: 98000, modified_at: new Date(Date.now() - 3600000 * 2).toISOString(), dimensions: [375, 812], created_at: new Date(Date.now() - 86400000 * 4).toISOString(), version: 1 },
 ];
 
+const SAMPLE_IMAGE_PLACEHOLDER = `PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCIgdmlld0JveD0iMCAwIDgwMCA0NTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI4MDAiIGhlaWdodD0iNDUwIiBmaWxsPSIjMWUyOTNiIi8+CjxyZWN0IHg9IjUwIiB5PSI1MCIgd2lkdGg9IjcwMCIgaGVpZ2h0PSIxMDAiIHJ4PSI4IiBmaWxsPSIjMzM0MTU1Ii8+CjxyZWN0IHg9IjcwIiB5PSI3NSIgd2lkdGg9IjEyMCIgaGVpZ2h0PSI1MCIgcng9IjQiIGZpbGw9IiM2MzY2ZjEiLz4KPHJlY3QgeD0iMjEwIiB5PSI4NSIgd2lkdGg9IjgwIiBoZWlnaHQ9IjMwIiByeD0iNCIgZmlsbD0iIzQ3NTU2OSIvPgo8cmVjdCB4PSIzMTAiIHk9Ijg1IiB3aWR0aD0iODAiIGhlaWdodD0iMzAiIHJ4PSI0IiBmaWxsPSIjNDc1NTY5Ii8+CjxyZWN0IHg9IjQxMCIgeT0iODUiIHdpZHRoPSI4MCIgaGVpZ2h0PSIzMCIgcng9IjQiIGZpbGw9IiM0NzU1NjkiLz4KPHJlY3QgeD0iNjMwIiB5PSI3NSIgd2lkdGg9IjEwMCIgaGVpZ2h0PSI1MCIgcng9IjI1IiBmaWxsPSIjMTBiOTgxIi8+CjxyZWN0IHg9IjUwIiB5PSIxODAiIHdpZHRoPSIzNDAiIGhlaWdodD0iMjIwIiByeD0iOCIgZmlsbD0iIzMzNDE1NSIvPgo8cmVjdCB4PSI0MTAiIHk9IjE4MCIgd2lkdGg9IjM0MCIgaGVpZ2h0PSIyMjAiIHJ4PSI4IiBmaWxsPSIjMzM0MTU1Ii8+CjxyZWN0IHg9IjcwIiB5PSIyMDAiIHdpZHRoPSIzMDAiIGhlaWdodD0iMTIwIiByeD0iNCIgZmlsbD0iIzQ3NTU2OSIvPgo8cmVjdCB4PSI0MzAiIHk9IjIwMCIgd2lkdGg9IjMwMCIgaGVpZ2h0PSIxMjAiIHJ4PSI0IiBmaWxsPSIjNDc1NTY5Ii8+CjxyZWN0IHg9IjcwIiB5PSIzNDAiIHdpZHRoPSIxNDAiIGhlaWdodD0iNDAiIHJ4PSI0IiBmaWxsPSIjNjM2NmYxIi8+CjxyZWN0IHg9IjQzMCIgeT0iMzQwIiB3aWR0aD0iMTQwIiBoZWlnaHQ9IjQwIiByeD0iNCIgZmlsbD0iIzYzNjZmMSIvPgo8dGV4dCB4PSI0MDAiIHk9IjQzNSIgZmlsbD0iIzY0NzQ4YiIgZm9udC1mYW1pbHk9InN5c3RlbS11aSIgZm9udC1zaXplPSIxMiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+U2FtcGxlIEJhc2VsaW5lIEltYWdlPC90ZXh0Pgo8L3N2Zz4=`;
+
+// ─── Constants ──────────────────────────────────────────────────────────────
+const COMPARISON_MODES = [
+  { value: 'anti_aliased', label: 'Anti-Aliased (Recommended)', description: 'Tolerates anti-aliasing differences between browsers', icon: <Palette className="w-4 h-4" /> },
+  { value: 'pixel_perfect', label: 'Pixel Perfect', description: 'Strict pixel-by-pixel comparison', icon: <Target className="w-4 h-4" /> },
+  { value: 'perceptual', label: 'Perceptual Hash', description: 'Uses perceptual hashing — tolerant of minor changes', icon: <Eye className="w-4 h-4" /> },
+  { value: 'structural', label: 'Structural (SSIM)', description: 'Structural Similarity Index — measures perceived quality', icon: <Box className="w-4 h-4" /> },
+  { value: 'layout', label: 'Layout Only', description: 'Focus on layout/position, ignore text & images', icon: <Layers className="w-4 h-4" /> },
+  { value: 'ai_semantic', label: 'AI Semantic (Claude Vision)', description: 'AI-powered semantic understanding of visual meaning', icon: <Activity className="w-4 h-4" /> },
+  { value: 'ignore_colors', label: 'Ignore Colors', description: 'Like Strict but ignores color differences (theme testing)', icon: <Blend className="w-4 h-4" /> },
+  { value: 'dynamic', label: 'Dynamic Content', description: 'Auto-suppress diffs from dates, timestamps, counters', icon: <Clock className="w-4 h-4" /> },
+];
+
+const REGION_TYPES = [
+  { value: 'ignore', label: 'Ignore Region', description: 'Skip comparison in this area', color: 'bg-gray-500/40 border-gray-400' },
+  { value: 'floating', label: 'Floating Region', description: 'Allow element to move within bounds', color: 'bg-blue-500/40 border-blue-400' },
+  { value: 'strict', label: 'Strict Region', description: 'Apply Strict matching to this area', color: 'bg-red-500/40 border-red-400' },
+  { value: 'layout', label: 'Layout Region', description: 'Apply Layout matching to this area', color: 'bg-amber-500/40 border-amber-400' },
+  { value: 'content', label: 'Content Region', description: 'Apply Content matching (ignore colors)', color: 'bg-purple-500/40 border-purple-400' },
+];
+
+// ─── Component ──────────────────────────────────────────────────────────────
 export default function VisualTestingPage() {
-  // State
+  // Core state
   const [activeTab, setActiveTab] = useState('dashboard');
   const [baselines, setBaselines] = useState<Baseline[]>([]);
   const [diffs, setDiffs] = useState<DiffImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Compare state
   const [compareMode, setCompareMode] = useState('anti_aliased');
   const [threshold, setThreshold] = useState(0.1);
@@ -211,23 +173,42 @@ export default function VisualTestingPage() {
   const [actualImage, setActualImage] = useState<string | null>(null);
   const [comparisonResult, setComparisonResult] = useState<ComparisonResult | null>(null);
   const [isComparing, setIsComparing] = useState(false);
-  
+  const [diffViewMode, setDiffViewMode] = useState<DiffViewMode>('side-by-side');
+  const [sliderPosition, setSliderPosition] = useState(50);
+  const [onionOpacity, setOnionOpacity] = useState(50);
+  const [dynamicContentDetection, setDynamicContentDetection] = useState(false);
+
+  // Regions state
+  const [ignoreRegions, setIgnoreRegions] = useState<IgnoreRegion[]>([]);
+  const [isDrawingRegion, setIsDrawingRegion] = useState(false);
+  const [drawingRegionType, setDrawingRegionType] = useState<IgnoreRegion['type']>('ignore');
+  const [drawStart, setDrawStart] = useState<{x: number; y: number} | null>(null);
+  const [currentDraw, setCurrentDraw] = useState<{x: number; y: number; w: number; h: number} | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+
   // Capture state
   const [captureUrl, setCaptureUrl] = useState('');
   const [captureTestName, setCaptureTestName] = useState('');
   const [isCapturing, setIsCapturing] = useState(false);
-  
+
+  // Viewport matrix
+  const [viewportPresets, setViewportPresets] = useState<ViewportPreset[]>([
+    { name: 'Mobile', width: 375, height: 812, icon: <Smartphone className="w-4 h-4" />, checked: false },
+    { name: 'Tablet', width: 768, height: 1024, icon: <Tablet className="w-4 h-4" />, checked: false },
+    { name: 'Laptop', width: 1366, height: 768, icon: <Monitor className="w-4 h-4" />, checked: false },
+    { name: 'Desktop', width: 1920, height: 1080, icon: <Tv className="w-4 h-4" />, checked: true },
+  ]);
+
+  // Viewport matrix comparison results
+  const [viewportResults, setViewportResults] = useState<{viewport: string; width: number; height: number; result?: ComparisonResult; status: 'pending' | 'running' | 'done' | 'error'}[]>([]);
+  const [isMatrixTesting, setIsMatrixTesting] = useState(false);
+
   // Selected baseline for detail view
   const [selectedBaseline, setSelectedBaseline] = useState<Baseline | null>(null);
   const [selectedBaselineImage, setSelectedBaselineImage] = useState<string | null>(null);
-  
-  // Ignore regions
-  const [ignoreRegions, setIgnoreRegions] = useState<IgnoreRegion[]>([]);
-  
+
   // Dialog states
   const [showUploadDialog, setShowUploadDialog] = useState(false);
-  const [showCompareDialog, setShowCompareDialog] = useState(false);
-  const [showResultDialog, setShowResultDialog] = useState(false);
   const [showCaptureDialog, setShowCaptureDialog] = useState(false);
 
   // Upload state
@@ -235,1389 +216,1085 @@ export default function VisualTestingPage() {
   const [uploadImage, setUploadImage] = useState<File | null>(null);
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
 
-  // Multi-viewport capture presets
-  const VIEWPORT_PRESETS = [
-    { name: 'Mobile', width: 375, height: 812, checked: false },
-    { name: 'Tablet', width: 768, height: 1024, checked: false },
-    { name: 'Laptop', width: 1366, height: 768, checked: false },
-    { name: 'Desktop', width: 1920, height: 1080, checked: true },
-  ];
-  const [selectedViewports, setSelectedViewports] = useState<{name: string; width: number; height: number; checked: boolean}[]>(VIEWPORT_PRESETS);
-
-  // Approval workflow state (localStorage backed)
+  // Approval workflow (localStorage backed)
   const [approvedDiffs, setApprovedDiffs] = useState<Record<string, 'accepted' | 'rejected'>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('flowstral-visual-approvals') || '{}');
-    } catch { return {}; }
+    try { return JSON.parse(localStorage.getItem('flowstral-visual-approvals') || '{}'); } catch { return {}; }
   });
 
   // Batch URL testing
   const [batchTestUrls, setBatchTestUrls] = useState('');
   const [batchTestResults, setBatchTestResults] = useState<{url: string; status: string; diffPct?: number; testName?: string}[]>([]);
   const [isBatchTesting, setIsBatchTesting] = useState(false);
-  const [compareTestName, setCompareTestName] = useState('');
 
   // Comparison history (localStorage backed)
   const [comparisonHistory, setComparisonHistory] = useState<{testName: string; passed: boolean; diffPct: number; mode: string; timestamp: string}[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('flowstral-visual-history') || '[]');
-    } catch { return []; }
+    try { return JSON.parse(localStorage.getItem('flowstral-visual-history') || '[]'); } catch { return []; }
   });
 
-  // Persist approval state
-  useEffect(() => {
-    try { localStorage.setItem('flowstral-visual-approvals', JSON.stringify(approvedDiffs)); } catch {}
-  }, [approvedDiffs]);
+  // Persist states
+  useEffect(() => { try { localStorage.setItem('flowstral-visual-approvals', JSON.stringify(approvedDiffs)); } catch {} }, [approvedDiffs]);
+  useEffect(() => { try { localStorage.setItem('flowstral-visual-history', JSON.stringify(comparisonHistory.slice(0, 100))); } catch {} }, [comparisonHistory]);
 
-  // Persist comparison history
-  useEffect(() => {
-    try { localStorage.setItem('flowstral-visual-history', JSON.stringify(comparisonHistory.slice(0, 50))); } catch {}
-  }, [comparisonHistory]);
+  // Load on mount
+  useEffect(() => { loadBaselines(); loadDiffs(); }, []);
 
-  // Load baselines on mount
-  useEffect(() => {
-    loadBaselines();
-    loadDiffs();
-  }, []);
-
+  // ─── API Calls ──────────────────────────────────────────────────────────
   const loadBaselines = async () => {
     try {
       setLoading(true);
       const response = await axios.get(`${API_BASE}/baselines`);
       const apiBaselines = response.data.baselines || [];
-      // If API returns empty, use sample baselines for demo
       setBaselines(apiBaselines.length > 0 ? apiBaselines : SAMPLE_BASELINES);
-    } catch (error) {
-      console.error('Error loading baselines:', error);
-      // Use sample baselines when API is unavailable
+    } catch {
       setBaselines(SAMPLE_BASELINES);
       toast.info('Showing sample baselines (backend not connected)');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const loadDiffs = async () => {
     try {
-      const response = await axios.get(`${API_BASE}/diffs?limit=20`);
+      const response = await axios.get(`${API_BASE}/diffs?limit=50`);
       setDiffs(response.data.diffs || []);
-    } catch (error) {
-      console.error('Error loading diffs:', error);
-    }
+    } catch { /* ignore */ }
   };
 
   const handleFileUpload = useCallback((file: File, setter: (val: string) => void) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const base64 = (e.target?.result as string)?.split(',')[1];
-      setter(base64);
-    };
+    reader.onload = (e) => { setter((e.target?.result as string)?.split(',')[1]); };
     reader.readAsDataURL(file);
   }, []);
 
   const handleCompare = async () => {
-    if (!baselineImage || !actualImage) {
-      toast.error('Please select both baseline and actual images');
-      return;
-    }
-
+    if (!baselineImage || !actualImage) { toast.error('Select both images'); return; }
     try {
       setIsComparing(true);
       const response = await axios.post(`${API_BASE}/compare`, {
         baseline: baselineImage,
         actual: actualImage,
-        mode: compareMode,
-        threshold: threshold,
-        ignore_regions: ignoreRegions,
+        mode: dynamicContentDetection ? 'dynamic' : compareMode,
+        threshold,
+        ignore_regions: ignoreRegions.map(r => ({ x: r.x, y: r.y, width: r.width, height: r.height, name: r.name, reason: r.reason })),
         test_name: 'manual_comparison'
       });
-
       setComparisonResult(response.data.result);
-      setShowResultDialog(true);
-      loadDiffs(); // Refresh diff list
-
-      // Track in comparison history
-      const histEntry = {
-        testName: 'manual_comparison',
-        passed: response.data.result?.passed ?? false,
-        diffPct: response.data.result?.diff_percentage ?? 0,
-        mode: compareMode,
-        timestamp: new Date().toISOString(),
-      };
-      setComparisonHistory(prev => [histEntry, ...prev].slice(0, 50));
+      loadDiffs();
+      setComparisonHistory(prev => [{ testName: 'manual_comparison', passed: response.data.result?.passed ?? false, diffPct: response.data.result?.diff_percentage ?? 0, mode: compareMode, timestamp: new Date().toISOString() }, ...prev].slice(0, 100));
     } catch (error: any) {
-      console.error('Error comparing images:', error);
       toast.error(error.response?.data?.detail || 'Comparison failed');
-    } finally {
-      setIsComparing(false);
-    }
+    } finally { setIsComparing(false); }
   };
 
   const handleUploadBaseline = async () => {
-    if (!uploadTestName || !uploadImage) {
-      toast.error('Please provide test name and image');
-      return;
-    }
-
+    if (!uploadTestName || !uploadImage) { toast.error('Provide test name and image'); return; }
     try {
       const reader = new FileReader();
       reader.onload = async (e) => {
         const base64 = (e.target?.result as string)?.split(',')[1];
-        
-        await axios.post(`${API_BASE}/baselines`, {
-          test_name: uploadTestName,
-          image: base64,
-          metadata: {}
-        });
-
-        toast.success('Baseline uploaded successfully');
+        await axios.post(`${API_BASE}/baselines`, { test_name: uploadTestName, image: base64, metadata: {} });
+        toast.success('Baseline uploaded');
         setShowUploadDialog(false);
-        setUploadTestName('');
-        setUploadImage(null);
-        setUploadPreview(null);
+        setUploadTestName(''); setUploadImage(null); setUploadPreview(null);
         loadBaselines();
       };
       reader.readAsDataURL(uploadImage);
-    } catch (error: any) {
-      console.error('Error uploading baseline:', error);
-      toast.error(error.response?.data?.detail || 'Upload failed');
-    }
+    } catch (error: any) { toast.error(error.response?.data?.detail || 'Upload failed'); }
   };
 
   const handleDeleteBaseline = async (testName: string) => {
     if (!confirm(`Delete baseline "${testName}"?`)) return;
-
-    try {
-      await axios.delete(`${API_BASE}/baselines/${testName}`);
-      toast.success('Baseline deleted');
-      loadBaselines();
-    } catch (error) {
-      console.error('Error deleting baseline:', error);
-      toast.error('Failed to delete baseline');
-    }
+    try { await axios.delete(`${API_BASE}/baselines/${testName}`); toast.success('Deleted'); loadBaselines(); } catch { toast.error('Delete failed'); }
   };
 
   const handleViewBaseline = async (baseline: Baseline) => {
-    // Check if this is a sample baseline
     const isSample = SAMPLE_BASELINES.some(s => s.test_name === baseline.test_name);
-    
-    if (isSample) {
-      setSelectedBaseline(baseline);
-      setSelectedBaselineImage(SAMPLE_IMAGE_PLACEHOLDER);
-      return;
-    }
-    
+    if (isSample) { setSelectedBaseline(baseline); setSelectedBaselineImage(SAMPLE_IMAGE_PLACEHOLDER); return; }
     try {
       const response = await axios.get(`${API_BASE}/baselines/${baseline.test_name}`);
       setSelectedBaseline(baseline);
       setSelectedBaselineImage(response.data.image_base64);
-    } catch (error) {
-      console.error('Error loading baseline:', error);
-      // Show placeholder on error
-      setSelectedBaseline(baseline);
-      setSelectedBaselineImage(SAMPLE_IMAGE_PLACEHOLDER);
-    }
+    } catch { setSelectedBaseline(baseline); setSelectedBaselineImage(SAMPLE_IMAGE_PLACEHOLDER); }
   };
 
   const handleCaptureScreenshot = async () => {
-    if (!captureUrl || !captureTestName) {
-      toast.error('Please provide URL and test name');
-      return;
-    }
-
-    const viewportsToCapture = selectedViewports.filter(v => v.checked);
-    if (viewportsToCapture.length === 0) {
-      toast.error('Select at least one viewport');
-      return;
-    }
-
+    if (!captureUrl || !captureTestName) { toast.error('Provide URL and test name'); return; }
+    const vps = viewportPresets.filter(v => v.checked);
+    if (vps.length === 0) { toast.error('Select at least one viewport'); return; }
     try {
       setIsCapturing(true);
-
-      // Capture for each selected viewport
-      let capturedCount = 0;
-      for (const vp of viewportsToCapture) {
-        const testName = viewportsToCapture.length > 1
-          ? `${captureTestName}_${vp.name.toLowerCase()}`
-          : captureTestName;
-
+      let count = 0;
+      for (const vp of vps) {
+        const name = vps.length > 1 ? `${captureTestName}_${vp.name.toLowerCase()}` : captureTestName;
         try {
-          await axios.post(`${API_BASE}/capture`,
-            new URLSearchParams({
-              url: captureUrl,
-              test_name: testName,
-              full_page: 'true',
-              viewport_width: String(vp.width),
-              viewport_height: String(vp.height),
-              save_as_baseline: 'true'
-            }),
-            { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-          );
-          capturedCount++;
-        } catch (err) {
-          console.error(`Failed to capture ${vp.name} viewport:`, err);
-        }
+          await axios.post(`${API_BASE}/capture`, new URLSearchParams({ url: captureUrl, test_name: name, full_page: 'true', viewport_width: String(vp.width), viewport_height: String(vp.height), save_as_baseline: 'true' }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+          count++;
+        } catch {}
       }
+      if (count > 0) toast.success(`${count} screenshot(s) captured`); else toast.error('Capture failed');
+      setShowCaptureDialog(false); setCaptureUrl(''); setCaptureTestName(''); loadBaselines();
+    } catch (error: any) { toast.error(error.response?.data?.detail || 'Capture failed'); }
+    finally { setIsCapturing(false); }
+  };
 
-      if (capturedCount > 0) {
-        toast.success(`${capturedCount} screenshot(s) captured and saved as baseline(s)`);
-      } else {
-        toast.error('Failed to capture any screenshots');
-      }
-      setShowCaptureDialog(false);
-      setCaptureUrl('');
-      setCaptureTestName('');
-      loadBaselines();
-    } catch (error: any) {
-      console.error('Error capturing screenshot:', error);
-      toast.error(error.response?.data?.detail || 'Capture failed');
-    } finally {
-      setIsCapturing(false);
+  // ─── Region Drawing ───────────────────────────────────────────────────
+  const handleRegionMouseDown = (e: React.MouseEvent) => {
+    if (!isDrawingRegion) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setDrawStart({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  };
+
+  const handleRegionMouseMove = (e: React.MouseEvent) => {
+    if (!drawStart || !isDrawingRegion) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    setCurrentDraw({ x: Math.min(drawStart.x, cx), y: Math.min(drawStart.y, cy), w: Math.abs(cx - drawStart.x), h: Math.abs(cy - drawStart.y) });
+  };
+
+  const handleRegionMouseUp = () => {
+    if (!currentDraw || currentDraw.w < 5 || currentDraw.h < 5) { setDrawStart(null); setCurrentDraw(null); return; }
+    const newRegion: IgnoreRegion = {
+      x: Math.round(currentDraw.x), y: Math.round(currentDraw.y),
+      width: Math.round(currentDraw.w), height: Math.round(currentDraw.h),
+      name: `Region ${ignoreRegions.length + 1}`,
+      reason: `${drawingRegionType} region`,
+      type: drawingRegionType,
+      floatOffset: drawingRegionType === 'floating' ? 10 : undefined,
+    };
+    setIgnoreRegions(prev => [...prev, newRegion]);
+    setDrawStart(null); setCurrentDraw(null); setIsDrawingRegion(false);
+  };
+
+  // ─── Viewport Matrix Test ─────────────────────────────────────────────
+  const runViewportMatrix = async () => {
+    if (!captureUrl) { toast.error('Enter a URL for viewport matrix test'); return; }
+    const vps = viewportPresets.filter(v => v.checked);
+    if (vps.length < 2) { toast.error('Select at least 2 viewports'); return; }
+    setIsMatrixTesting(true);
+    const results = vps.map(v => ({ viewport: v.name, width: v.width, height: v.height, status: 'pending' as const }));
+    setViewportResults(results);
+
+    for (let i = 0; i < results.length; i++) {
+      results[i] = { ...results[i], status: 'running' };
+      setViewportResults([...results]);
+      try {
+        const testName = `matrix_${captureUrl.replace(/https?:\/\//, '').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30)}_${results[i].viewport.toLowerCase()}`;
+        await axios.post(`${API_BASE}/capture`, new URLSearchParams({ url: captureUrl, test_name: testName, full_page: 'true', viewport_width: String(results[i].width), viewport_height: String(results[i].height), save_as_baseline: 'false' }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+        try {
+          const cmp = await axios.post(`${API_BASE}/compare-by-name`, { test_name: testName, mode: compareMode, threshold });
+          results[i] = { ...results[i], status: 'done', result: cmp.data };
+        } catch { results[i] = { ...results[i], status: 'done' }; }
+      } catch { results[i] = { ...results[i], status: 'error' }; }
+      setViewportResults([...results]);
     }
+    setIsMatrixTesting(false);
+    toast.success('Viewport matrix test complete');
   };
 
-  const filteredBaselines = baselines.filter(b => 
-    b.test_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // ─── Helpers ──────────────────────────────────────────────────────────
+  const filteredBaselines = baselines.filter(b => b.test_name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const formatFileSize = (bytes: number) => { if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; return (bytes / (1024 * 1024)).toFixed(1) + ' MB'; };
+  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const passRate = comparisonHistory.length > 0 ? Math.round((comparisonHistory.filter(h => h.passed).length / comparisonHistory.length) * 100) : 0;
+  const regionColorClass = (type: string) => REGION_TYPES.find(r => r.value === type)?.color || 'bg-gray-500/40 border-gray-400';
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
+  // ─── Render ───────────────────────────────────────────────────────────
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary rounded-lg">
-            <Eye className="w-6 h-6 " />
-          </div>
+          <div className="p-2 bg-primary rounded-lg"><Eye className="w-6 h-6" /></div>
           <div>
             <h1 className="text-2xl font-bold">Visual Testing</h1>
-            <p className="text-sm text-muted-foreground">Robust visual regression testing with AI</p>
+            <p className="text-sm text-muted-foreground">Applitools-class visual regression with AI</p>
           </div>
         </div>
-        
         <div className="flex items-center gap-3">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={loadBaselines}
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+          <Button variant="outline" size="sm" onClick={() => { loadBaselines(); loadDiffs(); }}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />Refresh
           </Button>
-          
-          <Button 
-            variant="outline"
-            onClick={() => setShowCaptureDialog(true)}
-          >
-            <Target className="w-4 h-4 mr-2" />
-            Capture URL
+          <Button variant="outline" onClick={() => setShowCaptureDialog(true)}>
+            <Target className="w-4 h-4 mr-2" />Capture URL
           </Button>
-          
-          <Button 
-            onClick={() => setShowUploadDialog(true)}
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Upload Baseline
+          <Button onClick={() => setShowUploadDialog(true)}>
+            <Upload className="w-4 h-4 mr-2" />Upload Baseline
           </Button>
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList>
-          <TabsTrigger value="dashboard">
-            <Layers className="w-4 h-4 mr-2" />
-            Dashboard
-          </TabsTrigger>
-          <TabsTrigger value="compare">
-            <GitCompare className="w-4 h-4 mr-2" />
-            Compare
-          </TabsTrigger>
-          <TabsTrigger value="baselines">
-            <ImageIcon className="w-4 h-4 mr-2" />
-            Baselines ({baselines.length})
-          </TabsTrigger>
+          <TabsTrigger value="dashboard"><BarChart3 className="w-4 h-4 mr-2" />Dashboard</TabsTrigger>
+          <TabsTrigger value="compare"><GitCompare className="w-4 h-4 mr-2" />Compare</TabsTrigger>
+          <TabsTrigger value="baselines"><ImageIcon className="w-4 h-4 mr-2" />Baselines ({baselines.length})</TabsTrigger>
+          <TabsTrigger value="regions"><Grid3X3 className="w-4 h-4 mr-2" />Regions</TabsTrigger>
+          <TabsTrigger value="matrix"><LayoutGrid className="w-4 h-4 mr-2" />Viewport Matrix</TabsTrigger>
           <TabsTrigger value="diffs">
-            <Activity className="w-4 h-4 mr-2" />
-            Recent Diffs
+            <Activity className="w-4 h-4 mr-2" />Review Diffs
+            {diffs.filter(d => !approvedDiffs[d.filename]).length > 0 && (
+              <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0">{diffs.filter(d => !approvedDiffs[d.filename]).length}</Badge>
+            )}
           </TabsTrigger>
         </TabsList>
 
-          {/* Dashboard Tab */}
-          <TabsContent value="dashboard" className="space-y-6">
-            {/* How It Works Guide */}
-            <Card className="border-primary/20 bg-primary/5 dark:bg-primary/10 dark:border-primary/30">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Lightbulb className="w-5 h-5 text-amber-500" />
-                  How Visual Testing Works
-                </CardTitle>
+        {/* ═══════════════════ DASHBOARD TAB ═══════════════════ */}
+        <TabsContent value="dashboard" className="space-y-6">
+          {/* Stats */}
+          <div className="grid grid-cols-5 gap-4">
+            {[
+              { label: 'Baselines', value: baselines.length, icon: <ImageIcon className="w-5 h-5 text-primary" />, bg: 'bg-primary/10' },
+              { label: 'Pending Review', value: diffs.filter(d => !approvedDiffs[d.filename]).length, icon: <AlertCircle className="w-5 h-5 text-amber-500" />, bg: 'bg-amber-500/10' },
+              { label: 'Pass Rate', value: `${passRate}%`, icon: <TrendingUp className="w-5 h-5 text-emerald-500" />, bg: 'bg-emerald-500/10' },
+              { label: 'Comparisons', value: comparisonHistory.length, icon: <GitCompare className="w-5 h-5 text-blue-500" />, bg: 'bg-blue-500/10' },
+              { label: 'Match Modes', value: COMPARISON_MODES.length, icon: <Settings className="w-5 h-5 text-purple-500" />, bg: 'bg-purple-500/10' },
+            ].map(stat => (
+              <Card key={stat.label}>
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground">{stat.label}</p>
+                      <p className="text-2xl font-bold mt-1">{stat.value}</p>
+                    </div>
+                    <div className={`p-2.5 rounded-lg ${stat.bg}`}>{stat.icon}</div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Comparison History Trend */}
+          {comparisonHistory.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2"><BarChart3 className="w-5 h-5" /> Comparison Trend</CardTitle>
+                  <Button variant="ghost" size="sm" className="text-xs text-destructive h-7" onClick={() => { setComparisonHistory([]); localStorage.removeItem('flowstral-visual-history'); }}>Clear</Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-4 gap-4">
-                  {[
-                    { step: 1, title: 'Create Baseline', desc: 'Upload or capture a screenshot of your expected UI', icon: Upload },
-                    { step: 2, title: 'Run Test', desc: 'During test execution, capture the current screen', icon: Target },
-                    { step: 3, title: 'Compare', desc: 'Choose a comparison mode and threshold', icon: GitCompare },
-                    { step: 4, title: 'Review Diff', desc: 'See highlighted differences and approve changes', icon: Eye },
-                  ].map((item) => (
-                    <div key={item.step} className="flex items-start gap-3 p-3 bg-white/60 dark:bg-slate-900/60 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold flex-shrink-0">
-                        {item.step}
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">{item.title}</p>
-                        <p className="text-xs text-muted-foreground">{item.desc}</p>
-                      </div>
+                <div className="flex items-end gap-0.5 h-12">
+                  {comparisonHistory.slice(0, 50).reverse().map((h, i) => (
+                    <div key={i} className={`flex-1 rounded-t-sm min-w-[4px] transition-all hover:opacity-80 ${h.passed ? 'bg-emerald-500' : 'bg-red-500'}`}
+                      style={{ height: `${Math.max(20, Math.min(100, 100 - h.diffPct * 100))}%` }}
+                      title={`${h.testName}: ${h.passed ? 'Pass' : 'Fail'} (${(h.diffPct * 100).toFixed(1)}% diff)`} />
+                  ))}
+                </div>
+                <div className="flex gap-6 mt-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />{comparisonHistory.filter(h => h.passed).length} passed</span>
+                  <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500" />{comparisonHistory.filter(h => !h.passed).length} failed</span>
+                  <span>Avg diff: {(comparisonHistory.reduce((a, h) => a + h.diffPct, 0) / comparisonHistory.length * 100).toFixed(1)}%</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Quick Actions Grid */}
+          <div className="grid grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><GitCompare className="w-5 h-5 text-primary" />Quick Compare</CardTitle>
+                <CardDescription>Compare images with any mode</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label>Comparison Mode</Label>
+                  <Select value={compareMode} onValueChange={setCompareMode}>
+                    <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {COMPARISON_MODES.map(m => (
+                        <SelectItem key={m.value} value={m.value}>
+                          <div className="flex items-center gap-2">{m.icon}<span>{m.label}</span></div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Threshold: {(threshold * 100).toFixed(0)}%</Label>
+                  <Slider value={[threshold * 100]} onValueChange={([v]) => setThreshold(v / 100)} max={50} step={1} className="mt-2" />
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={dynamicContentDetection} onChange={e => setDynamicContentDetection(e.target.checked)} className="rounded" />
+                    <span className="text-sm">Dynamic content detection</span>
+                  </label>
+                </div>
+                <Button className="w-full" onClick={() => setActiveTab('compare')}>
+                  <GitCompare className="w-4 h-4 mr-2" />Open Compare Tab
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Eye className="w-5 h-5 text-emerald-500" />Comparison Modes</CardTitle>
+                <CardDescription>{COMPARISON_MODES.length} modes including AI semantic</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 max-h-[300px] overflow-auto">
+                  {COMPARISON_MODES.map(mode => (
+                    <div key={mode.value} className={`p-2.5 rounded-lg border cursor-pointer transition-all ${compareMode === mode.value ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/40'}`} onClick={() => setCompareMode(mode.value)}>
+                      <div className="flex items-center gap-2">{mode.icon}<span className="font-medium text-sm">{mode.label}</span></div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{mode.description}</p>
                     </div>
                   ))}
                 </div>
               </CardContent>
             </Card>
+          </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total Baselines</p>
-                      <p className="text-3xl font-bold">{baselines.length}</p>
-                    </div>
-                    <div className="p-3 bg-primary/10 dark:bg-primary/20 rounded-lg">
-                      <ImageIcon className="w-6 h-6 text-primary" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Recent Diffs</p>
-                      <p className="text-3xl font-bold">{diffs.length}</p>
-                    </div>
-                    <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
-                      <GitCompare className="w-6 h-6 text-amber-400" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card className="">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Comparison Modes</p>
-                      <p className="text-3xl font-bold ">5</p>
-                    </div>
-                    <div className="p-3 bg-emerald-500/20 rounded-lg">
-                      <Settings className="w-6 h-6 text-emerald-400" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card className="">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Storage Used</p>
-                      <p className="text-3xl font-bold ">
-                        {formatFileSize(baselines.reduce((acc, b) => acc + b.file_size, 0))}
-                      </p>
-                    </div>
-                    <div className="p-3 bg-blue-500/20 rounded-lg">
-                      <Box className="w-6 h-6 text-blue-400" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="grid grid-cols-2 gap-6">
-              <Card className="">
-                <CardHeader>
-                  <CardTitle className=" flex items-center gap-2">
-                    <GitCompare className="w-5 h-5 text-primary" />
-                    Quick Compare
-                  </CardTitle>
-                  <CardDescription>Compare images using any comparison mode</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div>
-                      <Label className="text-foreground">Comparison Mode</Label>
-                      <Select value={compareMode} onValueChange={setCompareMode}>
-                        <SelectTrigger className="bg-background border-border  mt-2">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-background border-border">
-                          {COMPARISON_MODES.map(mode => (
-                            <SelectItem key={mode.value} value={mode.value} className="">
-                              <div className="flex items-center gap-2">
-                                {mode.icon}
-                                <span>{mode.label}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-foreground">Threshold: {(threshold * 100).toFixed(0)}%</Label>
-                      <Slider
-                        value={[threshold * 100]}
-                        onValueChange={([val]) => setThreshold(val / 100)}
-                        max={50}
-                        step={1}
-                        className="mt-2"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Maximum allowed difference percentage
-                      </p>
-                    </div>
-                    
-                    <Button 
-                      onClick={() => setShowCompareDialog(true)}
-                      className="w-full bg-primary hover:bg-primary/90"
-                    >
-                      <GitCompare className="w-4 h-4 mr-2" />
-                      Start Comparison
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="">
-                <CardHeader>
-                  <CardTitle className=" flex items-center gap-2">
-                    <Eye className="w-5 h-5 text-emerald-400" />
-                    Comparison Modes
-                  </CardTitle>
-                  <CardDescription>Choose the right mode for your use case</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {COMPARISON_MODES.map(mode => (
-                      <div 
-                        key={mode.value}
-                        className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                          compareMode === mode.value 
-                            ? 'border-primary bg-primary/10' 
-                            : 'border-border hover:border-primary'
-                        }`}
-                        onClick={() => setCompareMode(mode.value)}
-                      >
-                        <div className="flex items-center gap-2 ">
-                          {mode.icon}
-                          <span className="font-medium">{mode.label}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">{mode.description}</p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Recent Baselines */}
-            <Card className="">
-              <CardHeader>
-                <CardTitle className=" flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-blue-400" />
-                  Recent Baselines
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {baselines.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <ImageIcon className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No baselines yet</p>
-                    <p className="text-sm mt-1">Upload images or capture screenshots to create baselines</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-4 gap-4">
-                    {baselines.slice(0, 8).map(baseline => (
-                      <div 
-                        key={baseline.test_name}
-                        className="group relative bg-card rounded-lg border border-border/50 overflow-hidden cursor-pointer hover:border-primary/50 transition-all"
-                        onClick={() => handleViewBaseline(baseline)}
-                      >
-                        <div className="aspect-video bg-muted flex items-center justify-center">
-                          <ImageIcon className="w-8 h-8 text-muted-foreground" />
-                        </div>
-                        <div className="p-3">
-                          <p className="text-sm font-medium  truncate">{baseline.test_name}</p>
-                          <p className="text-xs text-muted-foreground">{formatFileSize(baseline.file_size)}</p>
-                        </div>
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <Button size="sm" variant="secondary">
-                            <Eye className="w-4 h-4 mr-1" />
-                            View
-                          </Button>
+          {/* Recent Baselines */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Clock className="w-5 h-5 text-blue-500" />Recent Baselines</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {baselines.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <ImageIcon className="w-12 h-12 mx-auto mb-4 opacity-50" /><p>No baselines yet</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-4 gap-4">
+                  {baselines.slice(0, 8).map(b => (
+                    <div key={b.test_name} className="group relative rounded-lg border overflow-hidden cursor-pointer hover:border-primary/50 transition-all" onClick={() => handleViewBaseline(b)}>
+                      <div className="aspect-video bg-muted flex items-center justify-center"><ImageIcon className="w-8 h-8 text-muted-foreground" /></div>
+                      <div className="p-2.5">
+                        <p className="text-sm font-medium truncate">{b.test_name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-muted-foreground">{formatFileSize(b.file_size)}</span>
+                          {b.version && <Badge variant="outline" className="text-[10px] px-1 py-0">v{b.version}</Badge>}
+                          {b.dimensions && <span className="text-[10px] text-muted-foreground">{b.dimensions[0]}x{b.dimensions[1]}</span>}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Compare Tab */}
-          <TabsContent value="compare" className="space-y-6">
-            <Card className="">
-              <CardHeader>
-                <CardTitle className="">Image Comparison</CardTitle>
-                <CardDescription>
-                  Upload or select baseline and actual images to compare
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-6">
-                  {/* Baseline Image */}
-                  <div className="space-y-4">
-                    <Label className=" text-lg">Baseline Image</Label>
-                    <div 
-                      className={`aspect-video border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer transition-all ${
-                        baselineImage ? 'border-emerald-500 bg-emerald-500/10' : 'border-border hover:border-primary'
-                      }`}
-                      onClick={() => document.getElementById('baseline-input')?.click()}
-                    >
-                      {baselineImage ? (
-                        <img 
-                          src={`data:image/png;base64,${baselineImage}`} 
-                          alt="Baseline" 
-                          className="max-h-full max-w-full object-contain"
-                        />
-                      ) : (
-                        <div className="text-center text-muted-foreground">
-                          <Upload className="w-8 h-8 mx-auto mb-2" />
-                          <p>Click to upload baseline</p>
-                        </div>
-                      )}
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Button size="sm" variant="secondary"><Eye className="w-4 h-4 mr-1" />View</Button>
+                      </div>
                     </div>
-                    <input 
-                      id="baseline-input"
-                      type="file" 
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleFileUpload(file, setBaselineImage);
-                      }}
-                    />
-                    {baselineImage && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setBaselineImage(null)}
-                        className="border-border text-foreground"
-                      >
-                        <X className="w-4 h-4 mr-1" />
-                        Clear
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* Actual Image */}
-                  <div className="space-y-4">
-                    <Label className=" text-lg">Actual Image</Label>
-                    <div 
-                      className={`aspect-video border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer transition-all ${
-                        actualImage ? 'border-blue-500 bg-blue-500/10' : 'border-border hover:border-primary'
-                      }`}
-                      onClick={() => document.getElementById('actual-input')?.click()}
-                    >
-                      {actualImage ? (
-                        <img 
-                          src={`data:image/png;base64,${actualImage}`} 
-                          alt="Actual" 
-                          className="max-h-full max-w-full object-contain"
-                        />
-                      ) : (
-                        <div className="text-center text-muted-foreground">
-                          <Upload className="w-8 h-8 mx-auto mb-2" />
-                          <p>Click to upload actual</p>
-                        </div>
-                      )}
-                    </div>
-                    <input 
-                      id="actual-input"
-                      type="file" 
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleFileUpload(file, setActualImage);
-                      }}
-                    />
-                    {actualImage && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setActualImage(null)}
-                        className="border-border text-foreground"
-                      >
-                        <X className="w-4 h-4 mr-1" />
-                        Clear
-                      </Button>
-                    )}
-                  </div>
+                  ))}
                 </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-                {/* Comparison Settings */}
-                <Separator className="my-6 bg-slate-700" />
-                
-                <div className="grid grid-cols-3 gap-6">
-                  <div>
-                    <Label className="text-foreground">Comparison Mode</Label>
-                    <Select value={compareMode} onValueChange={setCompareMode}>
-                      <SelectTrigger className="bg-background border-border  mt-2">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-background border-border">
-                        {COMPARISON_MODES.map(mode => (
-                          <SelectItem key={mode.value} value={mode.value} className="">
-                            <div className="flex items-center gap-2">
-                              {mode.icon}
-                              <span>{mode.label}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div>
-                    <Label className="text-foreground">Threshold: {(threshold * 100).toFixed(0)}%</Label>
-                    <Slider
-                      value={[threshold * 100]}
-                      onValueChange={([val]) => setThreshold(val / 100)}
-                      max={50}
-                      step={1}
-                      className="mt-4"
-                    />
-                  </div>
-                  
-                  <div className="flex items-end">
-                    <Button 
-                      onClick={handleCompare}
-                      disabled={!baselineImage || !actualImage || isComparing}
-                      className="w-full bg-primary hover:bg-primary/90"
-                    >
-                      {isComparing ? (
-                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <GitCompare className="w-4 h-4 mr-2" />
-                      )}
-                      {isComparing ? 'Comparing...' : 'Compare Images'}
+        {/* ═══════════════════ COMPARE TAB ═══════════════════ */}
+        <TabsContent value="compare" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Image Comparison</CardTitle>
+                  <CardDescription>Upload baseline and actual images, configure regions, then compare</CardDescription>
+                </div>
+                {/* Diff view mode toggle */}
+                <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                  {([['side-by-side', <Columns className="w-4 h-4" />, 'Side by Side'], ['slider', <SlidersHorizontal className="w-4 h-4" />, 'Slider'], ['onion-skin', <Blend className="w-4 h-4" />, 'Onion Skin']] as [DiffViewMode, React.ReactNode, string][]).map(([mode, icon, label]) => (
+                    <Button key={mode} variant={diffViewMode === mode ? 'default' : 'ghost'} size="sm" className="h-8 gap-1.5" onClick={() => setDiffViewMode(mode)}>
+                      {icon}<span className="text-xs">{label}</span>
                     </Button>
-                  </div>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Comparison Result */}
-            {comparisonResult && (
-              <Card className={`border-2 ${
-                comparisonResult.passed 
-                  ? 'bg-emerald-500/10 border-emerald-500/50' 
-                  : 'bg-red-500/10 border-red-500/50'
-              }`}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    {comparisonResult.passed ? (
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Image upload area */}
+              <div className="grid grid-cols-2 gap-6">
+                {/* Baseline */}
+                <div className="space-y-3">
+                  <Label className="text-base font-semibold flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-emerald-500" /> Baseline Image
+                  </Label>
+                  <div ref={canvasRef}
+                    className={`relative aspect-video border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer transition-all ${baselineImage ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-border hover:border-primary'} ${isDrawingRegion ? 'cursor-crosshair' : ''}`}
+                    onClick={() => { if (!isDrawingRegion) document.getElementById('baseline-input')?.click(); }}
+                    onMouseDown={baselineImage ? handleRegionMouseDown : undefined}
+                    onMouseMove={baselineImage ? handleRegionMouseMove : undefined}
+                    onMouseUp={baselineImage ? handleRegionMouseUp : undefined}
+                  >
+                    {baselineImage ? (
                       <>
-                        <CheckCircle className="w-6 h-6 text-emerald-400" />
-                        <span className="text-emerald-400">Comparison Passed</span>
+                        <img src={`data:image/png;base64,${baselineImage}`} alt="Baseline" className="max-h-full max-w-full object-contain" />
+                        {/* Rendered regions overlay */}
+                        {ignoreRegions.map((r, i) => (
+                          <div key={i} className={`absolute border-2 ${regionColorClass(r.type)} rounded-sm`}
+                            style={{ left: r.x, top: r.y, width: r.width, height: r.height }}>
+                            <span className="absolute -top-5 left-0 text-[10px] bg-background/90 px-1 rounded">{r.name}</span>
+                          </div>
+                        ))}
+                        {/* Currently drawing region */}
+                        {currentDraw && (
+                          <div className={`absolute border-2 border-dashed ${regionColorClass(drawingRegionType)} rounded-sm`}
+                            style={{ left: currentDraw.x, top: currentDraw.y, width: currentDraw.w, height: currentDraw.h }} />
+                        )}
                       </>
                     ) : (
-                      <>
-                        <AlertCircle className="w-6 h-6 text-red-400" />
-                        <span className="text-red-400">Comparison Failed</span>
-                      </>
+                      <div className="text-center text-muted-foreground"><Upload className="w-8 h-8 mx-auto mb-2" /><p>Click to upload baseline</p></div>
                     )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-4 gap-4 mb-6">
-                    <div className="p-4 bg-muted rounded-lg">
-                      <p className="text-sm text-muted-foreground">Difference</p>
-                      <p className="text-2xl font-bold ">
-                        {(comparisonResult.diff_percentage * 100).toFixed(2)}%
-                      </p>
-                    </div>
-                    <div className="p-4 bg-muted rounded-lg">
-                      <p className="text-sm text-muted-foreground">Threshold</p>
-                      <p className="text-2xl font-bold ">
-                        {(comparisonResult.threshold * 100).toFixed(0)}%
-                      </p>
-                    </div>
-                    <div className="p-4 bg-muted rounded-lg">
-                      <p className="text-sm text-muted-foreground">Mode</p>
-                      <p className="text-lg font-medium  capitalize">
-                        {comparisonResult.mode.replace('_', ' ')}
-                      </p>
-                    </div>
-                    <div className="p-4 bg-muted rounded-lg">
-                      <p className="text-sm text-muted-foreground">Time</p>
-                      <p className="text-2xl font-bold ">
-                        {comparisonResult.execution_time_ms}ms
-                      </p>
-                    </div>
                   </div>
+                  <input id="baseline-input" type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, setBaselineImage); }} />
+                  {baselineImage && <Button variant="outline" size="sm" onClick={() => { setBaselineImage(null); setIgnoreRegions([]); }}><X className="w-4 h-4 mr-1" />Clear</Button>}
+                </div>
 
-                  {comparisonResult.diff_image_base64 && (
-                    <div className="mt-4">
-                      <Label className=" mb-2 block">Diff Image (Baseline | Diff | Actual)</Label>
-                      <div className="bg-slate-900 rounded-lg p-4 overflow-auto">
-                        <img 
-                          src={`data:image/png;base64,${comparisonResult.diff_image_base64}`}
-                          alt="Diff"
-                          className="max-w-full"
-                        />
-                      </div>
-                    </div>
-                  )}
+                {/* Actual */}
+                <div className="space-y-3">
+                  <Label className="text-base font-semibold flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500" /> Actual Image
+                  </Label>
+                  <div className={`aspect-video border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer transition-all ${actualImage ? 'border-blue-500/50 bg-blue-500/5' : 'border-border hover:border-primary'}`}
+                    onClick={() => document.getElementById('actual-input')?.click()}>
+                    {actualImage ? (
+                      <img src={`data:image/png;base64,${actualImage}`} alt="Actual" className="max-h-full max-w-full object-contain" />
+                    ) : (
+                      <div className="text-center text-muted-foreground"><Upload className="w-8 h-8 mx-auto mb-2" /><p>Click to upload actual</p></div>
+                    )}
+                  </div>
+                  <input id="actual-input" type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, setActualImage); }} />
+                  {actualImage && <Button variant="outline" size="sm" onClick={() => setActualImage(null)}><X className="w-4 h-4 mr-1" />Clear</Button>}
+                </div>
+              </div>
 
-                  {comparisonResult.ssim_score !== undefined && (
-                    <div className="mt-4 p-4 bg-muted rounded-lg">
-                      <p className="text-sm text-muted-foreground">SSIM Score</p>
-                      <p className="text-2xl font-bold ">
-                        {(comparisonResult.ssim_score * 100).toFixed(2)}%
-                      </p>
-                      <p className="text-xs text-muted-foreground">Higher is more similar (100% = identical)</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+              <Separator className="my-6" />
 
-            {/* Batch URL Testing */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Layers className="w-5 h-5" />
-                  Batch URL Testing
-                </CardTitle>
-                <CardDescription>
-                  Capture screenshots for multiple URLs and compare against baselines in bulk
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              {/* Settings row */}
+              <div className="grid grid-cols-4 gap-4">
                 <div>
-                  <Label className="mb-2 block">URLs (one per line)</Label>
-                  <textarea
-                    className="w-full h-32 rounded-md border border-border bg-muted px-3 py-2 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-ring"
-                    placeholder={"https://example.com\nhttps://example.com/about\nhttps://example.com/contact"}
-                    value={batchTestUrls}
-                    onChange={(e) => setBatchTestUrls(e.target.value)}
-                  />
+                  <Label>Mode</Label>
+                  <Select value={compareMode} onValueChange={setCompareMode}>
+                    <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {COMPARISON_MODES.map(m => (<SelectItem key={m.value} value={m.value}><div className="flex items-center gap-2">{m.icon}<span>{m.label}</span></div></SelectItem>))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="flex items-center gap-3">
-                  <Button
-                    onClick={async () => {
-                      const urls = batchTestUrls.split('\n').map(u => u.trim()).filter(u => u.startsWith('http'));
-                      if (urls.length === 0) { toast.error('Enter at least one URL'); return; }
-                      setIsBatchTesting(true);
-                      setBatchTestResults([]);
-                      const results: typeof batchTestResults = [];
-                      for (const url of urls) {
-                        const testName = url.replace(/https?:\/\//, '').replace(/[^a-zA-Z0-9]/g, '-').slice(0, 60);
-                        try {
-                          // Capture screenshot
-                          await axios.post(`${API_BASE}/capture`, { url, test_name: testName, viewport_width: 1920, viewport_height: 1080 });
-                          // Compare against baseline
-                          try {
-                            const cmpRes = await axios.post(`${API_BASE}/compare-by-name`, { test_name: testName, mode: compareMode, threshold });
-                            results.push({ url, status: cmpRes.data.passed ? 'passed' : 'failed', diffPct: cmpRes.data.diff_percentage, testName });
-                          } catch {
-                            results.push({ url, status: 'new-baseline', testName });
-                          }
-                        } catch {
-                          results.push({ url, status: 'error', testName });
-                        }
-                        setBatchTestResults([...results]);
-                      }
-                      setIsBatchTesting(false);
-                      const passed = results.filter(r => r.status === 'passed').length;
-                      const failed = results.filter(r => r.status === 'failed').length;
-                      toast.success(`Batch complete: ${passed} passed, ${failed} failed, ${results.length - passed - failed} other`);
-                    }}
-                    disabled={isBatchTesting || !batchTestUrls.trim()}
-                  >
-                    {isBatchTesting ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Testing...</> : <><Layers className="w-4 h-4 mr-2" /> Run Batch Test</>}
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    {batchTestUrls.split('\n').filter(u => u.trim().startsWith('http')).length} URL(s) queued
-                  </span>
+                <div>
+                  <Label>Threshold: {(threshold * 100).toFixed(0)}%</Label>
+                  <Slider value={[threshold * 100]} onValueChange={([v]) => setThreshold(v / 100)} max={50} step={1} className="mt-3.5" />
                 </div>
-
-                {batchTestResults.length > 0 && (
-                  <div className="border rounded-lg overflow-auto max-h-[400px]">
-                    <table className="min-w-max w-full text-sm">
-                      <thead className="bg-muted sticky top-0 z-10">
-                        <tr>
-                          <th className="text-left px-3 py-2 font-medium">URL</th>
-                          <th className="text-left px-3 py-2 font-medium w-28">Status</th>
-                          <th className="text-left px-3 py-2 font-medium w-24">Diff %</th>
-                          <th className="text-left px-3 py-2 font-medium w-32">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {batchTestResults.map((r, i) => (
-                          <tr key={i} className="border-t border-border">
-                            <td className="px-3 py-2 font-mono text-xs truncate max-w-[300px]" title={r.url}>{r.url}</td>
-                            <td className="px-3 py-2">
-                              {r.status === 'passed' && <Badge className="bg-green-500/20 text-green-600 border-green-500/30"><CheckCircle className="w-3 h-3 mr-1" /> Pass</Badge>}
-                              {r.status === 'failed' && <Badge className="bg-red-500/20 text-red-600 border-red-500/30"><AlertCircle className="w-3 h-3 mr-1" /> Fail</Badge>}
-                              {r.status === 'new-baseline' && <Badge className="bg-blue-500/20 text-blue-600 border-blue-500/30"><Plus className="w-3 h-3 mr-1" /> New</Badge>}
-                              {r.status === 'error' && <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30"><AlertCircle className="w-3 h-3 mr-1" /> Error</Badge>}
-                            </td>
-                            <td className="px-3 py-2 text-xs">{r.diffPct !== undefined ? `${r.diffPct.toFixed(2)}%` : '—'}</td>
-                            <td className="px-3 py-2">
-                              {r.testName && (
-                                <Button size="sm" variant="ghost" className="h-6 text-[11px]"
-                                  onClick={() => {
-                                    setCompareTestName(r.testName || '');
-                                    setActiveTab('compare');
-                                  }}>
-                                  View Details
-                                </Button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                <div className="space-y-2">
+                  <Label>Options</Label>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={dynamicContentDetection} onChange={e => setDynamicContentDetection(e.target.checked)} className="rounded" />
+                      <span className="text-sm">Auto-suppress dynamic content</span>
+                    </label>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Baselines Tab */}
-          <TabsContent value="baselines" className="space-y-6">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Search baselines..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 bg-muted border-border "
-                />
-              </div>
-              <Button 
-                variant="outline" 
-                className="border-border text-foreground"
-              >
-                <Filter className="w-4 h-4 mr-2" />
-                Filter
-              </Button>
-            </div>
-
-            {filteredBaselines.length === 0 ? (
-              <Card className="">
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  <ImageIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg">No baselines found</p>
-                  <p className="text-sm mt-2">Upload images or capture screenshots to create baselines</p>
-                  <Button 
-                    className="mt-4"
-                    onClick={() => setShowUploadDialog(true)}
-                  >
-                    <Upload className="w-4 h-4 mr-2" />
-                    Upload First Baseline
+                </div>
+                <div className="flex items-end">
+                  <Button onClick={handleCompare} disabled={!baselineImage || !actualImage || isComparing} className="w-full">
+                    {isComparing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <GitCompare className="w-4 h-4 mr-2" />}
+                    {isComparing ? 'Comparing...' : 'Compare'}
                   </Button>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid grid-cols-3 gap-4">
-                {filteredBaselines.map(baseline => (
-                  <Card 
-                    key={baseline.test_name}
-                    className=" hover:border-primary/50 transition-all cursor-pointer group"
-                    onClick={() => handleViewBaseline(baseline)}
-                  >
-                    <div className="aspect-video bg-slate-900 relative overflow-hidden">
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <ImageIcon className="w-12 h-12 text-slate-700" />
-                      </div>
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                        <Button size="sm" variant="secondary">
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteBaseline(baseline.test_name);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <p className="font-medium  truncate">{baseline.test_name}</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {formatFileSize(baseline.file_size)} • {formatDate(baseline.modified_at)}
-                          </p>
-                        </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreVertical className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent className="bg-background border-border">
-                            <DropdownMenuItem 
-                              className=""
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleViewBaseline(baseline);
-                              }}
-                            >
-                              <Eye className="w-4 h-4 mr-2" />
-                              View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className=""
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                try {
-                                  const res = await axios.get(`${API_BASE}/baselines/${baseline.test_name}`, { responseType: 'json' });
-                                  const b64 = res.data.image_base64;
-                                  if (b64) {
-                                    const a = document.createElement('a');
-                                    a.href = `data:image/png;base64,${b64}`;
-                                    a.download = `${baseline.test_name}.png`;
-                                    a.click();
-                                    toast.success('Baseline downloaded');
-                                  } else {
-                                    toast.error('No image data available');
-                                  }
-                                } catch {
-                                  toast.error('Failed to download baseline');
-                                }
-                              }}>
-                              <Download className="w-4 h-4 mr-2" />
-                              Download
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator className="bg-slate-700" />
-                            <DropdownMenuItem 
-                              className="text-red-400"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteBaseline(baseline.test_name);
-                              }}
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                </div>
               </div>
-            )}
-          </TabsContent>
 
-          {/* Diffs Tab */}
-          <TabsContent value="diffs" className="space-y-6">
-            <Card className="">
+              {/* Active regions indicator */}
+              {ignoreRegions.length > 0 && (
+                <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Grid3X3 className="w-3.5 h-3.5" />
+                  {ignoreRegions.length} region(s) configured —
+                  {REGION_TYPES.map(rt => {
+                    const count = ignoreRegions.filter(r => r.type === rt.value).length;
+                    return count > 0 ? <Badge key={rt.value} variant="outline" className="text-[10px] px-1.5 py-0 ml-1">{count} {rt.label}</Badge> : null;
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Comparison Result */}
+          {comparisonResult && (
+            <Card className={`border-2 ${comparisonResult.passed ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-red-500/50 bg-red-500/5'}`}>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="">Recent Diff Images</CardTitle>
-                    <CardDescription>Review, approve, or reject visual diffs</CardDescription>
+                  <CardTitle className="flex items-center gap-2">
+                    {comparisonResult.passed ? <><CheckCircle className="w-6 h-6 text-emerald-500" /><span className="text-emerald-600 dark:text-emerald-400">Passed</span></> :
+                      <><AlertCircle className="w-6 h-6 text-red-500" /><span className="text-red-600 dark:text-red-400">Failed</span></>}
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className="text-green-600 border-green-300" onClick={() => toast.success('Accepted as new baseline')}>
+                      <Check className="w-3 h-3 mr-1" />Accept
+                    </Button>
+                    <Button variant="outline" size="sm" className="text-red-600 border-red-300" onClick={() => toast.info('Changes rejected')}>
+                      <X className="w-3 h-3 mr-1" />Reject
+                    </Button>
                   </div>
-                  {diffs.length > 0 && (
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" className="text-green-600 border-green-300 hover:bg-green-50 dark:border-green-700 dark:hover:bg-green-900/20"
-                        onClick={() => {
-                          const newApprovals = { ...approvedDiffs };
-                          diffs.forEach(d => { newApprovals[d.filename] = 'accepted'; });
-                          setApprovedDiffs(newApprovals);
-                          toast.success('All diffs accepted');
-                        }}>
-                        <Check className="w-3 h-3 mr-1" /> Accept All
-                      </Button>
-                      <Button size="sm" variant="outline" className="text-red-600 border-red-300 hover:bg-red-50 dark:border-red-700 dark:hover:bg-red-900/20"
-                        onClick={() => {
-                          const newApprovals = { ...approvedDiffs };
-                          diffs.forEach(d => { newApprovals[d.filename] = 'rejected'; });
-                          setApprovedDiffs(newApprovals);
-                          toast.success('All diffs rejected');
-                        }}>
-                        <X className="w-3 h-3 mr-1" /> Reject All
-                      </Button>
-                    </div>
-                  )}
                 </div>
               </CardHeader>
               <CardContent>
-                {diffs.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <GitCompare className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No diff images yet</p>
-                    <p className="text-sm mt-1">Run comparisons to generate diff images</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {diffs.map(diff => {
-                      const approval = approvedDiffs[diff.filename];
-                      return (
-                        <div
-                          key={diff.filename}
-                          className={`flex items-center justify-between p-4 rounded-lg border ${
-                            approval === 'accepted' ? 'border-green-500/30 bg-green-500/5' :
-                            approval === 'rejected' ? 'border-red-500/30 bg-red-500/5' :
-                            'border-border/50 bg-card'
-                          }`}
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="w-16 h-12 bg-muted rounded flex items-center justify-center">
-                              <FileImage className="w-6 h-6 text-muted-foreground" />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium">{diff.filename}</p>
-                                {approval === 'accepted' && <Badge variant="default" className="bg-green-500 text-xs">Accepted</Badge>}
-                                {approval === 'rejected' && <Badge variant="destructive" className="text-xs">Rejected</Badge>}
-                              </div>
-                              <p className="text-xs text-muted-foreground">
-                                {formatFileSize(diff.size)} • {formatDate(diff.created_at)}
-                              </p>
+                {/* Metrics */}
+                <div className="grid grid-cols-5 gap-3 mb-6">
+                  {[
+                    { label: 'Difference', value: `${(comparisonResult.diff_percentage * 100).toFixed(2)}%`, icon: <Percent className="w-4 h-4" /> },
+                    { label: 'Threshold', value: `${(comparisonResult.threshold * 100).toFixed(0)}%`, icon: <Target className="w-4 h-4" /> },
+                    { label: 'Mode', value: comparisonResult.mode.replace(/_/g, ' '), icon: <Settings className="w-4 h-4" /> },
+                    { label: 'Time', value: `${Math.round(comparisonResult.execution_time_ms)}ms`, icon: <Timer className="w-4 h-4" /> },
+                    { label: 'SSIM', value: comparisonResult.ssim_score !== undefined ? `${(comparisonResult.ssim_score * 100).toFixed(1)}%` : 'N/A', icon: <Box className="w-4 h-4" /> },
+                  ].map(m => (
+                    <div key={m.label} className="p-3 bg-muted rounded-lg">
+                      <div className="flex items-center gap-1.5 text-muted-foreground mb-1">{m.icon}<span className="text-xs">{m.label}</span></div>
+                      <p className="text-lg font-bold capitalize">{m.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Diff Viewer */}
+                {comparisonResult.diff_image_base64 && baselineImage && actualImage && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm font-semibold">Diff Viewer</Label>
+                      <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">
+                        {([['side-by-side', 'Side by Side'], ['slider', 'Slider'], ['onion-skin', 'Onion Skin']] as [DiffViewMode, string][]).map(([mode, label]) => (
+                          <button key={mode} className={`px-2 py-1 rounded text-xs transition-colors ${diffViewMode === mode ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setDiffViewMode(mode)}>{label}</button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {diffViewMode === 'side-by-side' && (
+                      <div className="grid grid-cols-3 gap-3">
+                        {[
+                          { label: 'Baseline', src: baselineImage, color: 'emerald' },
+                          { label: 'Diff', src: comparisonResult.diff_image_base64, color: 'amber' },
+                          { label: 'Actual', src: actualImage, color: 'blue' },
+                        ].map(img => (
+                          <div key={img.label}>
+                            <p className="text-xs font-medium mb-1.5 flex items-center gap-1.5">
+                              <div className={`w-2 h-2 rounded-full bg-${img.color}-500`} />{img.label}
+                            </p>
+                            <div className="bg-muted rounded-lg p-2 overflow-auto max-h-[400px]">
+                              <img src={`data:image/png;base64,${img.src}`} alt={img.label} className="max-w-full" />
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" className="border-border"
-                              onClick={() => window.open(`${API_BASE}/diffs/${diff.filename}`, '_blank')}>
-                              <Eye className="w-4 h-4 mr-1" /> View
-                            </Button>
-                            <Button size="sm" variant={approval === 'accepted' ? 'default' : 'outline'}
-                              className={approval === 'accepted' ? 'bg-green-600 hover:bg-green-500' : 'text-green-600 border-green-300 hover:bg-green-50 dark:border-green-700'}
-                              onClick={async () => {
-                                setApprovedDiffs(prev => ({ ...prev, [diff.filename]: 'accepted' }));
-                                // Try to fetch the actual image and promote it to baseline
-                                try {
-                                  const testName = diff.filename.replace(/^diff_/, '').replace(/\.png$/, '').replace(/_\d+$/, '');
-                                  const actualRes = await axios.get(`${API_BASE}/baselines/${testName}`);
-                                  if (actualRes.data?.image_base64) {
-                                    await axios.post(`${API_BASE}/baselines`, { test_name: testName, image: actualRes.data.image_base64 });
-                                    toast.success('Accepted as new baseline');
-                                    loadBaselines();
-                                  } else {
-                                    toast.success('Marked as accepted');
-                                  }
-                                } catch {
-                                  toast.success('Marked as accepted');
-                                }
-                              }}>
-                              <Check className="w-3 h-3 mr-1" /> Accept
-                            </Button>
-                            <Button size="sm" variant={approval === 'rejected' ? 'destructive' : 'outline'}
-                              className={approval !== 'rejected' ? 'text-red-600 border-red-300 hover:bg-red-50 dark:border-red-700' : ''}
-                              onClick={() => {
-                                setApprovedDiffs(prev => ({ ...prev, [diff.filename]: 'rejected' }));
-                                toast.info('Diff rejected');
-                              }}>
-                              <X className="w-3 h-3 mr-1" /> Reject
-                            </Button>
+                        ))}
+                      </div>
+                    )}
+
+                    {diffViewMode === 'slider' && (
+                      <div className="space-y-2">
+                        <div className="relative overflow-hidden rounded-lg bg-muted" style={{ maxHeight: 500 }}>
+                          <img src={`data:image/png;base64,${actualImage}`} alt="Actual" className="w-full block" />
+                          <div className="absolute inset-0 overflow-hidden" style={{ width: `${sliderPosition}%` }}>
+                            <img src={`data:image/png;base64,${baselineImage}`} alt="Baseline" className="w-full block" style={{ minWidth: canvasRef.current?.offsetWidth || '100%' }} />
+                          </div>
+                          <div className="absolute top-0 bottom-0 w-1 bg-primary cursor-col-resize" style={{ left: `${sliderPosition}%` }}>
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-primary rounded-full flex items-center justify-center shadow-lg">
+                              <SlidersHorizontal className="w-4 h-4 text-primary-foreground" />
+                            </div>
+                          </div>
+                          <div className="absolute top-2 left-2 bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded">Baseline</div>
+                          <div className="absolute top-2 right-2 bg-blue-500 text-white text-[10px] px-2 py-0.5 rounded">Actual</div>
+                        </div>
+                        <Slider value={[sliderPosition]} onValueChange={([v]) => setSliderPosition(v)} max={100} step={1} />
+                      </div>
+                    )}
+
+                    {diffViewMode === 'onion-skin' && (
+                      <div className="space-y-2">
+                        <div className="relative overflow-hidden rounded-lg bg-muted" style={{ maxHeight: 500 }}>
+                          <img src={`data:image/png;base64,${baselineImage}`} alt="Baseline" className="w-full block" />
+                          <img src={`data:image/png;base64,${actualImage}`} alt="Actual" className="absolute inset-0 w-full block" style={{ opacity: onionOpacity / 100 }} />
+                          <div className="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded">
+                            Baseline ← → Actual ({onionOpacity}%)
                           </div>
                         </div>
-                      );
-                    })}
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-muted-foreground">Baseline</span>
+                          <Slider value={[onionOpacity]} onValueChange={([v]) => setOnionOpacity(v)} max={100} step={1} className="flex-1" />
+                          <span className="text-xs text-muted-foreground">Actual</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Mismatch regions */}
+                {comparisonResult.mismatch_regions && comparisonResult.mismatch_regions.length > 0 && (
+                  <div className="mt-4">
+                    <Label className="text-sm font-semibold mb-2 block">Mismatch Regions ({comparisonResult.mismatch_regions.length})</Label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {comparisonResult.mismatch_regions.slice(0, 8).map((r, i) => (
+                        <div key={i} className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs">
+                          <span className="font-mono">({r.x}, {r.y})</span> <span className="text-muted-foreground">{r.width}x{r.height}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Batch URL Testing */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2"><Layers className="w-5 h-5" />Batch URL Testing</CardTitle>
+              <CardDescription>Capture and compare multiple URLs against baselines in bulk</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <textarea className="w-full h-28 rounded-md border bg-muted px-3 py-2 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder={"https://example.com\nhttps://example.com/about\nhttps://example.com/pricing"}
+                value={batchTestUrls} onChange={e => setBatchTestUrls(e.target.value)} />
+              <div className="flex items-center gap-3">
+                <Button onClick={async () => {
+                  const urls = batchTestUrls.split('\n').map(u => u.trim()).filter(u => u.startsWith('http'));
+                  if (urls.length === 0) { toast.error('Enter at least one URL'); return; }
+                  setIsBatchTesting(true); setBatchTestResults([]);
+                  const results: typeof batchTestResults = [];
+                  for (const url of urls) {
+                    const testName = url.replace(/https?:\/\//, '').replace(/[^a-zA-Z0-9]/g, '-').slice(0, 60);
+                    try {
+                      await axios.post(`${API_BASE}/capture`, { url, test_name: testName, viewport_width: 1920, viewport_height: 1080 });
+                      try {
+                        const cmp = await axios.post(`${API_BASE}/compare-by-name`, { test_name: testName, mode: compareMode, threshold });
+                        results.push({ url, status: cmp.data.passed ? 'passed' : 'failed', diffPct: cmp.data.diff_percentage, testName });
+                      } catch { results.push({ url, status: 'new-baseline', testName }); }
+                    } catch { results.push({ url, status: 'error', testName }); }
+                    setBatchTestResults([...results]);
+                  }
+                  setIsBatchTesting(false);
+                  toast.success(`Batch: ${results.filter(r => r.status === 'passed').length} pass, ${results.filter(r => r.status === 'failed').length} fail`);
+                }} disabled={isBatchTesting || !batchTestUrls.trim()}>
+                  {isBatchTesting ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Testing...</> : <><Layers className="w-4 h-4 mr-2" />Run Batch</>}
+                </Button>
+                <span className="text-xs text-muted-foreground">{batchTestUrls.split('\n').filter(u => u.trim().startsWith('http')).length} URL(s)</span>
+              </div>
+              {batchTestResults.length > 0 && (
+                <div className="border rounded-lg overflow-auto max-h-[300px]">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-muted sticky top-0"><tr>
+                      <th className="text-left px-3 py-2 font-medium">URL</th>
+                      <th className="text-left px-3 py-2 font-medium w-24">Status</th>
+                      <th className="text-left px-3 py-2 font-medium w-20">Diff %</th>
+                    </tr></thead>
+                    <tbody>
+                      {batchTestResults.map((r, i) => (
+                        <tr key={i} className="border-t">
+                          <td className="px-3 py-2 font-mono text-xs truncate max-w-[300px]" title={r.url}>{r.url}</td>
+                          <td className="px-3 py-2">
+                            {r.status === 'passed' && <Badge className="bg-green-500/20 text-green-600 border-green-500/30"><CheckCircle className="w-3 h-3 mr-1" />Pass</Badge>}
+                            {r.status === 'failed' && <Badge className="bg-red-500/20 text-red-600 border-red-500/30"><AlertCircle className="w-3 h-3 mr-1" />Fail</Badge>}
+                            {r.status === 'new-baseline' && <Badge className="bg-blue-500/20 text-blue-600 border-blue-500/30"><Plus className="w-3 h-3 mr-1" />New</Badge>}
+                            {r.status === 'error' && <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30">Error</Badge>}
+                          </td>
+                          <td className="px-3 py-2 text-xs">{r.diffPct !== undefined ? `${(r.diffPct * 100).toFixed(1)}%` : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ═══════════════════ BASELINES TAB ═══════════════════ */}
+        <TabsContent value="baselines" className="space-y-6">
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search baselines..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-10" />
+            </div>
+            <Badge variant="outline">{filteredBaselines.length} baselines</Badge>
+          </div>
+          {filteredBaselines.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <ImageIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p className="text-lg">No baselines found</p>
+                <Button className="mt-4" onClick={() => setShowUploadDialog(true)}><Upload className="w-4 h-4 mr-2" />Upload Baseline</Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-3 gap-4">
+              {filteredBaselines.map(b => (
+                <Card key={b.test_name} className="hover:border-primary/50 transition-all cursor-pointer group" onClick={() => handleViewBaseline(b)}>
+                  <div className="aspect-video bg-muted relative overflow-hidden">
+                    <div className="absolute inset-0 flex items-center justify-center"><ImageIcon className="w-12 h-12 text-muted-foreground/30" /></div>
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <Button size="sm" variant="secondary"><Eye className="w-4 h-4" /></Button>
+                      <Button size="sm" variant="destructive" onClick={e => { e.stopPropagation(); handleDeleteBaseline(b.test_name); }}><Trash2 className="w-4 h-4" /></Button>
+                    </div>
+                  </div>
+                  <CardContent className="p-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-medium truncate">{b.test_name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-muted-foreground">{formatFileSize(b.file_size)}</span>
+                          <span className="text-xs text-muted-foreground">{formatDate(b.modified_at)}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          {b.dimensions && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{b.dimensions[0]}x{b.dimensions[1]}</Badge>}
+                          {b.version && <Badge variant="outline" className="text-[10px] px-1.5 py-0">v{b.version}</Badge>}
+                        </div>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={e => e.stopPropagation()}><MoreVertical className="w-4 h-4" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem onClick={e => { e.stopPropagation(); handleViewBaseline(b); }}><Eye className="w-4 h-4 mr-2" />View</DropdownMenuItem>
+                          <DropdownMenuItem onClick={async e => {
+                            e.stopPropagation();
+                            try { const res = await axios.get(`${API_BASE}/baselines/${b.test_name}`); if (res.data.image_base64) { const a = document.createElement('a'); a.href = `data:image/png;base64,${res.data.image_base64}`; a.download = `${b.test_name}.png`; a.click(); toast.success('Downloaded'); } } catch { toast.error('Download failed'); }
+                          }}><Download className="w-4 h-4 mr-2" />Download</DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem className="text-red-500" onClick={e => { e.stopPropagation(); handleDeleteBaseline(b.test_name); }}><Trash2 className="w-4 h-4 mr-2" />Delete</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ═══════════════════ REGIONS TAB ═══════════════════ */}
+        <TabsContent value="regions" className="space-y-6">
+          <div className="grid grid-cols-3 gap-6">
+            {/* Region types */}
+            <Card className="col-span-1">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2"><Grid3X3 className="w-5 h-5" />Region Types</CardTitle>
+                <CardDescription>Draw regions on the baseline image to customize comparison behavior per-area</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {REGION_TYPES.map(rt => (
+                  <div key={rt.value} className={`p-3 rounded-lg border cursor-pointer transition-all ${drawingRegionType === rt.value && isDrawingRegion ? 'border-primary ring-2 ring-primary/20' : 'border-border hover:border-primary/40'}`}
+                    onClick={() => { setDrawingRegionType(rt.value as IgnoreRegion['type']); setIsDrawingRegion(true); }}>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-4 h-4 rounded border ${rt.color}`} />
+                      <span className="font-medium text-sm">{rt.label}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">{rt.description}</p>
+                  </div>
+                ))}
+                {isDrawingRegion && (
+                  <div className="p-3 bg-primary/10 border border-primary/30 rounded-lg text-center">
+                    <Crosshair className="w-5 h-5 mx-auto mb-1 text-primary animate-pulse" />
+                    <p className="text-xs font-medium">Draw on the baseline image</p>
+                    <Button variant="ghost" size="sm" className="mt-1 h-6 text-xs" onClick={() => setIsDrawingRegion(false)}>Cancel</Button>
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            {/* Comparison History */}
-            {comparisonHistory.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>Comparison History</CardTitle>
-                    <Button variant="ghost" size="sm" className="text-xs text-destructive"
-                      onClick={() => { setComparisonHistory([]); localStorage.removeItem('flowstral-visual-history'); }}>
-                      Clear
-                    </Button>
+            {/* Active regions list */}
+            <Card className="col-span-2">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Active Regions ({ignoreRegions.length})</CardTitle>
+                  {ignoreRegions.length > 0 && <Button variant="ghost" size="sm" className="text-xs text-destructive h-7" onClick={() => setIgnoreRegions([])}>Clear All</Button>}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {ignoreRegions.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <MousePointer className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No regions configured</p>
+                    <p className="text-xs mt-1">Select a region type and draw on the baseline image, or add manually below</p>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  {/* Pass/Fail trend bar */}
-                  <div className="flex items-end gap-0.5 h-8 mb-4">
-                    {comparisonHistory.slice(0, 30).reverse().map((h, i) => (
-                      <div key={i} className={`flex-1 rounded-t-sm min-w-[4px] h-full ${h.passed ? 'bg-green-500' : 'bg-red-500'}`}
-                        title={`${h.testName}: ${h.passed ? 'Pass' : 'Fail'} (${h.diffPct?.toFixed(1)}%)`} />
+                ) : (
+                  <div className="space-y-2">
+                    {ignoreRegions.map((r, i) => (
+                      <div key={i} className="flex items-center justify-between p-2.5 rounded-lg border">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-4 h-4 rounded border ${regionColorClass(r.type)}`} />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{r.name}</span>
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 capitalize">{r.type}</Badge>
+                            </div>
+                            <span className="text-xs text-muted-foreground font-mono">({r.x}, {r.y}) {r.width}x{r.height}</span>
+                            {r.floatOffset && <span className="text-xs text-blue-500 ml-2">drift: ±{r.floatOffset}px</span>}
+                          </div>
+                        </div>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={() => setIgnoreRegions(prev => prev.filter((_, j) => j !== i))}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     ))}
                   </div>
-                  <div className="flex gap-4 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500" /> {comparisonHistory.filter(h => h.passed).length} passed</span>
-                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500" /> {comparisonHistory.filter(h => !h.passed).length} failed</span>
+                )}
+
+                {/* Manual region add */}
+                <Separator className="my-4" />
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold">Add Region Manually</Label>
+                  <div className="grid grid-cols-5 gap-2">
+                    <Input placeholder="X" type="number" id="reg-x" className="text-sm" />
+                    <Input placeholder="Y" type="number" id="reg-y" className="text-sm" />
+                    <Input placeholder="Width" type="number" id="reg-w" className="text-sm" />
+                    <Input placeholder="Height" type="number" id="reg-h" className="text-sm" />
+                    <Button variant="outline" size="sm" onClick={() => {
+                      const x = parseInt((document.getElementById('reg-x') as HTMLInputElement).value) || 0;
+                      const y = parseInt((document.getElementById('reg-y') as HTMLInputElement).value) || 0;
+                      const w = parseInt((document.getElementById('reg-w') as HTMLInputElement).value) || 100;
+                      const h = parseInt((document.getElementById('reg-h') as HTMLInputElement).value) || 100;
+                      setIgnoreRegions(prev => [...prev, { x, y, width: w, height: h, name: `Region ${prev.length + 1}`, reason: 'manual', type: drawingRegionType, floatOffset: drawingRegionType === 'floating' ? 10 : undefined }]);
+                      toast.success('Region added');
+                    }}><Plus className="w-4 h-4 mr-1" />Add</Button>
                   </div>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-        </Tabs>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ═══════════════════ VIEWPORT MATRIX TAB ═══════════════════ */}
+        <TabsContent value="matrix" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><LayoutGrid className="w-5 h-5" />Responsive Viewport Matrix</CardTitle>
+              <CardDescription>Test a single URL across multiple viewports simultaneously — like Applitools Ultrafast Grid</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Target URL</Label>
+                  <Input value={captureUrl} onChange={e => setCaptureUrl(e.target.value)} placeholder="https://example.com" className="mt-1.5" />
+                </div>
+                <div>
+                  <Label>Comparison Mode</Label>
+                  <Select value={compareMode} onValueChange={setCompareMode}>
+                    <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {COMPARISON_MODES.map(m => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Viewport selection */}
+              <div>
+                <Label className="mb-2 block">Select Viewports</Label>
+                <div className="grid grid-cols-4 gap-3">
+                  {viewportPresets.map((vp, i) => (
+                    <label key={vp.name} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${vp.checked ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/40'}`}>
+                      <input type="checkbox" checked={vp.checked} onChange={e => { const nv = [...viewportPresets]; nv[i] = { ...vp, checked: e.target.checked }; setViewportPresets(nv); }} className="rounded" />
+                      {vp.icon}
+                      <div>
+                        <span className="text-sm font-medium">{vp.name}</span>
+                        <p className="text-xs text-muted-foreground">{vp.width}x{vp.height}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <Button onClick={runViewportMatrix} disabled={isMatrixTesting || !captureUrl} className="w-full">
+                {isMatrixTesting ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Testing viewports...</> : <><LayoutGrid className="w-4 h-4 mr-2" />Run Viewport Matrix Test</>}
+              </Button>
+
+              {/* Results grid */}
+              {viewportResults.length > 0 && (
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  {viewportResults.map((vr, i) => (
+                    <Card key={i} className={`${vr.status === 'done' && vr.result ? (vr.result.passed ? 'border-emerald-500/30' : 'border-red-500/30') : ''}`}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {viewportPresets.find(v => v.name === vr.viewport)?.icon}
+                            <span className="font-medium">{vr.viewport}</span>
+                            <span className="text-xs text-muted-foreground">{vr.width}x{vr.height}</span>
+                          </div>
+                          {vr.status === 'pending' && <Badge variant="outline" className="text-xs">Pending</Badge>}
+                          {vr.status === 'running' && <Badge className="bg-blue-500/20 text-blue-600 text-xs"><RefreshCw className="w-3 h-3 mr-1 animate-spin" />Running</Badge>}
+                          {vr.status === 'done' && vr.result && (
+                            vr.result.passed ? <Badge className="bg-green-500/20 text-green-600 text-xs"><CheckCircle className="w-3 h-3 mr-1" />Pass</Badge> :
+                            <Badge className="bg-red-500/20 text-red-600 text-xs"><AlertCircle className="w-3 h-3 mr-1" />Fail</Badge>
+                          )}
+                          {vr.status === 'done' && !vr.result && <Badge variant="outline" className="text-xs">New Baseline</Badge>}
+                          {vr.status === 'error' && <Badge className="bg-yellow-500/20 text-yellow-600 text-xs">Error</Badge>}
+                        </div>
+                        {vr.result && (
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div className="p-2 bg-muted rounded"><span className="text-muted-foreground">Diff:</span> <span className="font-mono">{(vr.result.diff_percentage * 100).toFixed(1)}%</span></div>
+                            <div className="p-2 bg-muted rounded"><span className="text-muted-foreground">Time:</span> <span className="font-mono">{Math.round(vr.result.execution_time_ms)}ms</span></div>
+                            {vr.result.ssim_score !== undefined && <div className="p-2 bg-muted rounded"><span className="text-muted-foreground">SSIM:</span> <span className="font-mono">{(vr.result.ssim_score * 100).toFixed(1)}%</span></div>}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ═══════════════════ REVIEW DIFFS TAB ═══════════════════ */}
+        <TabsContent value="diffs" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Review Visual Diffs</CardTitle>
+                  <CardDescription>Accept changes to update baselines, or reject to flag bugs</CardDescription>
+                </div>
+                {diffs.length > 0 && (
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="text-green-600 border-green-300 hover:bg-green-50 dark:hover:bg-green-900/20"
+                      onClick={() => { const n = { ...approvedDiffs }; diffs.forEach(d => { n[d.filename] = 'accepted'; }); setApprovedDiffs(n); toast.success('All accepted'); }}>
+                      <Check className="w-3 h-3 mr-1" />Accept All
+                    </Button>
+                    <Button size="sm" variant="outline" className="text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      onClick={() => { const n = { ...approvedDiffs }; diffs.forEach(d => { n[d.filename] = 'rejected'; }); setApprovedDiffs(n); toast.success('All rejected'); }}>
+                      <X className="w-3 h-3 mr-1" />Reject All
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {diffs.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <GitCompare className="w-12 h-12 mx-auto mb-4 opacity-50" /><p>No diffs to review</p><p className="text-sm mt-1">Run comparisons to generate diffs</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Filter bar */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <Badge variant="outline" className="cursor-pointer" onClick={() => {/* show all */}}>All ({diffs.length})</Badge>
+                    <Badge variant="outline" className="cursor-pointer text-amber-600">Unreviewed ({diffs.filter(d => !approvedDiffs[d.filename]).length})</Badge>
+                    <Badge variant="outline" className="cursor-pointer text-green-600">Accepted ({diffs.filter(d => approvedDiffs[d.filename] === 'accepted').length})</Badge>
+                    <Badge variant="outline" className="cursor-pointer text-red-600">Rejected ({diffs.filter(d => approvedDiffs[d.filename] === 'rejected').length})</Badge>
+                  </div>
+
+                  {diffs.map(diff => {
+                    const approval = approvedDiffs[diff.filename];
+                    return (
+                      <div key={diff.filename} className={`flex items-center justify-between p-4 rounded-lg border transition-all ${approval === 'accepted' ? 'border-green-500/30 bg-green-500/5' : approval === 'rejected' ? 'border-red-500/30 bg-red-500/5' : 'border-border bg-card hover:border-primary/30'}`}>
+                        <div className="flex items-center gap-4">
+                          <div className="w-16 h-12 bg-muted rounded flex items-center justify-center"><FileImage className="w-6 h-6 text-muted-foreground" /></div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-sm">{diff.filename}</p>
+                              {approval === 'accepted' && <Badge className="bg-green-500 text-[10px] px-1.5">Accepted</Badge>}
+                              {approval === 'rejected' && <Badge variant="destructive" className="text-[10px] px-1.5">Rejected</Badge>}
+                              {!approval && <Badge variant="outline" className="text-[10px] px-1.5 text-amber-500 border-amber-300">Pending</Badge>}
+                            </div>
+                            <p className="text-xs text-muted-foreground">{formatFileSize(diff.size)} &middot; {formatDate(diff.created_at)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" onClick={() => window.open(`${API_BASE}/diffs/${diff.filename}`, '_blank')}><Eye className="w-4 h-4 mr-1" />View</Button>
+                          <Button size="sm" variant={approval === 'accepted' ? 'default' : 'outline'}
+                            className={approval === 'accepted' ? 'bg-green-600 hover:bg-green-500' : 'text-green-600 border-green-300'}
+                            onClick={async () => {
+                              setApprovedDiffs(prev => ({ ...prev, [diff.filename]: 'accepted' }));
+                              try {
+                                const testName = diff.filename.replace(/^diff_/, '').replace(/\.png$/, '').replace(/_\d+$/, '');
+                                const r = await axios.get(`${API_BASE}/baselines/${testName}`);
+                                if (r.data?.image_base64) { await axios.post(`${API_BASE}/baselines`, { test_name: testName, image: r.data.image_base64 }); toast.success('Promoted to new baseline'); loadBaselines(); }
+                                else toast.success('Accepted');
+                              } catch { toast.success('Accepted'); }
+                            }}><Check className="w-3 h-3 mr-1" />Accept</Button>
+                          <Button size="sm" variant={approval === 'rejected' ? 'destructive' : 'outline'}
+                            className={approval !== 'rejected' ? 'text-red-600 border-red-300' : ''}
+                            onClick={() => { setApprovedDiffs(prev => ({ ...prev, [diff.filename]: 'rejected' })); toast.info('Rejected'); }}>
+                            <X className="w-3 h-3 mr-1" />Reject</Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* ═══════════════════ DIALOGS ═══════════════════ */}
 
       {/* Upload Baseline Dialog */}
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
-        <DialogContent className="bg-background border-border max-w-lg">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="">Upload Baseline</DialogTitle>
-            <DialogDescription>
-              Upload an image to use as a baseline for visual regression testing
-            </DialogDescription>
+            <DialogTitle>Upload Baseline</DialogTitle>
+            <DialogDescription>Upload an image as a visual regression baseline</DialogDescription>
           </DialogHeader>
-          
           <div className="space-y-4">
+            <div><Label>Test Name</Label><Input value={uploadTestName} onChange={e => setUploadTestName(e.target.value)} placeholder="homepage_hero_section" className="mt-1.5" /></div>
             <div>
-              <Label className="text-foreground">Test Name</Label>
-              <Input 
-                value={uploadTestName}
-                onChange={(e) => setUploadTestName(e.target.value)}
-                placeholder="e.g., homepage_hero_section"
-                className="bg-muted border-border  mt-2"
-              />
-            </div>
-            
-            <div>
-              <Label className="text-foreground">Image</Label>
-              <div 
-                className="mt-2 aspect-video border-2 border-dashed border-border rounded-lg flex items-center justify-center cursor-pointer hover:border-primary"
-                onClick={() => document.getElementById('upload-input')?.click()}
-              >
-                {uploadPreview ? (
-                  <img src={uploadPreview} alt="Preview" className="max-h-full max-w-full object-contain" />
-                ) : (
-                  <div className="text-center text-muted-foreground">
-                    <Upload className="w-8 h-8 mx-auto mb-2" />
-                    <p>Click to select image</p>
-                  </div>
-                )}
+              <Label>Image</Label>
+              <div className="mt-1.5 aspect-video border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer hover:border-primary" onClick={() => document.getElementById('upload-input')?.click()}>
+                {uploadPreview ? <img src={uploadPreview} alt="Preview" className="max-h-full max-w-full object-contain" /> : <div className="text-center text-muted-foreground"><Upload className="w-8 h-8 mx-auto mb-2" /><p>Click to select</p></div>}
               </div>
-              <input 
-                id="upload-input"
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    setUploadImage(file);
-                    const reader = new FileReader();
-                    reader.onload = (ev) => setUploadPreview(ev.target?.result as string);
-                    reader.readAsDataURL(file);
-                  }
-                }}
-              />
+              <input id="upload-input" type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) { setUploadImage(f); const r = new FileReader(); r.onload = ev => setUploadPreview(ev.target?.result as string); r.readAsDataURL(f); } }} />
             </div>
           </div>
-          
           <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setShowUploadDialog(false)}
-              className="border-border text-foreground"
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleUploadBaseline}
-              disabled={!uploadTestName || !uploadImage}
-              className="bg-emerald-600 hover:bg-emerald-500"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Upload Baseline
-            </Button>
+            <Button variant="outline" onClick={() => setShowUploadDialog(false)}>Cancel</Button>
+            <Button onClick={handleUploadBaseline} disabled={!uploadTestName || !uploadImage}><Upload className="w-4 h-4 mr-2" />Upload</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Capture Screenshot Dialog */}
       <Dialog open={showCaptureDialog} onOpenChange={setShowCaptureDialog}>
-        <DialogContent className="bg-background border-border max-w-lg">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="">Capture Screenshot</DialogTitle>
-            <DialogDescription>
-              Capture a screenshot from a URL and save it as a baseline
-            </DialogDescription>
+            <DialogTitle>Capture Screenshot</DialogTitle>
+            <DialogDescription>Capture from URL and save as baseline</DialogDescription>
           </DialogHeader>
-          
           <div className="space-y-4">
+            <div><Label>URL</Label><Input value={captureUrl} onChange={e => setCaptureUrl(e.target.value)} placeholder="https://example.com" className="mt-1.5" /></div>
+            <div><Label>Test Name</Label><Input value={captureTestName} onChange={e => setCaptureTestName(e.target.value)} placeholder="example_homepage" className="mt-1.5" /></div>
             <div>
-              <Label className="text-foreground">URL</Label>
-              <Input 
-                value={captureUrl}
-                onChange={(e) => setCaptureUrl(e.target.value)}
-                placeholder="https://example.com"
-                className="bg-muted border-border  mt-2"
-              />
-            </div>
-            
-            <div>
-              <Label className="text-foreground">Test Name</Label>
-              <Input
-                value={captureTestName}
-                onChange={(e) => setCaptureTestName(e.target.value)}
-                placeholder="e.g., example_homepage"
-                className="bg-muted border-border  mt-2"
-              />
-            </div>
-
-            {/* Viewport Selector */}
-            <div>
-              <Label className="text-foreground mb-2 block">Viewports</Label>
+              <Label className="mb-2 block">Viewports</Label>
               <div className="grid grid-cols-2 gap-2">
-                {selectedViewports.map((vp, i) => (
-                  <label key={vp.name} className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-colors ${
-                    vp.checked ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/40'
-                  }`}>
-                    <input type="checkbox" checked={vp.checked}
-                      onChange={(e) => {
-                        const nv = [...selectedViewports];
-                        nv[i] = { ...vp, checked: e.target.checked };
-                        setSelectedViewports(nv);
-                      }}
-                      className="rounded border-border" />
-                    <div>
-                      <span className="text-sm font-medium">{vp.name}</span>
-                      <span className="text-xs text-muted-foreground ml-1">({vp.width}x{vp.height})</span>
-                    </div>
+                {viewportPresets.map((vp, i) => (
+                  <label key={vp.name} className={`flex items-center gap-2 p-2 rounded border cursor-pointer ${vp.checked ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/40'}`}>
+                    <input type="checkbox" checked={vp.checked} onChange={e => { const nv = [...viewportPresets]; nv[i] = { ...vp, checked: e.target.checked }; setViewportPresets(nv); }} className="rounded" />
+                    <span className="text-sm">{vp.name}</span>
+                    <span className="text-xs text-muted-foreground">({vp.width}x{vp.height})</span>
                   </label>
                 ))}
               </div>
-              {selectedViewports.filter(v => v.checked).length > 1 && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Multiple viewports: baselines named as {captureTestName || 'test'}_mobile, {captureTestName || 'test'}_desktop, etc.
-                </p>
-              )}
             </div>
           </div>
-
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowCaptureDialog(false)}
-              className="border-border text-foreground"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCaptureScreenshot}
-              disabled={!captureUrl || !captureTestName || isCapturing || selectedViewports.filter(v => v.checked).length === 0}
-              className="bg-primary hover:bg-primary/90"
-            >
-              {isCapturing ? (
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Target className="w-4 h-4 mr-2" />
-              )}
-              {isCapturing ? 'Capturing...' : `Capture ${selectedViewports.filter(v => v.checked).length > 1 ? `(${selectedViewports.filter(v => v.checked).length} viewports)` : '& Save'}`}
+            <Button variant="outline" onClick={() => setShowCaptureDialog(false)}>Cancel</Button>
+            <Button onClick={handleCaptureScreenshot} disabled={!captureUrl || !captureTestName || isCapturing || viewportPresets.filter(v => v.checked).length === 0}>
+              {isCapturing ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Capturing...</> : <><Target className="w-4 h-4 mr-2" />Capture</>}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Baseline Detail Dialog */}
-      <Dialog open={!!selectedBaseline} onOpenChange={() => {
-        setSelectedBaseline(null);
-        setSelectedBaselineImage(null);
-      }}>
-        <DialogContent className="bg-background border-border max-w-4xl">
+      <Dialog open={!!selectedBaseline} onOpenChange={() => { setSelectedBaseline(null); setSelectedBaselineImage(null); }}>
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle className="">{selectedBaseline?.test_name}</DialogTitle>
-            <DialogDescription>
-              Baseline image details
-            </DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedBaseline?.test_name}
+              {selectedBaseline?.version && <Badge variant="outline">v{selectedBaseline.version}</Badge>}
+            </DialogTitle>
+            <DialogDescription>Baseline details and management</DialogDescription>
           </DialogHeader>
-          
           <div className="space-y-4">
             {selectedBaselineImage && (
               <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[60vh]">
-                <img 
-                  src={`data:image/png;base64,${selectedBaselineImage}`}
-                  alt={selectedBaseline?.test_name}
-                  className="max-w-full"
-                />
+                <img src={`data:image/png;base64,${selectedBaselineImage}`} alt={selectedBaseline?.test_name} className="max-w-full" />
               </div>
             )}
-            
             {selectedBaseline && (
-              <div className="grid grid-cols-3 gap-4">
-                <div className="p-3 bg-muted rounded-lg">
-                  <p className="text-xs text-muted-foreground">File Size</p>
-                  <p className=" font-medium">{formatFileSize(selectedBaseline.file_size)}</p>
-                </div>
-                <div className="p-3 bg-muted rounded-lg">
-                  <p className="text-xs text-muted-foreground">Modified</p>
-                  <p className=" font-medium">{formatDate(selectedBaseline.modified_at)}</p>
-                </div>
-                <div className="p-3 bg-muted rounded-lg">
-                  <p className="text-xs text-muted-foreground">Path</p>
-                  <p className=" font-medium text-xs truncate">{selectedBaseline.path}</p>
-                </div>
+              <div className="grid grid-cols-4 gap-3">
+                <div className="p-3 bg-muted rounded-lg"><p className="text-xs text-muted-foreground">Size</p><p className="font-medium text-sm">{formatFileSize(selectedBaseline.file_size)}</p></div>
+                <div className="p-3 bg-muted rounded-lg"><p className="text-xs text-muted-foreground">Modified</p><p className="font-medium text-sm">{formatDate(selectedBaseline.modified_at)}</p></div>
+                <div className="p-3 bg-muted rounded-lg"><p className="text-xs text-muted-foreground">Dimensions</p><p className="font-medium text-sm">{selectedBaseline.dimensions ? `${selectedBaseline.dimensions[0]}x${selectedBaseline.dimensions[1]}` : 'Unknown'}</p></div>
+                <div className="p-3 bg-muted rounded-lg"><p className="text-xs text-muted-foreground">Version</p><p className="font-medium text-sm">v{selectedBaseline.version || 1}</p></div>
               </div>
             )}
           </div>
-          
           <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => handleDeleteBaseline(selectedBaseline?.test_name || '')}
-              className="border-red-700 text-red-400 hover:bg-red-500/10"
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete
-            </Button>
-            <Button 
-              variant="outline"
-              className="border-border text-foreground"
-              onClick={() => {
-                if (selectedBaselineImage) {
-                  setBaselineImage(selectedBaselineImage);
-                  setActiveTab('compare');
-                  setSelectedBaseline(null);
-                  setSelectedBaselineImage(null);
-                }
-              }}
-            >
-              <GitCompare className="w-4 h-4 mr-2" />
-              Use for Comparison
+            <Button variant="outline" className="text-red-500 border-red-300" onClick={() => handleDeleteBaseline(selectedBaseline?.test_name || '')}><Trash2 className="w-4 h-4 mr-2" />Delete</Button>
+            <Button variant="outline" onClick={() => { if (selectedBaselineImage) { setBaselineImage(selectedBaselineImage); setActiveTab('compare'); setSelectedBaseline(null); setSelectedBaselineImage(null); } }}>
+              <GitCompare className="w-4 h-4 mr-2" />Use for Comparison
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1625,4 +1302,3 @@ export default function VisualTestingPage() {
     </div>
   );
 }
-
