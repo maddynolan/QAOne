@@ -4,3 +4,5 @@ export { default as MobileDeviceLab } from './MobileDeviceLab';
 export { default as MobileTestRuns } from './MobileTestRuns';
 export { default as MobileInspector } from './MobileInspector';
 export { default as MobileAdvancedTools } from './MobileAdvancedTools';
+export { default as MobileAppProfiler } from './MobileAppProfiler';
+export { default as MobileDeviceMatrix } from './MobileDeviceMatrix';
