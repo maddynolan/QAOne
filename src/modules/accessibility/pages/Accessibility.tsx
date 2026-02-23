@@ -55,6 +55,8 @@ interface ScanResult {
   issues: AccessibilityIssue[];
   timestamp: string;
   complianceScore?: number;
+  scanner_warning?: string;
+  scan_method?: "axe_core" | "basic_html";
 }
 
 // Calculate compliance score (0-100) from issue severity counts
@@ -421,13 +423,40 @@ export default function Accessibility() {
         </Card>
       )}
 
+      {/* Scanner Warning */}
+      {scanResult && scanResult.scanner_warning && (
+        <Card className="border-amber-500 bg-amber-50 dark:bg-amber-900/20">
+          <CardContent className="pt-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-amber-800 dark:text-amber-300">Limited Scan Results</p>
+                <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">{scanResult.scanner_warning}</p>
+                <p className="text-xs text-amber-600 dark:text-amber-500 mt-2">
+                  For full axe-core scanning with detailed element-level violations, run the backend locally with Playwright installed:
+                  <code className="bg-amber-100 dark:bg-amber-800/50 px-1.5 py-0.5 rounded ml-1">pip install playwright && playwright install chromium</code>
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Scan Results */}
       {scanResult && !batchMode && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Scan Results</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  Scan Results
+                  {scanResult.scan_method === 'axe_core' && (
+                    <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-300">axe-core</Badge>
+                  )}
+                  {scanResult.scan_method === 'basic_html' && (
+                    <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-300">basic HTML</Badge>
+                  )}
+                </CardTitle>
                 <CardDescription>
                   {scanResult.url} • {new Date(scanResult.timestamp).toLocaleString()}
                 </CardDescription>
