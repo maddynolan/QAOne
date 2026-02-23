@@ -40,7 +40,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { API_BASE_URL } from "@/lib/api-config";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { TestMetrics, LiveTestData, ServerCpuMetrics, ProtocolRecording } from "@/modules/performance/types/performance-types";
-import { ECOMMERCE_TEST_URL, MAX_BROWSER_VUS, QUICK_START_SCENARIOS } from "@/modules/performance/constants/performance-constants";
+import { ECOMMERCE_TEST_URL, MAX_BROWSER_VUS, QUICK_START_SCENARIOS, FLOWSTRAL_SCENARIOS, FLOWSTRAL_WEBSITE_URL, FLOWSTRAL_API_URL } from "@/modules/performance/constants/performance-constants";
 import PerformanceCharts from "@/modules/performance/components/PerformanceCharts";
 import PerformanceAnalytics from "@/modules/performance/components/PerformanceAnalytics";
 
@@ -415,12 +415,13 @@ export default function Performance() {
   };
 
   // Run actual load test using the frontend (in-browser = quick validation only)
-  const runLoadTest = async (scenario?: typeof QUICK_START_SCENARIOS[0]) => {
+  const runLoadTest = async (scenario?: typeof QUICK_START_SCENARIOS[0] & { baseUrl?: string }) => {
     const defaultEndpoints = recorderEndpoints.length > 0
       ? recorderEndpoints
       : [{ method: "GET" as const, path: "/api/products", weight: 100 }];
     let virtualUsers = scenario?.virtualUsers ?? customConfig.virtualUsers;
-    const baseUrl = customConfig.baseUrl || ECOMMERCE_TEST_URL;
+    // Scenario can override baseUrl (used by Flowstral scenarios)
+    const baseUrl = scenario?.baseUrl || customConfig.baseUrl || ECOMMERCE_TEST_URL;
 
     // Server-side execution path: no VU cap, uses backend PerformanceEngine
     if (useServerRunner && virtualUsers > MAX_BROWSER_VUS) {
@@ -1297,9 +1298,86 @@ export default function Performance() {
             </AlertDescription>
           </Alert>
           
+          {/* ─── Flowstral.com Website Scenarios ─── */}
+          <div className="flex items-center gap-3 mt-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
+              <Zap className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold">Flowstral.com Website Tests</h3>
+              <p className="text-xs text-muted-foreground">Test your live site — Vercel CDN ({FLOWSTRAL_WEBSITE_URL}) + Railway API ({FLOWSTRAL_API_URL})</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {FLOWSTRAL_SCENARIOS.map((scenario) => (
+              <Card
+                key={scenario.id}
+                className={`cursor-pointer transition-all hover:shadow-lg border-violet-500/20 ${
+                  selectedScenario === scenario.id ? "border-violet-500 ring-2 ring-violet-500/20" : ""
+                }`}
+                onClick={() => setSelectedScenario(scenario.id)}
+              >
+                <CardHeader>
+                  <CardTitle className="text-lg">{scenario.name}</CardTitle>
+                  <CardDescription>{scenario.description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Target:</span>
+                      <Badge variant="outline" className="text-[10px] truncate max-w-[160px]">{scenario.baseUrl}</Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Virtual Users:</span>
+                      <Badge variant="outline">{scenario.virtualUsers}</Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Duration:</span>
+                      <Badge variant="outline">{scenario.duration}s</Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Endpoints:</span>
+                      <Badge variant="outline">{scenario.endpoints.length}</Badge>
+                    </div>
+                  </div>
+                  <Button
+                    className="w-full mt-4 bg-violet-600 hover:bg-violet-700"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      runLoadTest(scenario);
+                    }}
+                    disabled={isRunning}
+                  >
+                    {isRunning ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        Running...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4 mr-2" />
+                        Run Test
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* ─── Local/Demo Scenarios ─── */}
+          <div className="flex items-center gap-3 mt-4">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center">
+              <Server className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold">Local / Demo Scenarios</h3>
+              <p className="text-xs text-muted-foreground">Test against a local server at {ECOMMERCE_TEST_URL} — or change Base URL in Config tab</p>
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {QUICK_START_SCENARIOS.map((scenario) => (
-              <Card 
+              <Card
                 key={scenario.id}
                 className={`cursor-pointer transition-all hover:shadow-lg ${
                   selectedScenario === scenario.id ? "border-primary ring-2 ring-primary/20" : ""
