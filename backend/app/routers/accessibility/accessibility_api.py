@@ -37,23 +37,31 @@ async def run_axe_core_scan(url: str, component_selector: Optional[str] = None, 
     violations = []
     html_content = ""
 
+    scanner_error = None
+
     try:
-        # Path to the scanner script
+        # Path to the scanner script — go up TWO levels from routers/accessibility/
+        # to reach app/, then down to services/accessibility/
         script_path = os.path.join(
             os.path.dirname(__file__),
-            "..", "services", "accessibility", "axe_scanner.py"
+            "..", "..", "services", "accessibility", "axe_scanner.py"
         )
         script_path = os.path.abspath(script_path)
 
         logger.info(f"[A11Y] Scanner script path: {script_path}")
         logger.info(f"[A11Y] Script exists: {os.path.exists(script_path)}")
 
+        if not os.path.exists(script_path):
+            scanner_error = f"Scanner script not found at {script_path}"
+            logger.error(f"[A11Y] {scanner_error}")
+            return {"violations": violations, "html": html_content, "scanner_error": scanner_error}
+
         # Build command — pass component_selector (or "None"), wcag_level, wcag_version
         cmd = [sys.executable, script_path, url, component_selector or "None", wcag_level, wcag_version]
-        
+
         logger.info(f"[A11Y] Running axe-core scan via subprocess: {url}")
         logger.info(f"[A11Y] Command: {' '.join(cmd)}")
-        
+
         # Run in subprocess with timeout
         result = subprocess.run(
             cmd,
@@ -62,31 +70,45 @@ async def run_axe_core_scan(url: str, component_selector: Optional[str] = None, 
             timeout=120,
             cwd=os.path.dirname(script_path)
         )
-        
+
         logger.info(f"[A11Y] Subprocess returncode: {result.returncode}")
         logger.info(f"[A11Y] Stdout length: {len(result.stdout) if result.stdout else 0}")
         logger.info(f"[A11Y] Stderr: {result.stderr[:500] if result.stderr else 'None'}")
-        
+
         if result.returncode == 0 and result.stdout:
             data = json.loads(result.stdout)
             violations = data.get("violations", [])
             html_content = data.get("html", "")
-            
+
             logger.info(f"[A11Y] Parsed violations: {len(violations)}")
-            
+
             if data.get("error"):
-                logger.warning(f"[A11Y] Axe scanner warning: {data['error']}")
+                scanner_error = data["error"]
+                logger.warning(f"[A11Y] Axe scanner warning: {scanner_error}")
         else:
-            logger.error(f"[A11Y] Axe scanner failed: {result.stderr}")
-            
+            scanner_error = result.stderr[:500] if result.stderr else f"Scanner exited with code {result.returncode}"
+            logger.error(f"[A11Y] Axe scanner failed: {scanner_error}")
+            # Try to parse partial output even on failure
+            if result.stdout:
+                try:
+                    data = json.loads(result.stdout)
+                    if data.get("error"):
+                        scanner_error = data["error"]
+                    html_content = data.get("html", "")
+                except json.JSONDecodeError:
+                    pass
+
     except subprocess.TimeoutExpired:
-        logger.error("Axe-core scan timed out after 60 seconds")
+        scanner_error = "Axe-core scan timed out after 120 seconds"
+        logger.error(f"[A11Y] {scanner_error}")
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse axe scanner output: {e}")
+        scanner_error = f"Failed to parse axe scanner output: {e}"
+        logger.error(f"[A11Y] {scanner_error}")
     except Exception as e:
+        scanner_error = str(e)
         logger.error(f"Error running axe-core scan: {e}", exc_info=True)
-    
-    return {"violations": violations, "html": html_content}
+
+    return {"violations": violations, "html": html_content, "scanner_error": scanner_error}
 
 
 # Request/Response Models
@@ -181,9 +203,24 @@ async def scan_page(
         
         axe_violations = axe_result.get("violations", [])
         html_content = axe_result.get("html", "")
-        
+        scanner_error = axe_result.get("scanner_error")
+
         logger.info(f"Axe-core found {len(axe_violations)} violations")
-        
+        if scanner_error:
+            logger.warning(f"Scanner error (will use fallback): {scanner_error}")
+
+        # If axe-core subprocess failed AND we have no HTML, try fetching HTML directly
+        if not axe_violations and not html_content and scanner_error:
+            logger.info("[A11Y] Axe subprocess failed, attempting direct HTML fetch for basic checks")
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=30, follow_redirects=True, verify=False) as client:
+                    resp = await client.get(request.url)
+                    html_content = resp.text
+                    logger.info(f"[A11Y] Fetched HTML directly: {len(html_content)} chars")
+            except Exception as fetch_err:
+                logger.warning(f"[A11Y] Direct HTML fetch also failed: {fetch_err}")
+
         # Run WCAG scan using the pipeline with real axe-core results
         wcag_result = await wcag_pipeline.scan_page(
             html=html_content,
@@ -191,7 +228,7 @@ async def scan_page(
             component_selector=request.component_selector if request.scan_type == "component" else None,
             wcag_scan_data={"violations": axe_violations} if axe_violations else None
         )
-        
+
         # Convert WCAG violations to issues format
         issues = []
         for violation in wcag_result.get("violations", []):
@@ -205,7 +242,7 @@ async def scan_page(
                     selector = first_node.get("selector", "")
                 else:
                     element_html = str(first_node)
-            
+
             issues.append({
                 "id": violation.get("id", "unknown"),
                 "rule": violation.get("rule", "") or violation.get("description", ""),
@@ -217,9 +254,9 @@ async def scan_page(
                 "wcag_criterion": violation.get("wcag_criterion", ""),
                 "help_url": violation.get("helpUrl", "")
             })
-        
+
         scan_id = f"scan-{datetime.utcnow().timestamp()}"
-        
+
         # Generate simple report without LLM
         summary = wcag_result.get("summary", {})
         report = {
@@ -230,10 +267,10 @@ async def scan_page(
             "moderate_issues": summary.get("moderate", 0),
             "minor_issues": summary.get("minor", 0)
         }
-        
+
         logger.info(f"Scan complete: {summary.get('total', 0)} total issues found")
-        
-        return {
+
+        result = {
             "status": "success",
             "scan_id": scan_id,
             "url": request.url,
@@ -244,6 +281,15 @@ async def scan_page(
             "report": report,
             "timestamp": datetime.utcnow().isoformat()
         }
+
+        # Include scanner warning if axe-core couldn't run (so frontend can show it)
+        if scanner_error and not axe_violations:
+            result["scanner_warning"] = f"Axe-core scanner unavailable ({scanner_error}). Results are from basic HTML analysis only — install Playwright for full axe-core scanning."
+            result["scan_method"] = "basic_html"
+        else:
+            result["scan_method"] = "axe_core"
+
+        return result
     
     except HTTPException:
         raise

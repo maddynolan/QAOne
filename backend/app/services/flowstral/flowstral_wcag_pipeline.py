@@ -72,80 +72,271 @@ class WCAGPipeline:
         return snapshot
     
     def _basic_wcag_check(self, html: str) -> List[Dict[str, Any]]:
-        """Basic WCAG checks (simplified - in production use axe-core)"""
+        """
+        Enhanced basic WCAG checks — runs when axe-core is unavailable.
+        Covers 12+ common WCAG violation categories via regex analysis.
+        """
         violations = []
-        
-        # Check for missing alt text on images
+        if not html or len(html) < 50:
+            return violations
+
         import re
-        images = re.findall(r'<img[^>]*>', html)
+
+        # 1. Images missing alt text (WCAG 1.1.1)
+        images = re.findall(r'<img[^>]*?>', html, re.IGNORECASE | re.DOTALL)
         for img in images:
-            if 'alt=' not in img and 'alt =' not in img:
+            if 'alt=' not in img.lower():
                 violations.append({
                     "id": "image-alt",
                     "rule": "Images must have alt text",
                     "impact": "critical",
-                    "description": "Image missing alt attribute",
-                    "help": "Add alt text to describe the image",
-                    "helpUrl": "https://www.w3.org/WAI/WCAG21/Understanding/non-text-content.html",
-                    "nodes": [{"html": img}],
-                    "suggested_fix": f'Add alt="description" to image tag'
+                    "description": "Image element is missing alt attribute. Screen readers cannot describe the image.",
+                    "help": "Add alt text to describe the image content, or alt=\"\" for decorative images",
+                    "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/image-alt",
+                    "nodes": [{"html": img[:200]}],
+                    "wcag_criterion": "WCAG 1.1.1",
+                    "suggested_fix": 'Add alt="[descriptive text]" attribute to <img> element'
                 })
-        
-        # Check for missing form labels
-        inputs = re.findall(r'<input[^>]*>', html)
-        for inp in inputs:
-            if 'id=' in inp:
-                input_id = re.search(r'id=["\']([^"\']+)["\']', inp)
-                if input_id:
-                    # Check if label exists for this input
-                    label_pattern = f'<label[^>]*for=["\']{input_id.group(1)}["\']'
-                    if not re.search(label_pattern, html, re.IGNORECASE):
-                        violations.append({
-                            "id": "label",
-                            "rule": "Form inputs must have labels",
-                            "impact": "serious",
-                            "description": f"Input missing label (id: {input_id.group(1)})",
-                            "help": "Add a label element with for attribute matching input id",
-                            "helpUrl": "https://www.w3.org/WAI/WCAG21/Understanding/labels-or-instructions.html",
-                            "nodes": [{"html": inp}],
-                            "suggested_fix": f'<label for="{input_id.group(1)}">Label text</label>'
-                        })
-        
-        # Check for missing ARIA labels on interactive elements
-        buttons = re.findall(r'<button[^>]*>', html)
-        for btn in buttons:
-            if 'aria-label=' not in btn and 'aria-labelledby=' not in btn:
-                # Check if button has text content
-                button_text = re.search(r'<button[^>]*>(.*?)</button>', html, re.DOTALL)
-                if not button_text or not button_text.group(1).strip():
+            elif re.search(r'alt=[\"\'][\s]*[\"\']', img, re.IGNORECASE):
+                # Empty alt on non-decorative image
+                if 'role="presentation"' not in img.lower() and 'role="none"' not in img.lower():
+                    src = re.search(r'src=["\']([^"\']+)', img)
+                    src_name = src.group(1).split("/")[-1] if src else "unknown"
                     violations.append({
-                        "id": "button-name",
-                        "rule": "Buttons must have accessible names",
-                        "impact": "serious",
-                        "description": "Button missing accessible name",
-                        "help": "Add aria-label or visible text to button",
-                        "helpUrl": "https://www.w3.org/WAI/WCAG21/Understanding/name-role-value.html",
-                        "nodes": [{"html": btn}],
-                        "suggested_fix": 'Add aria-label="Button description" to button'
+                        "id": "image-alt",
+                        "rule": "Images should have meaningful alt text",
+                        "impact": "moderate",
+                        "description": f"Image has empty alt text but no decorative role ({src_name}). If decorative, add role=\"presentation\".",
+                        "help": "Add descriptive alt text or mark as decorative",
+                        "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/image-alt",
+                        "nodes": [{"html": img[:200]}],
+                        "wcag_criterion": "WCAG 1.1.1",
+                        "suggested_fix": 'Add descriptive alt text, or add role="presentation" if decorative'
                     })
-        
-        # Check for heading hierarchy
-        headings = re.findall(r'<h([1-6])[^>]*>', html)
+
+        # 2. Form inputs missing labels (WCAG 1.3.1, 4.1.2)
+        inputs = re.findall(r'<input[^>]*?>', html, re.IGNORECASE | re.DOTALL)
+        for inp in inputs:
+            input_type = re.search(r'type=["\']([^"\']+)', inp, re.IGNORECASE)
+            itype = input_type.group(1).lower() if input_type else "text"
+            if itype in ('hidden', 'submit', 'button', 'reset', 'image'):
+                continue
+            has_label = False
+            input_id = re.search(r'id=["\']([^"\']+)["\']', inp, re.IGNORECASE)
+            if input_id:
+                label_pat = f'<label[^>]*for=["\']\\s*{re.escape(input_id.group(1))}\\s*["\']'
+                if re.search(label_pat, html, re.IGNORECASE):
+                    has_label = True
+            if 'aria-label=' in inp.lower() or 'aria-labelledby=' in inp.lower() or 'title=' in inp.lower():
+                has_label = True
+            if not has_label:
+                violations.append({
+                    "id": "label",
+                    "rule": "Form inputs must have associated labels",
+                    "impact": "serious",
+                    "description": f"Input element (type={itype}) has no associated <label>, aria-label, or title attribute.",
+                    "help": "Associate a label with every form control",
+                    "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/label",
+                    "nodes": [{"html": inp[:200]}],
+                    "wcag_criterion": "WCAG 4.1.2",
+                    "suggested_fix": f'Add <label for="{input_id.group(1) if input_id else "input-id"}">[Label]</label> or aria-label="[Label]"'
+                })
+
+        # 3. Buttons missing accessible names (WCAG 4.1.2)
+        button_matches = re.finditer(r'<button[^>]*>(.*?)</button>', html, re.IGNORECASE | re.DOTALL)
+        for btn_match in button_matches:
+            btn_tag = btn_match.group(0)
+            btn_content = btn_match.group(1).strip()
+            # Strip inner HTML tags to check for text
+            text_only = re.sub(r'<[^>]+>', '', btn_content).strip()
+            if not text_only and 'aria-label=' not in btn_tag.lower() and 'aria-labelledby=' not in btn_tag.lower() and 'title=' not in btn_tag.lower():
+                violations.append({
+                    "id": "button-name",
+                    "rule": "Buttons must have an accessible name",
+                    "impact": "serious",
+                    "description": "Button element has no visible text or aria-label. Screen readers cannot identify it.",
+                    "help": "Add visible text content or aria-label to button",
+                    "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/button-name",
+                    "nodes": [{"html": btn_tag[:200]}],
+                    "wcag_criterion": "WCAG 4.1.2",
+                    "suggested_fix": 'Add aria-label="[Button purpose]" or visible text inside <button>'
+                })
+
+        # 4. Links missing accessible names (WCAG 4.1.2)
+        link_matches = re.finditer(r'<a\s[^>]*>(.*?)</a>', html, re.IGNORECASE | re.DOTALL)
+        for link_match in link_matches:
+            link_tag = link_match.group(0)
+            link_content = link_match.group(1).strip()
+            text_only = re.sub(r'<[^>]+>', '', link_content).strip()
+            if not text_only and 'aria-label=' not in link_tag.lower() and 'aria-labelledby=' not in link_tag.lower():
+                href = re.search(r'href=["\']([^"\']*)', link_tag, re.IGNORECASE)
+                href_val = href.group(1) if href else "#"
+                violations.append({
+                    "id": "link-name",
+                    "rule": "Links must have an accessible name",
+                    "impact": "serious",
+                    "description": f"Link to '{href_val[:50]}' has no visible text or aria-label.",
+                    "help": "Add visible text content or aria-label to link",
+                    "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/link-name",
+                    "nodes": [{"html": link_tag[:200]}],
+                    "wcag_criterion": "WCAG 4.1.2",
+                    "suggested_fix": 'Add visible link text or aria-label="[Link purpose]"'
+                })
+
+        # 5. Missing document language (WCAG 3.1.1)
+        if '<html' in html.lower() and not re.search(r'<html[^>]*\slang=', html, re.IGNORECASE):
+            violations.append({
+                "id": "html-has-lang",
+                "rule": "HTML element must have a lang attribute",
+                "impact": "serious",
+                "description": "The <html> element does not have a lang attribute, which is required for screen readers to identify the page language.",
+                "help": "Add a lang attribute to the <html> element",
+                "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/html-has-lang",
+                "nodes": [{"html": re.search(r'<html[^>]*>', html, re.IGNORECASE).group(0)[:200] if re.search(r'<html[^>]*>', html, re.IGNORECASE) else "<html>"}],
+                "wcag_criterion": "WCAG 3.1.1",
+                "suggested_fix": '<html lang="en"> (or appropriate language code)'
+            })
+
+        # 6. Missing document title (WCAG 2.4.2)
+        if '<head' in html.lower():
+            if not re.search(r'<title[^>]*>[^<]+</title>', html, re.IGNORECASE):
+                violations.append({
+                    "id": "document-title",
+                    "rule": "Document must have a <title> element",
+                    "impact": "serious",
+                    "description": "Page is missing a <title> element. Screen readers announce the page title when users navigate between pages.",
+                    "help": "Add a descriptive <title> element to the <head>",
+                    "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/document-title",
+                    "nodes": [],
+                    "wcag_criterion": "WCAG 2.4.2",
+                    "suggested_fix": "<title>Descriptive Page Title</title> in <head>"
+                })
+
+        # 7. Heading hierarchy (WCAG 1.3.1)
+        headings = re.findall(r'<h([1-6])[^>]*>', html, re.IGNORECASE)
         if headings:
             heading_levels = [int(h) for h in headings]
-            # Check if h1 exists
             if 1 not in heading_levels:
                 violations.append({
                     "id": "page-has-heading-one",
-                    "rule": "Page must have h1 heading",
+                    "rule": "Page must contain a level-one heading",
                     "impact": "moderate",
-                    "description": "Page missing h1 heading",
-                    "help": "Add an h1 heading to the page",
-                    "helpUrl": "https://www.w3.org/WAI/WCAG21/Understanding/info-and-relationships.html",
+                    "description": "Page does not have an <h1> heading. Screen readers use headings to understand page structure.",
+                    "help": "Ensure the page has at least one <h1> heading",
+                    "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/page-has-heading-one",
                     "nodes": [],
-                    "suggested_fix": "<h1>Page Title</h1>"
+                    "wcag_criterion": "WCAG 1.3.1",
+                    "suggested_fix": "Add <h1>Page Title</h1> as the main heading"
                 })
-        
+            # Check for skipped levels
+            for i in range(1, len(heading_levels)):
+                if heading_levels[i] > heading_levels[i - 1] + 1:
+                    violations.append({
+                        "id": "heading-order",
+                        "rule": "Heading levels should only increase by one",
+                        "impact": "moderate",
+                        "description": f"Heading level jumps from h{heading_levels[i-1]} to h{heading_levels[i]}, skipping h{heading_levels[i-1]+1}.",
+                        "help": "Ensure heading levels do not skip (e.g., h2 should not be followed by h4)",
+                        "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/heading-order",
+                        "nodes": [],
+                        "wcag_criterion": "WCAG 1.3.1",
+                        "suggested_fix": f"Change h{heading_levels[i]} to h{heading_levels[i-1]+1} or add missing intermediate headings"
+                    })
+                    break  # Report first skip only
+
+        # 8. Missing landmark regions (WCAG 1.3.1)
+        has_main = bool(re.search(r'<main[\s>]|role=["\']main["\']', html, re.IGNORECASE))
+        has_nav = bool(re.search(r'<nav[\s>]|role=["\']navigation["\']', html, re.IGNORECASE))
+        if not has_main and len(html) > 1000:
+            violations.append({
+                "id": "landmark-one-main",
+                "rule": "Page should have one main landmark",
+                "impact": "moderate",
+                "description": "Page does not have a <main> landmark region. Screen readers use landmarks to navigate between sections.",
+                "help": "Wrap the primary content area in a <main> element",
+                "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/landmark-one-main",
+                "nodes": [],
+                "wcag_criterion": "WCAG 1.3.1",
+                "suggested_fix": "Wrap primary content with <main>...</main>"
+            })
+
+        # 9. Missing skip navigation link (WCAG 2.4.1)
+        first_500 = html[:2000].lower()
+        if has_nav and 'skip' not in first_500 and '#main' not in first_500 and '#content' not in first_500:
+            violations.append({
+                "id": "skip-link",
+                "rule": "Page should have a skip navigation link",
+                "impact": "moderate",
+                "description": "No skip navigation link found. Keyboard-only users must tab through all navigation items to reach main content.",
+                "help": "Add a skip link as the first focusable element",
+                "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/skip-link",
+                "nodes": [],
+                "wcag_criterion": "WCAG 2.4.1",
+                "suggested_fix": '<a href="#main-content" class="sr-only focus:not-sr-only">Skip to main content</a>'
+            })
+
+        # 10. Inline event handlers without keyboard equivalents (WCAG 2.1.1)
+        onclick_divs = re.findall(r'<(?:div|span|td|li|p)[^>]*onclick=[^>]*>', html, re.IGNORECASE)
+        for elem in onclick_divs[:5]:  # Cap at 5
+            if 'role=' not in elem.lower() and 'tabindex=' not in elem.lower():
+                violations.append({
+                    "id": "interactive-element-role",
+                    "rule": "Non-interactive elements with click handlers need role and tabindex",
+                    "impact": "serious",
+                    "description": "Non-interactive element has onclick handler but no role or tabindex. Keyboard users cannot access it.",
+                    "help": "Add role=\"button\" and tabindex=\"0\" or use a <button> element instead",
+                    "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/interactive-supports-focus",
+                    "nodes": [{"html": elem[:200]}],
+                    "wcag_criterion": "WCAG 2.1.1",
+                    "suggested_fix": 'Add role="button" tabindex="0" and keyboard event handlers, or use <button> instead'
+                })
+
+        # 11. Iframes missing title (WCAG 4.1.2)
+        iframes = re.findall(r'<iframe[^>]*>', html, re.IGNORECASE)
+        for iframe in iframes:
+            if 'title=' not in iframe.lower() and 'aria-label=' not in iframe.lower():
+                violations.append({
+                    "id": "frame-title",
+                    "rule": "Frames must have an accessible name",
+                    "impact": "serious",
+                    "description": "iframe element is missing a title attribute. Screen readers need it to describe the frame content.",
+                    "help": "Add a title attribute to the <iframe> element",
+                    "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/frame-title",
+                    "nodes": [{"html": iframe[:200]}],
+                    "wcag_criterion": "WCAG 4.1.2",
+                    "suggested_fix": 'Add title="[Description of iframe content]" to <iframe>'
+                })
+
+        # 12. Meta viewport disabling zoom (WCAG 1.4.4)
+        viewport = re.search(r'<meta[^>]*name=["\']viewport["\'][^>]*content=["\']([^"\']+)["\']', html, re.IGNORECASE)
+        if viewport:
+            content = viewport.group(1).lower()
+            if 'user-scalable=no' in content or 'user-scalable=0' in content:
+                violations.append({
+                    "id": "meta-viewport",
+                    "rule": "Zooming and scaling must not be disabled",
+                    "impact": "critical",
+                    "description": "Meta viewport has user-scalable=no, preventing users from zooming. This is critical for users with low vision.",
+                    "help": "Remove user-scalable=no from viewport meta tag",
+                    "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/meta-viewport",
+                    "nodes": [{"html": viewport.group(0)[:200]}],
+                    "wcag_criterion": "WCAG 1.4.4",
+                    "suggested_fix": "Remove user-scalable=no from <meta name=\"viewport\"> content"
+                })
+            max_scale = re.search(r'maximum-scale=([0-9.]+)', content)
+            if max_scale and float(max_scale.group(1)) < 2:
+                violations.append({
+                    "id": "meta-viewport-large",
+                    "rule": "maximum-scale should be at least 2",
+                    "impact": "serious",
+                    "description": f"Meta viewport maximum-scale={max_scale.group(1)} prevents adequate zooming.",
+                    "help": "Set maximum-scale to at least 2, or remove it entirely",
+                    "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/meta-viewport-large",
+                    "nodes": [{"html": viewport.group(0)[:200]}],
+                    "wcag_criterion": "WCAG 1.4.4",
+                    "suggested_fix": "Set maximum-scale=5 or remove the maximum-scale restriction"
+                })
+
         return violations
     
     def get_violations_by_impact(self, violations: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
