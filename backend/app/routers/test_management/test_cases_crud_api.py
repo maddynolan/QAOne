@@ -818,6 +818,18 @@ async def create_test_case(request: Request):
                 pg_case_id = await execute_insert("test_cases", db_data)
                 if pg_case_id:
                     logger.info(f"Successfully created test case in PostgreSQL: {pg_case_id}")
+                    # Auto-create initial version snapshot
+                    try:
+                        from app.services.core.version_control_service import version_service
+                        await version_service.create_version(
+                            test_case_id=pg_case_id,
+                            snapshot=db_data,
+                            changed_by=DEFAULT_USER_ID,
+                            change_type="created",
+                            metadata={"source": "api"}
+                        )
+                    except Exception as ver_err:
+                        logger.warning(f"Version creation failed (non-blocking): {ver_err}")
                     return {"id": pg_case_id}
             except Exception as pg_error:
                 logger.warning(f"PostgreSQL insert failed, using in-memory: {pg_error}")
@@ -873,6 +885,29 @@ async def update_test_case(case_id: str, request: Request):
                             conn.commit()
                             
                             if result:
+                                # Auto-create version snapshot on update
+                                try:
+                                    from app.services.core.version_control_service import version_service
+                                    snapshot = {
+                                        "title": data.get("name", ""),
+                                        "description": data.get("description", ""),
+                                        "priority": priority,
+                                        "test_type": data.get("testType", "manual"),
+                                        "tags": data.get("tags", []),
+                                        "steps": data.get("steps", []),
+                                        "preconditions": data.get("preconditions", []),
+                                        "test_data": data.get("testData", {}),
+                                        "estimated_time": data.get("estimatedTime", 15)
+                                    }
+                                    await version_service.create_version(
+                                        test_case_id=case_id,
+                                        snapshot=snapshot,
+                                        changed_by=DEFAULT_USER_ID,
+                                        change_type="modified",
+                                        metadata={"source": "api"}
+                                    )
+                                except Exception as ver_err:
+                                    logger.warning(f"Version creation on update failed (non-blocking): {ver_err}")
                                 return {"id": case_id}
                     finally:
                         pool.putconn(conn)
@@ -996,3 +1031,128 @@ async def link_test_case_to_requirement(case_id: str, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ─── Version Control Endpoints ───────────────────────────────────────────────
+
+@router.get("/{case_id}/versions")
+async def get_test_case_versions(
+    case_id: str,
+    limit: int = 50,
+    offset: int = 0
+):
+    """Get version history for a test case (newest first)"""
+    try:
+        from app.services.core.version_control_service import version_service
+        versions = await version_service.get_versions(case_id, limit=limit, offset=offset)
+        total = await version_service.get_version_count(case_id)
+        return {
+            "test_case_id": case_id,
+            "versions": versions,
+            "total": total,
+            "limit": limit,
+            "offset": offset
+        }
+    except Exception as e:
+        logger.error(f"Error getting versions for {case_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{case_id}/versions/{version_id}")
+async def get_test_case_version_snapshot(case_id: str, version_id: str):
+    """Get full snapshot for a specific version"""
+    try:
+        from app.services.core.version_control_service import version_service
+        snapshot = await version_service.get_version_snapshot(version_id)
+        if not snapshot:
+            raise HTTPException(status_code=404, detail="Version not found")
+        return snapshot
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting version snapshot: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{case_id}/versions/compare")
+async def compare_test_case_versions(case_id: str, request: Request):
+    """Compare two versions of a test case"""
+    try:
+        data = await request.json()
+        version_a = data.get("version_a")
+        version_b = data.get("version_b")
+
+        if not version_a or not version_b:
+            raise HTTPException(status_code=400, detail="version_a and version_b are required")
+
+        from app.services.core.version_control_service import version_service
+        diff = await version_service.compare_versions(version_a, version_b)
+        if not diff:
+            raise HTTPException(status_code=404, detail="One or both versions not found")
+        return diff
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error comparing versions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{case_id}/versions/{version_id}/revert")
+async def revert_test_case_to_version(case_id: str, version_id: str, request: Request):
+    """Revert a test case to a previous version. Creates a new version (non-destructive)."""
+    try:
+        data = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        reverted_by = data.get("user_id", "system")
+
+        from app.services.core.version_control_service import version_service
+        result = await version_service.revert_to_version(case_id, version_id, reverted_by)
+
+        if not result:
+            raise HTTPException(status_code=404, detail="Version not found or revert failed")
+
+        # Also update the actual test case in the database with the restored snapshot
+        snapshot = result["snapshot"]
+        if _is_postgres_available():
+            try:
+                from app.services.storage.postgres_direct import get_postgres_pool
+                pool = get_postgres_pool()
+                if pool:
+                    conn = pool.getconn()
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                """
+                                UPDATE test_cases
+                                SET title = %s, description = %s, priority = %s, test_type = %s,
+                                    tags = %s, steps = %s, preconditions = %s, test_data = %s,
+                                    estimated_time = %s, updated_at = NOW()
+                                WHERE id = %s
+                                """,
+                                (
+                                    snapshot.get("title", ""),
+                                    snapshot.get("description", ""),
+                                    snapshot.get("priority", "P2"),
+                                    snapshot.get("test_type", "manual"),
+                                    snapshot.get("tags", []),
+                                    json.dumps(snapshot.get("steps", [])),
+                                    snapshot.get("preconditions", []),
+                                    json.dumps(snapshot.get("test_data", {})),
+                                    snapshot.get("estimated_time", 15),
+                                    case_id
+                                )
+                            )
+                            conn.commit()
+                    finally:
+                        pool.putconn(conn)
+            except Exception as pg_error:
+                logger.warning(f"PostgreSQL revert update failed: {pg_error}")
+
+        return {
+            "status": "reverted",
+            "test_case_id": case_id,
+            "restored_from_version": result["restored_from_version"],
+            "new_version_id": result["new_version_id"]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reverting test case: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
