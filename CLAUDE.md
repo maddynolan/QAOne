@@ -1311,6 +1311,7 @@ PostgreSQL (primary) with **in-memory fallback**:
 | Enterprise Security | `docs/ENTERPRISE-SECURITY-GUIDE.md` |
 | On-Prem Deployment | `docs/ON-PREM-DEPLOYMENT-RUNBOOK.md` |
 | SaaS Deployment | `docs/SAAS-DEPLOYMENT-GUIDE.md` |
+| Deployment / Data Architecture | `docs/DEPLOYMENT-AND-DATA-ARCHITECTURE.md` |
 
 **When updating feature docs:**
 1. Update the relevant `FEATURE-*.md` with new/changed functionality
