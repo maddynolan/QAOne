@@ -752,6 +752,20 @@ app.include_router(oauth2_router)
 from app.routers.api_testing.request_chaining_api import router as request_chaining_router
 app.include_router(request_chaining_router)
 
+# API Collection Persistence - Server-side storage for API collections (team sharing)
+try:
+    from app.routers.api_testing.collection_persistence_api import router as collection_persistence_router
+    app.include_router(collection_persistence_router)
+except Exception as e:
+    logger.warning(f"Collection persistence API not loaded: {e}")
+
+# Mobile Test Flows Persistence - Server-side storage for mobile YAML flows
+try:
+    from app.routers.test_management.mobile_flows_api import router as mobile_flows_router
+    app.include_router(mobile_flows_router)
+except Exception as e:
+    logger.warning(f"Mobile flows API not loaded: {e}")
+
 # OWASP API Security Testing - Automated security scanning
 from app.routers.platform.owasp_security_api import router as owasp_security_router
 app.include_router(owasp_security_router)

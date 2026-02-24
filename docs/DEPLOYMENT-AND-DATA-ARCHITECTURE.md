@@ -424,7 +424,7 @@ Switching updates `AuthContext` (`currentOrg`, `currentProject`), which triggers
 | Imported specs | **In-memory** during import | OpenAPI/Swagger/Postman specs parsed on-the-fly |
 | Database connections | **In-memory** per session | Schema browsing via live queries to connected DB |
 
-**Note:** API test collections are currently client-side only. They persist across browser sessions via localStorage but are not synced to the server database. Each user's collections are local to their browser.
+**Server-side persistence (v3.13.2):** API collections can now be synced to the server via `POST /api/v2/testing/collections/sync`. The backend stores collections, folders, requests, environments, and chains in PostgreSQL (migrations 032). The Zustand store's `syncToServer()` action pushes localStorage data to the server for team sharing. Collections still work offline via localStorage as the primary store, with optional server sync for cross-device and team access.
 
 ### 5.4 Performance Tests
 
@@ -472,7 +472,7 @@ Switching updates `AuthContext` (`currentOrg`, `currentProject`), which triggers
 | Element hierarchy | **In-memory** (parsed XML) | `uiautomator dump` XML parsed on-demand |
 | Saved locations/profiles | **Browser localStorage** via Zustand | Deep links, geo locations, network profiles |
 
-**Note:** Mobile test data is entirely client-side (Zustand + localStorage). The Electron desktop app communicates with devices via IPC → Maestro CLI / ADB / xcrun. No backend database tables for mobile-specific data.
+**Server-side persistence (v3.13.2):** Mobile test flows, folders, and run history can now be synced to the server via `POST /api/mobile/sync`. The backend stores flows (YAML), folders, and run records in PostgreSQL (migration 033). Flows still work offline via localStorage/Zustand as the primary store, with optional server sync for team sharing. The Electron desktop app communicates with devices via IPC → Maestro CLI / ADB / xcrun.
 
 ---
 
@@ -491,11 +491,11 @@ The platform currently tracks test case changes through:
 | `ai_generation_audit` | AI-generated test provenance (model, prompt, cost) | Only for AI-generated tests |
 | Element model `success_rate` | Selector reliability over time | Element-level, not test-level |
 
-**What is missing:**
-- No `test_case_versions` or history table
-- No diff tracking between edits (steps are a single JSONB blob)
-- No branching/merging of test case variants
-- No "undo" or "revert to version N" capability
+**Previously missing (now implemented in v3.13.2):**
+- ~~No `test_case_versions` or history table~~ → **Migration 031** creates `test_case_versions` table
+- ~~No diff tracking between edits~~ → **`version_control_service.py`** auto-computes diffs on every save
+- ~~No branching/merging of test case variants~~ → `parent_version_id` FK enables branching
+- ~~No "undo" or "revert to version N" capability~~ → **`POST /{case_id}/versions/{version_id}/revert`** endpoint + frontend UI
 
 ### 6.2 How It Works Today
 
@@ -513,9 +513,9 @@ audit_log: "test_case.created"  "test_case.updated"  "test_case.archived"
 
 The archived status effectively creates an immutable snapshot. Teams commonly duplicate a test case before major edits to preserve the original.
 
-### 6.3 Recommended Version Control Architecture
+### 6.3 Version Control Architecture (Implemented v3.13.2)
 
-A future implementation should add:
+The following has been implemented:
 
 **New table: `test_case_versions`**
 ```sql
@@ -534,13 +534,19 @@ CREATE TABLE test_case_versions (
 );
 ```
 
-**How it would work:**
-1. Every save creates a new version row with the full JSONB snapshot
-2. `diff_summary` computed by comparing consecutive versions
-3. UI shows version timeline with "Revert to version N" button
+**How it works:**
+1. Every save auto-creates a new version row with the full JSONB snapshot (wired into `create_test_case` and `update_test_case`)
+2. `diff_summary` + `diff_details` computed by `_compute_diff()` comparing consecutive version snapshots
+3. **Frontend `VersionHistoryPanel`** shows version timeline with expand/collapse, diff details, snapshot preview, and "Revert to version N" button
 4. `parent_version_id` enables branching (fork a test case for a feature branch)
 5. Integrates with existing `audit_logs` for "who changed what when"
 6. Desktop sync queue would include version snapshots for offline editing
+
+**Implementation files:**
+- Migration: `supabase/migrations/031_test_case_versions.sql`
+- Backend service: `backend/app/services/core/version_control_service.py` (singleton: `version_service`)
+- Backend endpoints: `GET/POST /{case_id}/versions/*` in `test_cases_crud_api.py`
+- Frontend: `src/modules/test-management/components/VersionHistoryPanel.tsx`
 
 **Git-like metaphor for teams:**
 - `main` version = the `active` test case
@@ -650,12 +656,12 @@ CLOUD (Hetzner/Railway)              ON-PREM (Customer DC)
 | **Releases** | Supabase PG | Docker PG 16 | Not available | Docker PG 16 |
 | **Test runs/results** | Supabase PG | Docker PG 16 | SQLite + sync queue | Docker PG 16 |
 | **Screenshots/videos** | Supabase Storage (S3) | MinIO | Local filesystem | MinIO |
-| **API collections** | Browser localStorage | Browser localStorage | Browser localStorage | Browser localStorage |
-| **API environments** | Browser localStorage | Browser localStorage | Browser localStorage | Browser localStorage |
+| **API collections** | localStorage + PG sync | localStorage + PG sync | localStorage | localStorage + PG sync |
+| **API environments** | localStorage + PG sync | localStorage + PG sync | localStorage | localStorage + PG sync |
 | **Perf test history** | Browser localStorage | Browser localStorage + PG | Browser localStorage | Browser localStorage + PG |
 | **Visual baselines** | Backend filesystem | Backend filesystem | Not available | Backend filesystem |
 | **A11y scan results** | Supabase PG | Docker PG 16 | Not available (web only) | Docker PG 16 |
-| **Mobile flows (YAML)** | Browser localStorage | Browser localStorage | Zustand + IPC | Browser localStorage |
+| **Mobile flows (YAML)** | localStorage + PG sync | localStorage + PG sync | Zustand + IPC | localStorage + PG sync |
 | **Recordings** | Supabase PG (JSONB) | Docker PG 16 | SQLite | Docker PG 16 |
 | **Action graphs** | Supabase PG | Docker PG 16 | Not available | Docker PG 16 |
 | **Element models** | Supabase PG | Docker PG 16 | Not available | Docker PG 16 |

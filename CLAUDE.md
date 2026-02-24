@@ -2,7 +2,7 @@
 
 > **This file is the starting reference for all Claude sessions working on this codebase.**
 > It must be kept up-to-date whenever changes are made to components, APIs, or architecture.
-> Last updated: 2026-02-23
+> Last updated: 2026-02-24
 
 ---
 
@@ -169,7 +169,7 @@ QAAI (also branded as Flowstral/ArisTrace) is an enterprise QA automation platfo
 | `src/modules/test-management/` | `routers/test_management/` | Test lifecycle (create → execute → report) |
 | `src/modules/api-testing/` | `routers/api_testing/` | Multi-protocol API testing |
 | `src/modules/performance/` | `routers/performance/` | Load testing, virtual users |
-| `src/modules/mobile-testing/` | — | Mobile testing via Maestro CLI |
+| `src/modules/mobile-testing/` | `routers/test_management/` | Mobile testing via Maestro CLI + server persistence |
 | `src/modules/accessibility/` | `routers/accessibility/` | WCAG compliance scanning |
 | `src/modules/visual-testing/` | `routers/visual_testing/` | Visual regression testing |
 | `src/modules/salesforce/` | `routers/salesforce/` | Salesforce-specific tools |
@@ -429,11 +429,24 @@ Subdirectories: `collector/`, `core/`, `detection/`, `generator/`, `handlers/`, 
 
 | File | Prefix | Purpose |
 |------|--------|---------|
-| `backend/app/routers/test_management/test_cases_crud_api.py` | `/test-cases` | Test case CRUD (16 endpoints), PostgreSQL with in-memory fallback |
+| `backend/app/routers/test_management/test_cases_crud_api.py` | `/test-cases` | Test case CRUD (20 endpoints), PostgreSQL with in-memory fallback, version control |
 | `backend/app/routers/test_management/test_plans_api.py` | `/test-plans` | Test plan management (4 endpoints) |
 | `backend/app/routers/test_management/gherkin_api.py` | `/api/gherkin` | BDD/Gherkin support (3 endpoints) |
 | `backend/app/routers/ai/ai_generation_api.py` | `/ai` | AI test generation (28 endpoints) |
 | `backend/app/routers/test_management/requirement_to_testcase_api.py` | `/api/req2tc` | Requirement-to-test-case conversion |
+| `backend/app/routers/test_management/mobile_flows_api.py` | `/api/mobile` | Mobile test flow server persistence (8 endpoints) |
+
+### Version Control (v3.13.2+)
+
+No-code test cases now have full version history with JSONB snapshots, diff computation, and non-destructive revert.
+
+**Frontend:** `src/modules/test-management/components/VersionHistoryPanel.tsx` — timeline view, color-coded change types, diff rendering, snapshot preview, revert confirmation dialog.
+
+**Key API Endpoints:**
+- `GET /test-cases/{id}/versions` — Paginated version history (newest first)
+- `GET /test-cases/{id}/versions/{version_id}` — Full JSONB snapshot for a version
+- `POST /test-cases/{id}/versions/compare` — Diff between any two versions
+- `POST /test-cases/{id}/versions/{version_id}/revert` — Non-destructive revert (creates new version of type 'restored')
 
 ### Test Generation Pipeline
 
@@ -451,6 +464,7 @@ Subdirectories: `collector/`, `core/`, `detection/`, `generator/`, `handlers/`, 
 | `backend/app/services/ai/test_case_rewrite_service.py` | Test case rewriting and formatting |
 | `backend/app/services/core/test_plan_service.py` | Test plan business logic |
 | `backend/app/services/core/test_data_service.py` | Test data management |
+| `backend/app/services/core/version_control_service.py` | Test case version control — JSONB snapshots, diff computation, non-destructive revert |
 
 ---
 
@@ -634,6 +648,18 @@ interface NetworkProfile { id, name, download_kbps, upload_kbps, latency_ms, pac
 - Deep links via `adb am start` / `xcrun simctl openurl`
 - Push notifications via `adb broadcast` / `xcrun simctl push`
 - All Advanced Tools (biometrics, geo, network, orientation, appearance, locale, font scale) wired to real device commands
+- **Server persistence** (v3.13.2+): Flows, folders, and runs sync to PostgreSQL via `/api/mobile/*` endpoints; localStorage remains offline fallback
+
+### Mobile Flow API Endpoints (v3.13.2+)
+
+- `GET /api/mobile/flows` — List all flows for a project
+- `POST /api/mobile/flows` — Create/update a flow
+- `DELETE /api/mobile/flows/{id}` — Delete a flow
+- `POST /api/mobile/sync` — Bulk sync flows/folders/runs from localStorage to PostgreSQL
+- `GET /api/mobile/folders` — List folders
+- `POST /api/mobile/folders` — Create/update a folder
+- `GET /api/mobile/runs` — List test runs
+- `POST /api/mobile/runs` — Record a test run
 
 ---
 
@@ -730,6 +756,8 @@ Key actions:
 - `openRequestInBuilder(id)` — loads request into builder with URL resolution
 - `updateCollection(id, updates)` — updates collection metadata (persists via `set()` + debounced save)
 - `_saveCollectionNow(id)` — immediate (non-debounced) save to DB + localStorage
+- `syncToServer()` — bulk sync all collections/environments from localStorage to PostgreSQL
+- `loadFromServer()` — load collections from PostgreSQL for team sharing
 
 ### Backend
 
@@ -738,6 +766,7 @@ Key actions:
 | `backend/app/routers/api_testing/enhanced_api_testing_api.py` | `/api/v2/testing` | 46 | Multi-protocol API testing (REST, SOAP, GraphQL, gRPC, Kafka, MQTT, WebSocket, AMQP) |
 | `backend/app/routers/api_testing/api_import_api.py` | `/api/import` | 9 | OpenAPI/HAR/Postman import, export, test generation |
 | `backend/app/routers/api_testing/request_chaining_api.py` | `/api/chain` | 9 | Request chaining for API testing |
+| `backend/app/routers/api_testing/collection_persistence_api.py` | `/api/v2/testing/collections` | 11 | Collection, request, folder, environment, chain server persistence + bulk sync |
 
 ### Key Backend Services
 
@@ -755,6 +784,7 @@ Key actions:
 | `OpenAPIValidator` | OpenAPI spec validation |
 | `SchemaInferenceEngine` | Auto-infer JSON schemas from responses |
 | `DataDrivenEngine` | Data-driven test execution; `create_database_source()` for DB query data sources |
+| `CollectionPersistenceService` | Server-side persistence for API collections, folders, requests, environments, chains; bulk sync from localStorage |
 
 ### Supported Protocols
 
@@ -773,6 +803,10 @@ REST, SOAP/WSDL, GraphQL, gRPC, Kafka, MQTT, WebSocket, AMQP (RabbitMQ)
 - `GET /api/v2/testing/database/{connection_id}/tables/{table_name}/columns` — Get columns for a table
 - `DELETE /api/v2/testing/database/{connection_id}` — Disconnect/remove a database connection
 - `POST /api/v2/testing/data-driven/source` — Create data-driven source (supports `source_type: "database_query"` with `connection_id`, `query`, `row_limit`)
+- `POST /api/v2/testing/collections/sync` — Bulk sync collections/environments/requests from localStorage to PostgreSQL
+- `GET /api/v2/testing/collections` — List all collections for a project
+- `POST /api/v2/testing/collections` — Create/update a collection
+- `DELETE /api/v2/testing/collections/{id}` — Delete a collection
 
 ---
 
@@ -1209,6 +1243,7 @@ PostgreSQL (primary) with **in-memory fallback**:
 - `backend/app/services/storage/postgres_direct.py` — Direct PostgreSQL
 - Auto-migration on startup via `auto_migrate.py`
 - Supabase for auth and file storage
+- 33 migrations (`supabase/migrations/001_initial_schema.sql` through `033_mobile_test_flows.sql`)
 
 ### Electron Desktop
 
@@ -1248,16 +1283,18 @@ PostgreSQL (primary) with **in-memory fallback**:
 | | cdp_recorder_api | `/cdp-recorder` | CDP recording |
 | | flowstral_api | `/api/flowstral` | Recording sessions |
 | | flowstral_engine_api | `/api/flowstral/engine` | Engine operations |
-| **test_management/** | test_cases_crud_api | `/test-cases` | Test case CRUD (16 endpoints) |
+| **test_management/** | test_cases_crud_api | `/test-cases` | Test case CRUD + version control (20 endpoints) |
 | | test_runs_api | `/test-runs` | Test execution (14 endpoints) |
 | | test_plans_api | `/test-plans` | Test plans |
 | | automation_api | `/automation` | Script conversion, execution |
 | | gherkin_api | `/api/gherkin` | BDD/Gherkin support |
 | | requirement_to_testcase_api | `/api/req2tc` | Req-to-test conversion |
 | | complex_verifications | `/api/complex-verify` | Email/PDF/file checks |
+| | mobile_flows_api | `/api/mobile` | Mobile test flow server persistence (8 endpoints) |
 | **api_testing/** | enhanced_api_testing_api | `/api/v2/testing` | Multi-protocol API testing (46 endpoints) |
 | | api_import_api | `/api/import` | OpenAPI/HAR/Postman import |
 | | request_chaining_api | `/api/chain` | Request chaining |
+| | collection_persistence_api | `/api/v2/testing/collections` | Collection server persistence + bulk sync (11 endpoints) |
 | **performance/** | performance_api | `/performance` | Load testing (80 endpoints) |
 | | protocol_recording_api | `/api/protocol-recording` | HTTP traffic capture |
 | | scale_api | `/api/v2` | Paginated queries |

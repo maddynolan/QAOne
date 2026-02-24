@@ -1517,6 +1517,82 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
             const coll = get().collections[collectionId];
             return coll?.chains || [];
           },
+
+          // ─── Server Sync ────────────────────────────────────────────────────
+
+          syncToServer: async () => {
+            try {
+              const state = get();
+              const collections = Object.values(state.collections || {}).map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                description: c.description || '',
+                base_url: c.base_url || '',
+                settings: c.settings || {},
+                requests: Object.values(c.requests || {}).map((r: any) => ({
+                  id: r.id,
+                  folder_id: r.folder_id,
+                  name: r.name,
+                  method: r.method,
+                  url: r.url,
+                  path: r.path || '',
+                  headers: r.headers || [],
+                  params: r.params || [],
+                  body: r.body || '',
+                  body_type: r.body_type || 'none',
+                  auth_type: r.auth_type,
+                  auth_config: r.auth_config || {},
+                  assertions: r.assertions || [],
+                })),
+                folders: Object.values(c.folders || {}).map((f: any) => ({
+                  id: f.id,
+                  name: f.name,
+                  parent_folder_id: f.parent_folder_id,
+                  sort_order: f.sort_order || 0,
+                })),
+              }));
+
+              const environments = Object.values(state.environments || {}).map((e: any) => ({
+                id: e.id,
+                name: e.name,
+                variables: e.variables || [],
+                is_active: e.is_active || false,
+              }));
+
+              const response = await fetch(`${API_BASE_URL}/api/v2/testing/collections/sync`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ collections, environments, chains: [] }),
+              });
+
+              if (response.ok) {
+                const result = await response.json();
+                console.log('[API Store] Server sync complete:', result);
+                return result;
+              } else {
+                console.error('[API Store] Server sync failed:', response.statusText);
+                return null;
+              }
+            } catch (err) {
+              console.error('[API Store] Server sync error:', err);
+              return null;
+            }
+          },
+
+          loadFromServer: async () => {
+            try {
+              const response = await fetch(`${API_BASE_URL}/api/v2/testing/collections`);
+              if (response.ok) {
+                const data = await response.json();
+                console.log('[API Store] Loaded from server:', data.total, 'collections');
+                return data.collections || [];
+              }
+              return [];
+            } catch (err) {
+              console.error('[API Store] Load from server error:', err);
+              return [];
+            }
+          },
         })),
         {
           name: 'api-testing-store',
