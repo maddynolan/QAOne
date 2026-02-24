@@ -1,0 +1,37 @@
+{{- if .Values.testWorkers.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "qaai.fullname" . }}-worker
+  labels:
+    {{- include "qaai.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.testWorkers.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "qaai.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "qaai.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: worker
+          image: "{{ .Values.testWorkers.image.repository }}:{{ .Values.testWorkers.image.tag }}"
+          imagePullPolicy: {{ .Values.testWorkers.image.pullPolicy | default "IfNotPresent" }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "qaai.fullname" . }}-config
+            - secretRef:
+                name: {{ include "qaai.fullname" . }}-secrets
+                optional: true
+          resources:
+            {{- toYaml .Values.testWorkers.resources | nindent 12 }}
+{{- end }}

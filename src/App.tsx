@@ -43,6 +43,9 @@ import { LicenseGate } from "./components/LicenseGate";
 // Theme Provider
 import { ThemeProvider } from "./contexts/ThemeContext";
 
+// Global Error Boundary - prevents white screen on unhandled errors
+import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
+
 // AI Provider - Global AI settings
 import { AIProvider } from "./contexts/AIContext";
 
@@ -107,6 +110,7 @@ import Traceability from "./modules/platform/pages/Traceability";
 import CICDIntegration from "./modules/platform/pages/CICDIntegration";
 import SecretsVault from "./modules/platform/pages/SecretsVault";
 import ProjectManagement from "./modules/platform/pages/ProjectManagement";
+import AuditLogPage from "./modules/platform/pages/AuditLogPage";
 import FrameworkAnalyzer from "./modules/platform/pages/FrameworkAnalyzer";
 import CodeAlchemy from "./modules/platform/pages/CodeAlchemy";
 import DataDependencyGraph from "./modules/platform/pages/DataDependencyGraph";
@@ -224,6 +228,7 @@ const App = () => {
   }, []);
 
   return (
+    <GlobalErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AIProvider>
@@ -425,6 +430,9 @@ const App = () => {
                   <Route path="/projects" element={<ProjectManagement />} />
                   <Route path="/project-boards" element={<ProjectManagement />} />
                   
+                  {/* Audit Log — Enterprise compliance */}
+                  <Route path="/audit-log" element={<AuditLogPage />} />
+
                   {/* Settings */}
                   <Route path="/settings" element={<Settings />} />
                 </Route>
@@ -459,6 +467,7 @@ const App = () => {
         </AIProvider>
       </ThemeProvider>
     </QueryClientProvider>
+    </GlobalErrorBoundary>
   );
 };
 

@@ -3,17 +3,14 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'qa-ai-backend'
+  - job_name: 'flowstral-backend'
+    metrics_path: /metrics
     static_configs:
-      - targets: ['host.docker.internal:8000']  # Backend API
+      - targets: ['backend:8000']
         labels:
-          service: 'qa-ai-backend'
-          environment: 'production'
+          service: 'flowstral-api'
+    scrape_interval: 10s
 
-  - job_name: 'qa-ai-frontend'
+  - job_name: 'node-exporter'
     static_configs:
-      - targets: ['host.docker.internal:8080']  # Frontend (if it exposes metrics)
-        labels:
-          service: 'qa-ai-frontend'
-          environment: 'production'
-
+      - targets: ['node-exporter:9100']

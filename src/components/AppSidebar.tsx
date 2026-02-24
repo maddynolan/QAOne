@@ -3,7 +3,7 @@ import {
   BookOpen, Sparkles, Plug, Code, FileCode, Zap, Scan, BarChart3, Activity,
   TrendingUp, MousePointerClick, GitBranch, Workflow, ChevronDown, ChevronRight, 
   Layers, Users, Calendar, Compass, TestTube, FlaskConical, Database, Shield, Map,
-  Video, Target, Gauge, Rocket, Wrench, Circle, Cloud
+  Video, Target, Gauge, Rocket, Wrench, Circle, Cloud, ClipboardList
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useState, useEffect, useMemo } from "react";
@@ -129,6 +129,7 @@ const navigationGroups = [
       { title: "Secrets Vault", url: "/secrets", icon: Shield },
       { title: "Coverage Map", url: "/coverage", icon: Map },
       { title: "Data Flow", url: "/data-flow", icon: Workflow },
+      { title: "Audit Log", url: "/audit-log", icon: ClipboardList, description: "Activity & compliance trail" },
       { title: "APM Config", url: "/apm", icon: Activity },
       { title: "Settings", url: "/settings", icon: Settings },
     ],
