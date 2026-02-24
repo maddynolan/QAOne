@@ -176,6 +176,10 @@ app.add_middleware(TenantContextMiddleware)
 from app.middleware.rbac_middleware import RBACMiddleware
 app.add_middleware(RBACMiddleware)
 
+# Rate Limiting Middleware (enterprise security — protects against DDoS/abuse)
+from app.middleware.rate_limit_middleware import RateLimitMiddleware
+app.add_middleware(RateLimitMiddleware)
+
 # CORS middleware — MUST be added LAST so it's the outermost middleware.
 # This ensures CORS headers are present on ALL responses, including error responses
 # from inner middleware/routes. Without this, BaseHTTPMiddleware exceptions can
@@ -767,6 +771,10 @@ try:
     logger.info("AI Testing API registered")
 except Exception as e:
     logger.warning(f"AI Testing API not loaded (non-critical): {e}")
+
+# Audit Trail API - Enterprise compliance logging
+from app.routers.platform.audit_api import router as audit_router
+app.include_router(audit_router)
 
 # AI Enhancements API - False positive persistence, flaky step detection, AI failure explainer
 # Independent module: works with or without AI keys, never blocks existing flows

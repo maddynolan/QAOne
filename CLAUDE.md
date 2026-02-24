@@ -2,7 +2,7 @@
 
 > **This file is the starting reference for all Claude sessions working on this codebase.**
 > It must be kept up-to-date whenever changes are made to components, APIs, or architecture.
-> Last updated: 2026-02-21
+> Last updated: 2026-02-23
 
 ---
 
@@ -67,7 +67,7 @@ QAAI (also branded as Flowstral/ArisTrace) is an enterprise QA automation platfo
 | Browser Automation | Playwright 1.48 |
 | Desktop | Electron 28 (Win/Mac/Linux) |
 | Extension | Chrome Extension Manifest V3 |
-| Deployment | Railway + Vercel + Supabase (SaaS) / Docker + K8s + Helm (on-prem) |
+| Deployment | Railway + Vercel + Supabase (SaaS) / Docker + K8s + Helm (on-prem) / GitHub Actions CI/CD |
 
 ### Repository Structure
 
@@ -107,7 +107,7 @@ QAAI (also branded as Flowstral/ArisTrace) is an enterprise QA automation platfo
 │   │   ├── dashboard/            # Dashboard & analytics
 │   │   │   └── pages/            # Dashboard, Analytics, Results
 │   │   └── platform/             # Cross-cutting (settings, integrations, defects, etc.)
-│   │       ├── pages/            # Settings, Integrations, Defects, Requirements, etc. (23 pages)
+│   │       ├── pages/            # Settings, Integrations, Defects, Requirements, AuditLog, etc. (24 pages)
 │   │       └── components/       # PluginManagement, WorkspaceSwitcher
 │   ├── pages/                    # Landing page + marketing pages only
 │   │   ├── LandingPage.tsx
@@ -117,8 +117,9 @@ QAAI (also branded as Flowstral/ArisTrace) is an enterprise QA automation platfo
 │   │   ├── enterprise/           # Enterprise UI components
 │   │   ├── StreamlinedLayout.tsx  # Main app layout
 │   │   ├── AppSidebar.tsx        # Navigation sidebar
+│   │   ├── GlobalErrorBoundary.tsx # App-level error boundary
 │   │   ├── LicenseGate.tsx       # License enforcement wrapper
-│   │   └── ProtectedRoute.tsx    # Auth route guard
+│   │   └── ProtectedRoute.tsx    # Auth + RBAC route guard
 │   ├── stores/                   # Shared Zustand stores (testDataStore)
 │   ├── contexts/                 # ThemeContext, AIContext, AuthContext
 │   ├── hooks/                    # useExecutionWebSocket, custom hooks
@@ -141,13 +142,21 @@ QAAI (also branded as Flowstral/ArisTrace) is an enterprise QA automation platfo
 │       │   └── integrations/     # jira_webhook
 │       ├── services/             # 295+ services across 26 subdirectories
 │       ├── schemas/              # Pydantic models
-│       └── middleware/           # RBAC, tenant, trace logging
+│       └── middleware/           # RBAC, tenant, trace logging, rate limiting
 ├── flowstral-engine/             # TypeScript recording/execution engine
 │   └── src/                      # FlowstralEngine, ElementCollector, PlaywrightScriptGenerator
 ├── flowstral-extension/          # Chrome extension (MV3)
 │   └── src/                      # background, content, sidepanel, lib
 ├── flowstral-desktop/            # Electron desktop app
 │   └── src/main/                 # Main process, embedded browser, test executor
+├── nginx/                        # Nginx security configuration
+│   └── default.conf              # OWASP headers, gzip, rate limiting, API proxy
+├── helm/qaai/                    # Kubernetes Helm chart
+│   ├── values.yaml               # Chart values (replicas, resources, ingress)
+│   └── templates/                # 8 K8s templates (deployments, services, ingress)
+├── prometheus/                   # Prometheus scrape config
+├── grafana/                      # Grafana datasources + dashboards
+├── .github/workflows/            # CI/CD pipelines (ci, staging, prod, security)
 ├── docs/                         # 270+ documentation files
 └── supabase/                     # Database migrations
 ```
@@ -181,6 +190,10 @@ Each module has its own `index.ts` barrel export and `README.md` documentation.
 | `backend/requirements.txt` | Python dependencies |
 | `docker-compose.yml` | PostgreSQL dev setup |
 | `docker-compose.full.yml` | Full production stack |
+| `nginx/default.conf` | Nginx security headers + reverse proxy config |
+| `helm/qaai/values.yaml` | Kubernetes Helm chart values |
+| `.github/workflows/ci.yml` | CI pipeline (build + test + Docker) |
+| `prometheus/prometheus.yml` | Prometheus scrape configuration |
 
 ### Running Locally
 
@@ -1057,9 +1070,30 @@ interface ComparisonResult { passed, diff_percentage, diff_pixel_count, total_pi
 
 - **JWT Tokens** via python-jose
 - **RBAC Middleware** — decorator-based permission checks: `@require_permission("test_cases:create")`
+- **Frontend RBAC** — `ProtectedRoute` with role hierarchy enforcement (owner > admin > member > viewer), `getUserRoleInOrg()`, `hasRequiredRole()`, inline UnauthorizedPage redirect
 - **Multi-Tenancy** — tenant isolation via TenantContextMiddleware
 - **OAuth2** — Salesforce and external integrations
-- **Middleware Stack** (outermost to innermost): CORS → RBAC → Tenant → TraceLogging
+- **Rate Limiting** — `RateLimitMiddleware` with sliding window (100/min default, 10/min auth, 20/min AI endpoints), X-RateLimit headers, X-Forwarded-For support
+- **Middleware Stack** (outermost to innermost): CORS → RateLimit → RBAC → Tenant → TraceLogging
+
+### Audit Trail
+
+- **Backend Service**: `backend/app/services/core/audit_service.py` — in-memory deque (10K max) with optional PostgreSQL persistence
+- **API Router**: `backend/app/routers/platform/audit_api.py` — 4 endpoints (`GET/POST /api/audit/logs`, `GET /api/audit/summary`, `GET /api/audit/actions`)
+- **Frontend UI**: `src/modules/platform/pages/AuditLogPage.tsx` — filterable table, summary cards, CSV export, pagination
+- **Navigation**: Available via sidebar under Configure → "Audit Log"
+- **Route**: `/audit-log`
+
+### Error Handling
+
+- **Global Error Boundary**: `src/components/GlobalErrorBoundary.tsx` — React class component wrapping entire `<App />`, catches unhandled rendering errors, shows friendly recovery UI with "Reload App" / "Try Again" buttons, optional error reporting to backend `/api/errors`
+- **Tab Error Boundary**: `TabErrorBoundary` pattern for isolated tab failures (API Testing, etc.)
+
+### Container Security
+
+- **Docker**: All containers run as non-root user `appuser` (UID 1001) per CIS Benchmark 4.1
+- **Nginx**: OWASP security headers (X-Frame-Options DENY, CSP, HSTS, X-Content-Type-Options nosniff, Referrer-Policy), rate limiting zones, blocked sensitive paths
+- **Frontend Dockerfile**: Multi-stage build (Node 20 → nginx:alpine), COPY `nginx/default.conf`, non-root user
 
 ### AI/LLM Integration
 
@@ -1198,7 +1232,7 @@ PostgreSQL (primary) with **in-memory fallback**:
 3. **State**: Zustand stores co-located with their modules (e.g., `src/modules/api-testing/store/`), middleware: `devtools` + `persist` + `immer`
 4. **Styling**: Tailwind CSS utility classes, CSS variables for theming, dark mode via `dark:` prefix
 5. **API calls**: Axios with centralized base URL from `api-config.ts`
-6. **Error boundaries**: TabErrorBoundary pattern for isolated failures
+6. **Error boundaries**: GlobalErrorBoundary wraps entire app; TabErrorBoundary for isolated tab failures
 7. **License gating**: `LicenseGate` wrapper for enterprise features
 8. **Lazy loading**: Heavy pages (API Testing) lazy-loaded to prevent crash propagation
 9. **In-memory fallback**: All DB operations fall back to in-memory when PostgreSQL unavailable
@@ -1253,6 +1287,7 @@ PostgreSQL (primary) with **in-memory fallback**:
 | | project_management_api | `/api/projects` | Project management |
 | | framework_analyzer_api | `/api/framework` | Framework detection |
 | | code_alchemy_api | `/api/code-alchemy` | Repository import |
+| | audit_api | `/api/audit` | Audit trail logging & queries (4 endpoints) |
 
 ---
 
@@ -1273,6 +1308,9 @@ PostgreSQL (primary) with **in-memory fallback**:
 | Salesforce | `docs/FEATURE-SALESFORCE.md` |
 | Marketing / Analytics / SEO | `docs/FEATURE-MARKETING-ANALYTICS.md` |
 | Platform Master | `docs/PLATFORM_MASTER_DOCUMENT.md` |
+| Enterprise Security | `docs/ENTERPRISE-SECURITY-GUIDE.md` |
+| On-Prem Deployment | `docs/ON-PREM-DEPLOYMENT-RUNBOOK.md` |
+| SaaS Deployment | `docs/SAAS-DEPLOYMENT-GUIDE.md` |
 
 **When updating feature docs:**
 1. Update the relevant `FEATURE-*.md` with new/changed functionality

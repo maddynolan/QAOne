@@ -1,0 +1,65 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Monday 6 AM UTC
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  npm-audit:
+    name: NPM Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run npm audit (production deps)
+        run: npm audit --production || true
+
+  pip-audit:
+    name: Python Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit
+        run: pip-audit -r backend/requirements.txt || true
+
+  trivy:
+    name: Container Image Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build backend image for scanning
+        run: docker build -f backend/Dockerfile -t flowstral-backend:scan ./backend
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: flowstral-backend:scan
+          format: table
+          severity: CRITICAL,HIGH
