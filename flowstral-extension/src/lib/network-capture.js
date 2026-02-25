@@ -16,6 +16,33 @@
  */
 
 class NetworkCapture {
+  // CWS Compliance: Headers that must be masked to protect user privacy
+  static SENSITIVE_HEADERS = new Set([
+    'authorization',
+    'cookie',
+    'set-cookie',
+    'x-api-key',
+    'x-auth-token',
+    'x-csrf-token',
+    'x-xsrf-token',
+    'proxy-authorization',
+    'www-authenticate',
+    'x-forwarded-for',
+  ]);
+
+  static maskSensitiveHeaders(headers) {
+    if (!headers || typeof headers !== 'object') return headers;
+    const masked = {};
+    for (const [key, value] of Object.entries(headers)) {
+      if (NetworkCapture.SENSITIVE_HEADERS.has(key.toLowerCase())) {
+        masked[key] = '[MASKED]';
+      } else {
+        masked[key] = value;
+      }
+    }
+    return masked;
+  }
+
   constructor() {
     this.enabled = false;
     this.requests = new Map();  // requestId -> request data
@@ -33,15 +60,17 @@ class NetworkCapture {
     this._boundOnCompleted = this._onCompleted.bind(this);
     this._boundOnError = this._onError.bind(this);
     
-    // Correlation patterns for auto-detection
-    this.CORRELATION_PATTERNS = [
-      { name: 'session_id', patterns: [/"session[_-]?id"\s*:\s*"([^"]+)"/gi, /sessionid=([^&;]+)/gi] },
-      { name: 'auth_token', patterns: [/"(?:access_)?token"\s*:\s*"([^"]+)"/gi, /Bearer\s+([^\s"]+)/gi] },
-      { name: 'csrf_token', patterns: [/"csrf[_-]?token"\s*:\s*"([^"]+)"/gi, /X-CSRF-TOKEN[:\s]+([^\s"]+)/gi] },
-      { name: 'request_id', patterns: [/"request[_-]?id"\s*:\s*"([^"]+)"/gi, /X-Request-ID[:\s]+([^\s"]+)/gi] },
-      { name: 'user_id', patterns: [/"user[_-]?id"\s*:\s*"([^"]+)"/gi] },
-      { name: 'api_key', patterns: [/"api[_-]?key"\s*:\s*"([^"]+)"/gi, /X-API-KEY[:\s]+([^\s"]+)/gi] },
-    ];
+    // CWS Compliance: Correlation pattern detection disabled in extension
+    // These patterns detect auth tokens/API keys which violates CWS privacy policy
+    // Full correlation detection is available in the Desktop app only
+    this.CORRELATION_PATTERNS = [];
+    // Original patterns preserved for Desktop app:
+    // { name: 'session_id', patterns: [/"session[_-]?id"\s*:\s*"([^"]+)"/gi, /sessionid=([^&;]+)/gi] },
+    // { name: 'auth_token', patterns: [/"(?:access_)?token"\s*:\s*"([^"]+)"/gi, /Bearer\s+([^\s"]+)/gi] },
+    // { name: 'csrf_token', patterns: [/"csrf[_-]?token"\s*:\s*"([^"]+)"/gi, /X-CSRF-TOKEN[:\s]+([^\s"]+)/gi] },
+    // { name: 'request_id', patterns: [/"request[_-]?id"\s*:\s*"([^"]+)"/gi, /X-Request-ID[:\s]+([^\s"]+)/gi] },
+    // { name: 'user_id', patterns: [/"user[_-]?id"\s*:\s*"([^"]+)"/gi] },
+    // { name: 'api_key', patterns: [/"api[_-]?key"\s*:\s*"([^"]+)"/gi, /X-API-KEY[:\s]+([^\s"]+)/gi] },
     
     // Request types to capture (filter out static assets by default)
     this.captureTypes = new Set(['xmlhttprequest', 'fetch', 'websocket', 'document']);
@@ -227,8 +256,8 @@ class NetworkCapture {
     const request = this.requests.get(details.requestId);
     if (!request) return;
     
-    request.requestHeaders = this._headersToObject(details.requestHeaders);
-    
+    request.requestHeaders = NetworkCapture.maskSensitiveHeaders(this._headersToObject(details.requestHeaders));
+
     // Extract auth/session info for correlation
     this._detectCorrelations('request_headers', request.requestHeaders);
   }
@@ -241,9 +270,9 @@ class NetworkCapture {
     const request = this.requests.get(details.requestId);
     if (!request) return;
     
-    request.responseHeaders = this._headersToObject(details.responseHeaders);
+    request.responseHeaders = NetworkCapture.maskSensitiveHeaders(this._headersToObject(details.responseHeaders));
     request.statusCode = details.statusCode;
-    
+
     // Extract tokens from response headers
     this._detectCorrelations('response_headers', request.responseHeaders);
   }

@@ -1031,9 +1031,16 @@
      * Scan dropdown menus by hovering to reveal hidden items
      */
     async scanDropdownMenus() {
+      // CWS Compliance: Auto-scanning dropdowns disabled in extension
+      // This feature automatically clicks/hovers UI elements which could trigger side effects
+      // Use manual scanning via the sidepanel "Scan Elements" button instead
+      // Desktop app retains full auto-scanning capability
+      console.log('[Flowstral] Auto dropdown scanning disabled in extension for CWS compliance');
+      return { dropdowns: [], totalItemsFound: 0 };
+
       const menuItems = [];
       const pageAnalyzer = this.pageAnalyzer;
-      
+
       try {
         // Find all potential menu triggers (dropdown buttons, nav items with submenus)
         const menuTriggers = pageAnalyzer.deepQuery([
@@ -2183,10 +2190,14 @@
         // This helps with Salesforce LWC and other custom elements
         const selector = this.smartSelector.getBestSelector(element);
         const elementAttrs = this.getElementAttributes(element);
-        const value = element.value || element.getAttribute('value') || '';
-        
+        let value = element.value || element.getAttribute('value') || '';
+
         // SECURITY: Check if this is a sensitive field
         const isSensitive = this.isSensitiveField(element, type, elementAttrs);
+        // CWS Compliance: Mask sensitive field values to protect user privacy
+        if (isSensitive) {
+          value = '[MASKED]';
+        }
         const displayValue = isSensitive ? '••••••••' : value;
         
         // Only record if we have a meaningful value change
@@ -2580,14 +2591,16 @@
         
         // SECURITY: Detect sensitive fields and mask the value for display
         const isSensitive = this.isSensitiveField(element, type, elementAttrs);
+        // CWS Compliance: Mask sensitive field values to protect user privacy
+        const maskedValue = isSensitive ? '[MASKED]' : this.pendingInput.value;
         const displayValue = isSensitive ? '••••••••' : this.pendingInput.value;
-        
+
         // Check if we already have a fill action on the SAME element - update it instead of creating new
         const existingFillIndex = this.findExistingFillAction(this.pendingInput.selector);
-        
+
         if (existingFillIndex >= 0) {
           // Update existing fill action with new value instead of adding duplicate
-          this.actions[existingFillIndex].value = this.pendingInput.value;
+          this.actions[existingFillIndex].value = maskedValue;
           this.actions[existingFillIndex].displayValue = displayValue;
           this.actions[existingFillIndex].isSensitive = isSensitive;
           this.actions[existingFillIndex].timestamp = Date.now(); // Update timestamp
@@ -2605,7 +2618,7 @@
           this.addAction({
             type: 'fill',
             selector: this.pendingInput.selector,
-            value: this.pendingInput.value,
+            value: maskedValue,          // CWS Compliance: actual value masked for sensitive fields
             displayValue: displayValue,  // Masked value for UI display
             isSensitive: isSensitive,    // Flag for security handling
             timestamp: this.pendingInput.startTime,

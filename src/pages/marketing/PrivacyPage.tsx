@@ -222,6 +222,37 @@ You can manage cookie preferences through:
 **Do Not Track:**
 We honor Do Not Track browser signals and do not track users who have enabled this setting.`
   },
+  {
+    id: 'extension',
+    icon: Globe,
+    title: '8. Chrome Extension & Browser Recorder',
+    content: `**What the Extension Collects:**
+The Flowstral Recorder browser extension captures user interactions (clicks, navigation, form fills) on web pages you choose to record. This data is used solely to generate automated test scripts.
+
+**Sensitive Data Masking:**
+- Password fields and sensitive inputs are automatically masked as [MASKED] and never stored or transmitted
+- HTTP headers containing authentication tokens (Authorization, Cookie, Set-Cookie, API keys) are automatically masked
+- Credit card numbers, SSNs, and other sensitive patterns are never captured
+
+**Network Traffic (Optional):**
+If you enable network capture, the extension records HTTP requests and responses for protocol-level testing. Sensitive headers are masked automatically. Full unmasked network capture is only available in the Flowstral Desktop app.
+
+**Screenshots (Optional):**
+When using AI-powered test healing, screenshots may be sent to our backend for analysis. You will be notified before any screenshot is transmitted.
+
+**Data Storage:**
+- Recording data is stored in your browser's local storage
+- Data is sent to your configured Flowstral backend server only when you choose to save or sync
+- No data is sent to third parties without your explicit action
+
+**Permissions:**
+- The extension requests access to web pages only when you activate recording
+- Network capture requires optional permission and can be disabled at any time
+- All permissions can be revoked through Chrome's extension settings
+
+**Data Deletion:**
+Uninstalling the extension removes all locally stored recording data. Data synced to your Flowstral backend follows the retention policy in Section 6.`
+  },
 ];
 
 export default function PrivacyPage() {

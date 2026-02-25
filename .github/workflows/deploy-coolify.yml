@@ -1,0 +1,96 @@
+name: Deploy to Coolify
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ghcr.io/${{ github.repository }}/backend
+  FRONTEND_IMAGE: ghcr.io/${{ github.repository }}/frontend
+  WORKER_IMAGE: ghcr.io/${{ github.repository }}/worker
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine tags
+        id: tags
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ steps.tags.outputs.tag }}
+            ${{ env.BACKEND_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.frontend
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ steps.tags.outputs.tag }}
+            ${{ env.FRONTEND_IMAGE }}:latest
+          build-args: |
+            VITE_API_BASE_URL=${{ vars.PRODUCTION_API_URL || 'https://api.flowstral.com' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Worker
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: backend/Dockerfile.worker
+          push: true
+          tags: |
+            ${{ env.WORKER_IMAGE }}:${{ steps.tags.outputs.tag }}
+            ${{ env.WORKER_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'release'
+    steps:
+      - name: Trigger Coolify Deployment
+        run: |
+          # Trigger backend redeploy
+          curl -s -X POST \
+            "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            || echo "Coolify webhook call completed"
+
+          echo "Deployment triggered. Coolify will pull new images and restart services."

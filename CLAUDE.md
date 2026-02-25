@@ -67,7 +67,7 @@ QAAI (also branded as Flowstral/ArisTrace) is an enterprise QA automation platfo
 | Browser Automation | Playwright 1.48 |
 | Desktop | Electron 28 (Win/Mac/Linux) |
 | Extension | Chrome Extension Manifest V3 |
-| Deployment | Railway + Vercel + Supabase (SaaS) / Docker + K8s + Helm (on-prem) / GitHub Actions CI/CD |
+| Deployment | Hetzner + Coolify (recommended) / Railway + Vercel + Supabase (SaaS) / Docker + K8s + Helm (on-prem) / GitHub Actions CI/CD |
 
 ### Repository Structure
 
@@ -111,7 +111,7 @@ QAAI (also branded as Flowstral/ArisTrace) is an enterprise QA automation platfo
 │   │       └── components/       # PluginManagement, WorkspaceSwitcher
 │   ├── pages/                    # Landing page + marketing pages only
 │   │   ├── LandingPage.tsx
-│   │   └── marketing/            # SmartRecorder, Pricing, About, Compare, CostCalculator, Blog, etc.
+│   │   └── marketing/            # SmartRecorder, Pricing, About, Compare, CostCalculator, Blog, Privacy, etc.
 │   ├── components/               # Shared layout & UI components
 │   │   ├── ui/                   # 49 shadcn/ui primitives
 │   │   ├── enterprise/           # Enterprise UI components
@@ -140,6 +140,7 @@ QAAI (also branded as Flowstral/ArisTrace) is an enterprise QA automation platfo
 │       │   ├── exploration/      # exploration_api, nexus_exploratory_api, blaze_api, etc.
 │       │   ├── platform/         # health_api, dashboard_api, secrets_api, license_api, etc.
 │       │   └── integrations/     # jira_webhook
+│       ├── scripts/              # CLI scripts (seed_demo_data.py)
 │       ├── services/             # 295+ services across 26 subdirectories
 │       ├── schemas/              # Pydantic models
 │       └── middleware/           # RBAC, tenant, trace logging, rate limiting
@@ -156,7 +157,10 @@ QAAI (also branded as Flowstral/ArisTrace) is an enterprise QA automation platfo
 │   └── templates/                # 8 K8s templates (deployments, services, ingress)
 ├── prometheus/                   # Prometheus scrape config
 ├── grafana/                      # Grafana datasources + dashboards
-├── .github/workflows/            # CI/CD pipelines (ci, staging, prod, security)
+├── deploy/                       # Deployment configurations
+│   ├── coolify/                  # Coolify setup guide + env template
+│   └── pgbouncer/                # PgBouncer connection pooling config
+├── .github/workflows/            # CI/CD pipelines (ci, staging, prod, security, deploy-coolify)
 ├── docs/                         # 270+ documentation files
 └── supabase/                     # Database migrations
 ```
@@ -193,6 +197,9 @@ Each module has its own `index.ts` barrel export and `README.md` documentation.
 | `nginx/default.conf` | Nginx security headers + reverse proxy config |
 | `helm/qaai/values.yaml` | Kubernetes Helm chart values |
 | `.github/workflows/ci.yml` | CI pipeline (build + test + Docker) |
+| `.github/workflows/deploy-coolify.yml` | Coolify CD pipeline (build + push GHCR + webhook deploy) |
+| `deploy/coolify/.env.example` | Coolify environment template (DATABASE_URL, Redis, S3, AI keys) |
+| `deploy/pgbouncer/pgbouncer.ini` | PgBouncer connection pooling (transaction mode, 200 max clients) |
 | `prometheus/prometheus.yml` | Prometheus scrape configuration |
 
 ### Running Locally
@@ -354,15 +361,27 @@ Subdirectories: `collector/`, `core/`, `detection/`, `generator/`, `handlers/`, 
 
 | File | Purpose |
 |------|---------|
-| `manifest.json` | MV3 manifest — permissions: activeTab, storage, tabs, scripting, sidePanel, webRequest |
-| `src/background/background.js` | Service worker — uses centralized URLs from api-config.js |
-| `src/content/content.js` | Content script — DOM event capture, auto-generates action IDs |
+| `manifest.json` | MV3 manifest — permissions: activeTab, storage, tabs, scripting, sidePanel; optional: webRequest |
+| `src/background/background.js` | Service worker — centralized URLs, HTTPS enforcement for non-localhost backends |
+| `src/content/content.js` | Content script — DOM event capture, auto-generates action IDs, password masking |
 | `src/lib/api-config.js` | Centralized URL config — reads serverUrl/frontendUrl from chrome.storage.local |
 | `src/lib/ai-enhancements.js` | AI API client — autoFixStep, saveFalsePositive, manualAssist (mirrors aiEnhancements.ts) |
 | `src/lib/recorder-engine.js` | Core recording logic |
+| `src/lib/network-capture.js` | Network traffic capture — sensitive header masking (Authorization, Cookie, etc.) |
 | `src/lib/action-coalescer-browser.js` | Event coalescing in browser |
 | `src/sidepanel/sidepanel.html` | Side panel UI — 5 visible tabs: Record, Suggest, SF, Script, Run |
 | `src/sidepanel/sidepanel.js` | SidebarController — recording, AI fix/flag/manual buttons per step, Open in Desktop |
+| `PRIVACY_POLICY.md` | Extension privacy policy (required for Chrome Web Store) |
+
+**Chrome Web Store Compliance (v3.13.3+):**
+- `optional_host_permissions` restricted from `<all_urls>` to `["https://*/*", "http://localhost/*", "http://127.0.0.1/*"]`
+- Sensitive headers masked in network captures: Authorization, Cookie, Set-Cookie, X-API-Key, X-Auth-Token, X-CSRF-Token → `[MASKED]`
+- Correlation patterns (auto-detection of API keys/tokens) disabled in extension, kept in Desktop app
+- Password fields and sensitive inputs masked as `[MASKED]` in recorded actions
+- Auto-dropdown scanning disabled (was auto-triggering clicks on page elements)
+- Backend URL validation enforces HTTPS for non-localhost URLs
+- Privacy policy linked from manifest.json `homepage_url` and web-hosted at `/privacy` (section 8)
+- Full unmasked HAR/network capture only available in Desktop app
 
 **Extension-Desktop Sync (v3.10.5+):**
 - All URLs centralized via `api-config.js` (no more hardcoded localhost)
@@ -1220,6 +1239,13 @@ Marketing pages live in `src/pages/marketing/` and are public (no auth required)
 - Featured posts section for posts with `featured: true`
 - Exported `BlogPost` interface and `blogPosts` array for reuse
 
+**Privacy Policy** (`PrivacyPage.tsx`, route: `/privacy`):
+- 8-section privacy policy covering: data collection, usage, sharing, security, GDPR/CCPA rights, retention, cookies, Chrome Extension
+- Section 8 covers Chrome Extension & Browser Recorder: what data is collected, sensitive data masking, network traffic capture (optional), screenshots (optional), data storage, permissions, deletion
+- Sidebar navigation with sticky positioning and scroll-to-section
+- Trust badges: GDPR Compliant, CCPA Compliant, AES-256 Encrypted, SOC 2 (In Progress)
+- Required for Chrome Web Store submission (linked from `manifest.json` `homepage_url`)
+
 **SEO Infrastructure:**
 - `index.html` — Enhanced meta tags (title, description, keywords, canonical URL), Open Graph, Twitter Card, Schema.org structured data (`SoftwareApplication` + `Organization`)
 - `public/sitemap.xml` — 28 URLs covering marketing, product, comparison, tools, and legal pages
@@ -1241,9 +1267,12 @@ Marketing pages live in `src/pages/marketing/` and are public (no auth required)
 PostgreSQL (primary) with **in-memory fallback**:
 - `backend/app/services/storage/database.py` — Unified client
 - `backend/app/services/storage/postgres_direct.py` — Direct PostgreSQL
-- Auto-migration on startup via `auto_migrate.py`
+- Auto-migration on startup via `auto_migrate.py` (core tables + file-based migrations)
+- Demo data seeding via `SEED_DEMO_DATA=true` env var (auto-triggered in `auto_migrate.py`)
+- `backend/app/scripts/seed_demo_data.py` — Idempotent seed script (fixed UUIDs + ON CONFLICT DO UPDATE): 1 org, 3 projects, 3 users, 50 test cases, 20 runs, 10 defects, 8 requirements, 5 API collections, 3 environments, 2 a11y scans, 3 perf runs
 - Supabase for auth and file storage
 - 33 migrations (`supabase/migrations/001_initial_schema.sql` through `033_mobile_test_flows.sql`)
+- PgBouncer for connection pooling at scale (`deploy/pgbouncer/pgbouncer.ini`)
 
 ### Electron Desktop
 
