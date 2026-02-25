@@ -13,19 +13,22 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Play, 
-  Square, 
-  CheckCircle2, 
-  XCircle, 
+import { useAI } from '@/contexts/AIContext';
+import {
+  Play,
+  Square,
+  CheckCircle2,
+  XCircle,
   AlertTriangle,
+  AlertCircle,
   Loader2,
   Download,
   MessageSquare,
   Eye,
   Sparkles,
   Zap,
-  RefreshCw
+  RefreshCw,
+  Settings
 } from 'lucide-react';
 
 // Types
@@ -69,6 +72,8 @@ const API_BASE = API_BASE_URL;
 console.log('[AIChatTesting] API_BASE =', API_BASE, 'hostname =', window.location.hostname);
 
 export function AIChatTesting() {
+  const { config: aiConfig } = useAI();
+  const aiAvailable = aiConfig.enabled && aiConfig.hasApiKey;
   const [input, setInput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
   const [currentPhase, setCurrentPhase] = useState('');
@@ -392,23 +397,42 @@ Looking at your screenshot, it shows "Access Denied" - Salesforce may be blockin
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {!aiAvailable && (
+            <div className="mb-4 p-4 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                    AI is not configured
+                  </p>
+                  <p className="text-sm text-amber-600/80 dark:text-amber-400/80 mt-1">
+                    AI Chat Testing requires an AI provider and API key to function.
+                  </p>
+                  <a
+                    href="/settings?tab=ai"
+                    className="inline-flex items-center gap-1 mt-2 text-sm font-medium text-amber-700 dark:text-amber-300 hover:underline"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    Configure AI in Settings
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Describe what you want to test in plain English...
-
-Examples:
-• Test login on https://myapp.com with valid and invalid credentials
-• Check if the shopping cart works properly
-• Verify that users can complete the checkout process
-• Test the search functionality with different queries"
+            placeholder={!aiAvailable
+              ? "AI must be configured before you can start testing..."
+              : "Describe what you want to test in plain English...\n\nExamples:\n\u2022 Test login on https://myapp.com with valid and invalid credentials\n\u2022 Check if the shopping cart works properly\n\u2022 Verify that users can complete the checkout process\n\u2022 Test the search functionality with different queries"
+            }
             rows={5}
             className="text-lg mb-4 resize-none"
-            disabled={isRunning}
+            disabled={isRunning || !aiAvailable}
           />
-          
+
           {/* Quick Examples */}
-          {!isRunning && !input && (
+          {!isRunning && !input && aiAvailable && (
             <div className="mb-4">
               <p className="text-sm text-muted-foreground mb-2">Try an example:</p>
               <div className="flex flex-wrap gap-2">
@@ -426,20 +450,21 @@ Examples:
               </div>
             </div>
           )}
-          
+
           <div className="flex gap-3">
             {!isRunning ? (
-              <Button 
-                onClick={startTesting} 
-                disabled={!input.trim()}
+              <Button
+                onClick={startTesting}
+                disabled={!input.trim() || !aiAvailable}
                 size="lg"
                 className="flex-1 h-12 text-lg"
+                title={!aiAvailable ? "Configure AI in Settings to enable testing" : undefined}
               >
                 <Zap className="w-5 h-5 mr-2" />
                 Start AI Testing
               </Button>
             ) : (
-              <Button 
+              <Button
                 onClick={stopTesting}
                 variant="destructive"
                 size="lg"

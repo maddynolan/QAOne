@@ -219,29 +219,26 @@ export function AIFlowExplorer({ isOpen, onClose, currentUrl, onSaveTests }: AIF
       return;
     }
     
-    // In Electron, backend may have API key - use special marker
-    const apiKeyToUse = config.apiKey || (isElectron ? '***env***' : '');
-    
-    if (!apiKeyToUse) {
+    // Backend resolves API key from stored BYOK or env var
+    if (!config.hasApiKey && !isElectron) {
       toast.error('OpenAI API key not configured. Go to Settings > AI.');
       return;
     }
-    
+
     setIsRunning(true);
     setLogs([]);
     setPageGraph({ nodes: [], edges: [] });
     setDiscoveredTests([]);
     setCoverage(null);
-    
+
     addLog('info', `🚀 Starting Flow Explorer from ${startUrl}`);
     addLog('info', `📊 Will explore up to ${maxPages} pages`);
-    
+
     try {
       // @ts-ignore
       const result = await window.electronAPI?.invoke('flow-explorer-start', {
         startUrl,
         maxPages,
-        apiKey: apiKeyToUse,
         model: config.model || 'gpt-4o-mini',
         testData: {
           ...customTestData
@@ -278,17 +275,13 @@ export function AIFlowExplorer({ isOpen, onClose, currentUrl, onSaveTests }: AIF
       return;
     }
     
-    // In Electron, backend may have API key - use special marker
-    const apiKeyToUse = config.apiKey || (isElectron ? '***env***' : '');
-    
     setIsAutomating(true);
     addLog('info', '🤖 Converting manual test to automation...');
-    
+
     try {
       // @ts-ignore
       const result = await window.electronAPI?.invoke('flow-explorer-automate-manual', {
         description: manualTestInput,
-        apiKey: apiKeyToUse,
         testData: customTestData
       });
       
@@ -318,28 +311,25 @@ export function AIFlowExplorer({ isOpen, onClose, currentUrl, onSaveTests }: AIF
       return;
     }
     
-    const apiKeyToUse = config.apiKey || (isElectron ? '***env***' : '');
-    
     console.log('[AIFlowExplorer] Starting goal execution...');
     console.log('[AIFlowExplorer] Goal:', goalInput);
     console.log('[AIFlowExplorer] Start URL:', startUrl);
-    console.log('[AIFlowExplorer] API key:', apiKeyToUse ? 'present' : 'missing');
+    console.log('[AIFlowExplorer] API key configured:', config.hasApiKey);
     console.log('[AIFlowExplorer] electronAPI available:', !!window.electronAPI);
-    
+
     setIsExecutingGoal(true);
     setGoalSteps([]);
     setGoalResult(null);
     setActiveTab('goal');
-    
+
     addLog('info', `🎯 Starting goal: "${goalInput}"`);
-    
+
     try {
       // @ts-ignore
       console.log('[AIFlowExplorer] Calling goal-agent-execute IPC...');
       const result = await window.electronAPI?.invoke('goal-agent-execute', {
         goal: goalInput,
         startUrl: startUrl,
-        apiKey: apiKeyToUse,
         maxSteps: 50,
         testData: customTestData
       });
@@ -768,7 +758,7 @@ The AI agent will automatically:
                   />
                   <Button
                     onClick={handleAutomateManual}
-                    disabled={isAutomating || !manualTestInput.trim() || (!config.apiKey && !isElectron)}
+                    disabled={isAutomating || !manualTestInput.trim() || (!config.hasApiKey && !isElectron)}
                     className="mt-3 bg-gradient-to-r from-indigo-600 to-purple-600"
                   >
                     {isAutomating ? (
@@ -926,7 +916,7 @@ The AI agent will automatically:
               ) : (
                 <Button
                   onClick={handleExecuteGoal}
-                  disabled={!goalInput.trim() || (!config.apiKey && !isElectron)}
+                  disabled={!goalInput.trim() || (!config.hasApiKey && !isElectron)}
                   className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
                 >
                   <Target className="h-4 w-4 mr-2" />
@@ -943,7 +933,7 @@ The AI agent will automatically:
               ) : (
                 <Button
                   onClick={handleStart}
-                  disabled={!config.apiKey && !isElectron}
+                  disabled={!config.hasApiKey && !isElectron}
                   className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
                 >
                   <Play className="h-4 w-4 mr-2" />

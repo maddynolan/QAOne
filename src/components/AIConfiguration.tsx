@@ -1,10 +1,15 @@
 /**
  * AI Service Configuration Component
- * Uses AIContext for global state management
- * Allows users to enable/disable AI and set API key
+ * Settings > AI tab — backend-synced configuration with BYOK support.
+ *
+ * Sections:
+ *   1. AI Master Toggle Card (hero)
+ *   2. Provider Configuration (provider, model, BYOK key, endpoint, test)
+ *   3. Feature Toggles (grouped by category)
+ *   4. Usage & Budget
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,275 +17,628 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { Sparkles, Settings, CheckCircle, AlertCircle, Eye, EyeOff, Loader2, Zap, Key } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Sparkles,
+  CheckCircle,
+  AlertCircle,
+  Loader2,
+  Zap,
+  Key,
+  Trash2,
+  Shield,
+  Server,
+  Activity,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 import { useAI, AI_FEATURE_AREAS, type AIFeatureId } from '@/contexts/AIContext';
 import { API_BASE_URL } from '@/lib/api-config';
 import { toast } from 'sonner';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const PROVIDER_OPTIONS = [
+  { value: 'openai', label: 'OpenAI', description: 'GPT-4o, GPT-4o-mini' },
+  { value: 'anthropic', label: 'Anthropic Claude', description: 'Claude Sonnet, Haiku' },
+  { value: 'custom', label: 'Custom / Azure', description: 'Custom endpoint' },
+] as const;
+
+const MODEL_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  openai: [
+    { value: 'gpt-4o-mini', label: 'GPT-4o-mini (recommended)' },
+    { value: 'gpt-4o', label: 'GPT-4o' },
+    { value: 'gpt-4', label: 'GPT-4' },
+  ],
+  anthropic: [
+    { value: 'claude-sonnet-4', label: 'Claude Sonnet 4' },
+    { value: 'claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
+    { value: 'claude-3-haiku', label: 'Claude 3 Haiku' },
+  ],
+  custom: [],
+};
+
+const FEATURE_GROUPS: Record<string, AIFeatureId[]> = {
+  'Test Generation': ['test_case_generation', 'test_step_suggestions', 'gherkin_generation', 'requirement_analysis'],
+  'Self-Healing & Locators': ['self_healing', 'smart_locators'],
+  'API & Performance': ['api_test_generation', 'api_mock_generation', 'perf_analysis', 'load_pattern_suggestions'],
+  'Visual & Accessibility': ['visual_analysis', 'a11y_suggestions'],
+  'Defects & Code': ['defect_analysis', 'defect_triage', 'code_generation', 'code_optimization'],
+  'Salesforce': ['sf_test_generation', 'sf_data_generation'],
+  'Assistants': ['chat_assistant', 'smart_fill'],
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Whether the active provider has a stored key */
+function providerHasKey(
+  provider: string,
+  hasApiKey: boolean,
+  hasAnthropicKey: boolean,
+): boolean {
+  if (provider === 'openai') return hasApiKey;
+  if (provider === 'anthropic') return hasAnthropicKey;
+  // custom providers use the openai key slot
+  return hasApiKey;
+}
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
 
 interface AIConfigProps {
   onConfigChange?: (config: any) => void;
 }
 
-export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
-  const { config, status, updateConfig, toggleFeature, isFeatureEnabled, testConnection } = useAI();
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState(config.apiKey);
-  const [maskedKey, setMaskedKey] = useState<string>('');
-  const [keySource, setKeySource] = useState<'env' | 'manual' | 'none'>('none');
-  const [loadingKey, setLoadingKey] = useState(true);
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
-  // Load masked key from backend on mount
-  useEffect(() => {
-    const loadMaskedKey = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/ai/vision/config/key`);
-        if (response.ok) {
-          const data = await response.json();
-          setMaskedKey(data.masked_key || '');
-          setKeySource(data.source || 'none');
-          
-          // If key exists in env, auto-enable AI
-          if (data.has_key && data.source === 'env') {
-            updateConfig({ enabled: true, apiKey: '***env***' }); // Marker for env key
-            toast.success('🔑 API key loaded from environment');
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load masked key:', error);
-      } finally {
-        setLoadingKey(false);
-      }
-    };
-    loadMaskedKey();
-  }, []);
+export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
+  const {
+    config,
+    status,
+    updateConfig,
+    toggleFeature,
+    isFeatureEnabled,
+    testConnection,
+    storeApiKey,
+    deleteApiKey,
+  } = useAI();
+
+  // Local UI state
+  const [testing, setTesting] = useState(false);
+  const [savingKey, setSavingKey] = useState(false);
+  const [deletingKey, setDeletingKey] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [customModelInput, setCustomModelInput] = useState(config.model);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(Object.keys(FEATURE_GROUPS)));
+
+  // Derived
+  const activeProviderHasKey = providerHasKey(config.provider, config.hasApiKey, config.hasAnthropicKey);
+  const featureTogglesEnabled = config.enabled && activeProviderHasKey;
+  const models = MODEL_OPTIONS[config.provider] ?? [];
+  const requestPct = config.maxRequestsPerDay > 0
+    ? Math.min(100, (config.requestsToday / config.maxRequestsPerDay) * 100)
+    : 0;
+
+  // Map provider value to the key slot name used on the backend
+  const keyProviderSlot = config.provider === 'custom' ? 'openai' : config.provider;
+
+  // -----------------------------------------------------------------------
+  // Handlers
+  // -----------------------------------------------------------------------
 
   const handleTestConnection = async () => {
     setTesting(true);
     try {
       const success = await testConnection();
       if (success) {
-        toast.success('✅ AI Service Connected!');
+        toast.success('AI service connected successfully');
       } else {
-        toast.error('❌ Connection failed - check API key');
+        toast.error('Connection failed -- check your API key and provider settings');
       }
-    } catch (error) {
+    } catch {
       toast.error('Connection test failed');
     } finally {
       setTesting(false);
     }
   };
 
-  const handleSaveApiKey = () => {
-    updateConfig({ apiKey: apiKeyInput });
-    // Also save to backend for server-side calls
-    saveApiKeyToBackend(apiKeyInput);
-    toast.success('API key saved!');
-  };
-
-  const saveApiKeyToBackend = async (apiKey: string) => {
+  const handleSaveKey = async () => {
+    if (!apiKeyInput.trim()) return;
+    setSavingKey(true);
     try {
-      await fetch(`${API_BASE_URL}/api/ai/vision/config`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          api_key: apiKey,
-          model: config.model,
-          provider: config.provider
-        })
-      });
-    } catch (error) {
-      console.error('Failed to save API key to backend:', error);
+      const ok = await storeApiKey(keyProviderSlot, apiKeyInput.trim());
+      if (ok) {
+        toast.success('API key stored securely on the server');
+        setApiKeyInput('');
+      } else {
+        toast.error('Failed to store API key');
+      }
+    } catch {
+      toast.error('Error storing API key');
+    } finally {
+      setSavingKey(false);
     }
   };
 
-  const featureGroups = {
-    'Test Generation': ['test_case_generation', 'test_step_suggestions', 'gherkin_generation'],
-    'Self-Healing & Locators': ['self_healing', 'smart_locators'],
-    'API & Performance': ['api_test_generation', 'api_mock_generation', 'perf_analysis', 'load_pattern_suggestions'],
-    'Visual & Accessibility': ['visual_analysis', 'a11y_suggestions'],
-    'Defects & Code': ['defect_analysis', 'defect_triage', 'code_generation', 'code_optimization'],
-    'Smart Assistants': ['chat_assistant', 'smart_fill', 'requirement_analysis']
+  const handleDeleteKey = async () => {
+    setDeletingKey(true);
+    try {
+      const ok = await deleteApiKey(keyProviderSlot);
+      if (ok) {
+        toast.success('API key removed');
+      } else {
+        toast.error('Failed to remove API key');
+      }
+    } catch {
+      toast.error('Error removing API key');
+    } finally {
+      setDeletingKey(false);
+    }
   };
 
-  return (
-    <Card className="w-full">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-purple-500" />
-              AI Configuration
-            </CardTitle>
-            <CardDescription>
-              Enable AI-powered features across the platform (GPT-4o-mini)
-            </CardDescription>
-          </div>
-          <Badge 
-            variant={config.enabled ? (status.connected ? 'default' : 'secondary') : 'outline'}
-            className={`flex items-center gap-1 ${config.enabled && status.connected ? 'bg-green-500/20 text-green-400 border-green-500/30' : ''}`}
-          >
-            {config.enabled && status.connected && <CheckCircle className="h-3 w-3" />}
-            {config.enabled && !status.connected && <AlertCircle className="h-3 w-3" />}
-            {!config.enabled && <Settings className="h-3 w-3" />}
-            {config.enabled ? (status.connected ? 'Connected' : 'Disconnected') : 'Disabled'}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Master Toggle */}
-        <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-lg border border-purple-500/20">
-          <div className="space-y-0.5">
-            <Label htmlFor="ai-enabled" className="text-base font-semibold flex items-center gap-2">
-              <Zap className="h-4 w-4 text-yellow-500" />
-              Enable AI Features
-            </Label>
-            <p className="text-sm text-muted-foreground">
-              When enabled, AI buttons appear throughout the app
-            </p>
-          </div>
-          <Switch
-            id="ai-enabled"
-            checked={config.enabled}
-            onCheckedChange={(enabled) => updateConfig({ enabled })}
-          />
-        </div>
+  const handleProviderChange = (provider: string) => {
+    const newProvider = provider as 'openai' | 'anthropic' | 'custom';
+    const defaultModel = (MODEL_OPTIONS[newProvider]?.[0]?.value) || config.model;
+    updateConfig({ provider: newProvider, model: defaultModel });
+  };
 
-        {config.enabled && (
-          <>
-            <Separator />
-            
-            {/* API Key Input */}
-            <div className="space-y-3">
-              <Label className="flex items-center gap-2">
-                <Key className="h-4 w-4" />
-                OpenAI API Key
-                {keySource === 'env' && (
-                  <Badge variant="outline" className="text-xs bg-green-500/10 text-green-500 border-green-500/30">
-                    From .env
-                  </Badge>
-                )}
+  const handleModelChange = (model: string) => {
+    updateConfig({ model });
+  };
+
+  const toggleGroup = (groupName: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupName)) {
+        next.delete(groupName);
+      } else {
+        next.add(groupName);
+      }
+      return next;
+    });
+  };
+
+  // Count enabled features
+  const enabledFeatureCount = useMemo(() => {
+    return Object.values(AI_FEATURE_AREAS).filter(f => config.enabledFeatures.has(f.id)).length;
+  }, [config.enabledFeatures]);
+
+  // -----------------------------------------------------------------------
+  // Status badge
+  // -----------------------------------------------------------------------
+  const statusBadge = (() => {
+    if (!config.enabled) {
+      return (
+        <Badge variant="outline" className="text-gray-400 border-gray-600">
+          Disabled
+        </Badge>
+      );
+    }
+    if (status.connected) {
+      return (
+        <Badge className="bg-green-500/20 text-green-400 border border-green-500/30 flex items-center gap-1">
+          <CheckCircle className="h-3 w-3" />
+          Connected
+        </Badge>
+      );
+    }
+    if (!activeProviderHasKey) {
+      return (
+        <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+          <Key className="h-3 w-3" />
+          Not Configured
+        </Badge>
+      );
+    }
+    return (
+      <Badge className="bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
+        <AlertCircle className="h-3 w-3" />
+        Error
+      </Badge>
+    );
+  })();
+
+  // -----------------------------------------------------------------------
+  // Render
+  // -----------------------------------------------------------------------
+  return (
+    <div className="space-y-6 w-full">
+      {/* ================================================================
+          1. AI Master Toggle Card (Hero)
+          ================================================================ */}
+      <Card className="border-gray-700 bg-gray-900/50">
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Sparkles className="h-5 w-5 text-purple-500" />
+                AI Configuration
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Configure AI-powered features across the platform
+              </CardDescription>
+            </div>
+            {statusBadge}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-lg border border-purple-500/20">
+            <div className="space-y-0.5">
+              <Label htmlFor="ai-master-toggle" className="text-base font-semibold flex items-center gap-2 text-gray-100">
+                <Zap className="h-4 w-4 text-yellow-500" />
+                Enable AI Features
               </Label>
-              
-              {/* Show masked key if loaded from env */}
-              {keySource === 'env' ? (
+              <p className="text-sm text-gray-400">
+                When enabled, AI buttons appear throughout the app
+              </p>
+            </div>
+            <Switch
+              id="ai-master-toggle"
+              checked={config.enabled}
+              onCheckedChange={(enabled) => updateConfig({ enabled })}
+            />
+          </div>
+
+          {/* Summary when connected */}
+          {config.enabled && status.connected && (
+            <div className="mt-3 flex items-center gap-3 text-sm text-gray-400">
+              <span className="flex items-center gap-1">
+                <Server className="h-3.5 w-3.5" />
+                {PROVIDER_OPTIONS.find(p => p.value === config.provider)?.label || config.provider}
+              </span>
+              <span className="text-gray-600">|</span>
+              <span className="font-mono text-gray-300">{config.model}</span>
+              {status.latency && (
+                <>
+                  <span className="text-gray-600">|</span>
+                  <span>{status.latency}ms</span>
+                </>
+              )}
+            </div>
+          )}
+
+          {!config.enabled && (
+            <div className="mt-4 bg-gray-800/50 p-4 rounded-lg text-center border border-gray-700/50">
+              <p className="text-gray-400">
+                Enable AI to unlock smart test generation, self-healing selectors, and more
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Only render remaining sections when AI is enabled */}
+      {config.enabled && (
+        <>
+          {/* ================================================================
+              2. Provider Configuration
+              ================================================================ */}
+          <Card className="border-gray-700 bg-gray-900/50">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Server className="h-4 w-4 text-blue-400" />
+                Provider & Model
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* Provider selector */}
+              <div className="space-y-2">
+                <Label className="text-sm text-gray-300">Provider</Label>
+                <Select value={config.provider} onValueChange={handleProviderChange}>
+                  <SelectTrigger className="bg-gray-800 border-gray-700 text-gray-200">
+                    <SelectValue placeholder="Select provider" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-800 border-gray-700">
+                    {PROVIDER_OPTIONS.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value} className="text-gray-200">
+                        <div className="flex flex-col">
+                          <span>{opt.label}</span>
+                          <span className="text-xs text-gray-500">{opt.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Model selector */}
+              <div className="space-y-2">
+                <Label className="text-sm text-gray-300">Model</Label>
+                {models.length > 0 ? (
+                  <Select value={config.model} onValueChange={handleModelChange}>
+                    <SelectTrigger className="bg-gray-800 border-gray-700 text-gray-200">
+                      <SelectValue placeholder="Select model" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-800 border-gray-700">
+                      {models.map(m => (
+                        <SelectItem key={m.value} value={m.value} className="text-gray-200">
+                          {m.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={customModelInput}
+                    onChange={e => setCustomModelInput(e.target.value)}
+                    onBlur={() => {
+                      if (customModelInput.trim() && customModelInput !== config.model) {
+                        updateConfig({ model: customModelInput.trim() });
+                      }
+                    }}
+                    placeholder="e.g. gpt-4o-mini or custom-model-id"
+                    className="bg-gray-800 border-gray-700 text-gray-200 placeholder:text-gray-500"
+                  />
+                )}
+              </div>
+
+              {/* Custom endpoint (custom/Azure only) */}
+              {config.provider === 'custom' && (
                 <div className="space-y-2">
-                  <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                    <p className="text-sm font-mono text-green-500">{maskedKey || 'sk-proj-****'}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      ✓ Loaded from OPENAI_API_KEY environment variable
-                    </p>
-                  </div>
-                  <Button onClick={handleTestConnection} variant="outline" disabled={testing} className="w-full">
-                    {testing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                    Test Connection
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Input
-                      type={showApiKey ? 'text' : 'password'}
-                      placeholder="sk-..."
-                      value={apiKeyInput}
-                      onChange={(e) => setApiKeyInput(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                    >
-                      {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  <Button onClick={handleSaveApiKey} variant="outline">
-                    Save
-                  </Button>
-                  <Button onClick={handleTestConnection} variant="outline" disabled={testing || !apiKeyInput}>
-                    {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-                  </Button>
+                  <Label className="text-sm text-gray-300">Custom Endpoint</Label>
+                  <Input
+                    value={config.endpoint || ''}
+                    onChange={e => updateConfig({ endpoint: e.target.value })}
+                    placeholder="https://your-deployment.openai.azure.com/v1"
+                    className="bg-gray-800 border-gray-700 text-gray-200 placeholder:text-gray-500 font-mono text-sm"
+                  />
                 </div>
               )}
-              
-              <p className="text-xs text-muted-foreground">
-                Model: <span className="font-mono">{config.model}</span> • 
-                {status.latency && ` Latency: ${status.latency}ms`}
-                {config.costTracking && ` • Requests: ${config.requestCount}`}
-              </p>
-            </div>
 
-            <Separator />
+              <Separator className="bg-gray-700" />
 
-            {/* Feature Toggles */}
-            <div className="space-y-4">
-              <Label className="text-base">AI Features</Label>
-              <p className="text-sm text-muted-foreground -mt-2">
-                Enable/disable specific AI capabilities
-              </p>
-              
-              <div className="grid gap-4">
-                {Object.entries(featureGroups).map(([groupName, featureIds]) => (
-                  <div key={groupName} className="space-y-2">
-                    <Label className="text-sm font-medium text-muted-foreground">{groupName}</Label>
-                    <div className="grid gap-2 pl-2">
-                      {featureIds.map(featureId => {
-                        const feature = Object.values(AI_FEATURE_AREAS).find(f => f.id === featureId);
-                        if (!feature) return null;
-                        
-                        return (
-                          <div key={featureId} className="flex items-center justify-between py-1">
-                            <div className="flex items-center gap-2">
-                              <span>{feature.icon}</span>
-                              <span className="text-sm">{feature.name}</span>
-                            </div>
-                            <Switch
-                              checked={isFeatureEnabled(featureId as AIFeatureId)}
-                              onCheckedChange={(enabled) => toggleFeature(featureId as AIFeatureId, enabled)}
-                              disabled={!status.connected}
-                            />
-                          </div>
-                        );
-                      })}
+              {/* API Key management */}
+              <div className="space-y-3">
+                <Label className="flex items-center gap-2 text-sm text-gray-300">
+                  <Key className="h-4 w-4" />
+                  API Key
+                  {activeProviderHasKey && (
+                    <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/30 ml-1">
+                      <Shield className="h-3 w-3 mr-1" />
+                      Key stored securely
+                    </Badge>
+                  )}
+                </Label>
+
+                {activeProviderHasKey ? (
+                  /* Key exists — show status + remove */
+                  <div className="space-y-3">
+                    <div className="p-3 rounded-lg bg-green-500/5 border border-green-500/20">
+                      <p className="text-sm text-green-400 font-mono">
+                        ********...****
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Stored on the server. The key is never sent to the browser.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={handleDeleteKey}
+                        variant="outline"
+                        size="sm"
+                        disabled={deletingKey}
+                        className="text-red-400 border-red-500/30 hover:bg-red-500/10"
+                      >
+                        {deletingKey ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4 mr-1" />
+                        )}
+                        Remove Key
+                      </Button>
+                      <Button
+                        onClick={handleTestConnection}
+                        variant="outline"
+                        size="sm"
+                        disabled={testing}
+                      >
+                        {testing ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                        )}
+                        Test Connection
+                      </Button>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Status Summary */}
-            <div className="bg-muted/50 p-4 rounded-lg">
-              <h4 className="font-semibold mb-2 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-purple-500" />
-                AI Status
-              </h4>
-              <div className="text-sm space-y-1 text-muted-foreground">
-                {status.connected ? (
-                  <>
-                    <p>✅ Connected to OpenAI ({config.model})</p>
-                    <p>🔌 {config.enabledFeatures.size} features enabled</p>
-                    <p>⚡ Ready for AI-assisted testing</p>
-                  </>
                 ) : (
-                  <>
-                    <p>⏳ Not connected - add API key above</p>
-                    <p>💡 AI features will appear once connected</p>
-                  </>
+                  /* No key — show input */
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      <Input
+                        type="password"
+                        value={apiKeyInput}
+                        onChange={e => setApiKeyInput(e.target.value)}
+                        placeholder={config.provider === 'anthropic' ? 'sk-ant-...' : 'sk-...'}
+                        className="flex-1 bg-gray-800 border-gray-700 text-gray-200 placeholder:text-gray-500 font-mono text-sm"
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleSaveKey();
+                        }}
+                      />
+                      <Button
+                        onClick={handleSaveKey}
+                        disabled={savingKey || !apiKeyInput.trim()}
+                        className="bg-purple-600 hover:bg-purple-700 text-white"
+                      >
+                        {savingKey ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                          <Key className="h-4 w-4 mr-1" />
+                        )}
+                        Save Key
+                      </Button>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Your key is sent directly to the backend and stored encrypted. It is never persisted in the browser.
+                    </p>
+                  </div>
                 )}
               </div>
-            </div>
-          </>
-        )}
 
-        {!config.enabled && (
-          <div className="bg-muted/30 p-4 rounded-lg text-center">
-            <p className="text-muted-foreground">
-              Enable AI to unlock smart test generation, self-healing, and more
-            </p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              {/* Connection status */}
+              {status.error && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                  <p className="text-sm text-red-400">{status.error}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ================================================================
+              3. Feature Toggles
+              ================================================================ */}
+          <Card className="border-gray-700 bg-gray-900/50">
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-purple-400" />
+                  AI Features
+                </CardTitle>
+                <span className="text-xs text-gray-500">
+                  {enabledFeatureCount}/{Object.keys(AI_FEATURE_AREAS).length} enabled
+                </span>
+              </div>
+              <CardDescription className="text-gray-400">
+                Enable or disable specific AI capabilities
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-1">
+              {!featureTogglesEnabled && (
+                <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <p className="text-sm text-amber-400">
+                    {!activeProviderHasKey
+                      ? 'Store an API key above to enable feature toggles.'
+                      : 'Connect to the AI provider to enable feature toggles.'}
+                  </p>
+                </div>
+              )}
+
+              {Object.entries(FEATURE_GROUPS).map(([groupName, featureIds]) => {
+                const isExpanded = expandedGroups.has(groupName);
+                const groupEnabled = featureIds.filter(id => config.enabledFeatures.has(id)).length;
+
+                return (
+                  <div key={groupName} className="border border-gray-700/50 rounded-lg overflow-hidden">
+                    {/* Group header */}
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(groupName)}
+                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-800/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        {isExpanded
+                          ? <ChevronDown className="h-4 w-4 text-gray-500" />
+                          : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                        <span className="text-sm font-medium text-gray-300">{groupName}</span>
+                      </div>
+                      <span className="text-xs text-gray-500">{groupEnabled}/{featureIds.length}</span>
+                    </button>
+
+                    {/* Feature rows */}
+                    {isExpanded && (
+                      <div className="border-t border-gray-700/50">
+                        {featureIds.map(featureId => {
+                          const feature = Object.values(AI_FEATURE_AREAS).find(f => f.id === featureId);
+                          if (!feature) return null;
+
+                          return (
+                            <div
+                              key={featureId}
+                              className="flex items-center justify-between px-4 py-2 pl-10 hover:bg-gray-800/30"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-sm shrink-0">{feature.icon}</span>
+                                <div className="min-w-0">
+                                  <span className="text-sm text-gray-200 block truncate">{feature.name}</span>
+                                  <span className="text-xs text-gray-500 block truncate">{feature.description}</span>
+                                </div>
+                              </div>
+                              <Switch
+                                checked={isFeatureEnabled(featureId)}
+                                onCheckedChange={(enabled) => toggleFeature(featureId, enabled)}
+                                disabled={!featureTogglesEnabled}
+                                className="shrink-0 ml-3"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          {/* ================================================================
+              4. Usage & Budget
+              ================================================================ */}
+          <Card className="border-gray-700 bg-gray-900/50">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Activity className="h-4 w-4 text-cyan-400" />
+                Usage & Budget
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Requests today */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-400">Requests today</span>
+                  <span className="text-gray-200 font-mono">
+                    {config.requestsToday} / {config.maxRequestsPerDay}
+                  </span>
+                </div>
+                <Progress value={requestPct} className="h-2" />
+              </div>
+
+              {/* Cost tracking */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-400">Estimated cost (session)</span>
+                  <span className="text-gray-200 font-mono">
+                    ${config.totalCost.toFixed(4)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Total requests */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-400">Total requests (all time)</span>
+                <span className="text-gray-200 font-mono">{config.requestCount}</span>
+              </div>
+
+              <Separator className="bg-gray-700" />
+
+              {/* Budget tracking toggle */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm text-gray-300">Cost Tracking</Label>
+                  <p className="text-xs text-gray-500">Track estimated token costs</p>
+                </div>
+                <Switch
+                  checked={config.costTracking}
+                  onCheckedChange={(costTracking) => updateConfig({ costTracking })}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
   );
 };

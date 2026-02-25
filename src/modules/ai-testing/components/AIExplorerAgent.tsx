@@ -189,10 +189,8 @@ export function AIExplorerAgent({ isOpen, onClose, currentUrl, onSaveTests }: AI
       return;
     }
     
-    // In Electron, backend may have API key - use special marker
-    const apiKeyToUse = config.apiKey || (isElectron ? '***env***' : '');
-    
-    if (!apiKeyToUse) {
+    // Backend resolves API key from stored BYOK or env var
+    if (!config.hasApiKey && !isElectron) {
       toast.error('OpenAI API key not configured. Go to Settings > AI to add it.');
       addLog({ type: 'error', message: 'No API key configured. Go to Settings > AI to add one.' });
       return;
@@ -213,9 +211,7 @@ export function AIExplorerAgent({ isOpen, onClose, currentUrl, onSaveTests }: AI
     });
     
     try {
-      const keyPreview = apiKeyToUse.startsWith('***') ? 'backend-env' : `${apiKeyToUse.substring(0, 8)}...`;
-      console.log('[AIExplorer] Calling ai-explorer-start with:', { startUrl, maxActions, keyPreview });
-      addLog({ type: 'info', message: `API Key: ${keyPreview}` });
+      console.log('[AIExplorer] Calling ai-explorer-start with:', { startUrl, maxActions, hasApiKey: config.hasApiKey });
       
       // Build test data object from user-provided values
       const userTestData: Record<string, string> = {};
@@ -243,7 +239,6 @@ export function AIExplorerAgent({ isOpen, onClose, currentUrl, onSaveTests }: AI
         startUrl,
         maxActions,
         maxPages: 5,
-        apiKey: apiKeyToUse,
         model: config.model || 'gpt-4o-mini',
         testData: Object.keys(userTestData).length > 0 ? userTestData : undefined
       });
@@ -476,7 +471,7 @@ export function AIExplorerAgent({ isOpen, onClose, currentUrl, onSaveTests }: AI
           </div>
           
           {/* API Key Warning - only show if not in Electron (desktop app has backend key) */}
-          {!config.apiKey && !isElectron && (
+          {!config.hasApiKey && !isElectron && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>OpenAI API key not configured. Go to Settings → AI to add your API key.</span>
@@ -677,9 +672,9 @@ export function AIExplorerAgent({ isOpen, onClose, currentUrl, onSaveTests }: AI
             ) : (
               <Button
                 onClick={handleStart}
-                disabled={!config.apiKey && !isElectron}
+                disabled={!config.hasApiKey && !isElectron}
                 className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-                title={!config.apiKey && !isElectron ? "Configure API key in Settings > AI first" : "Start autonomous exploration"}
+                title={!config.hasApiKey && !isElectron ? "Configure API key in Settings > AI first" : "Start autonomous exploration"}
               >
                 <Play className="h-4 w-4 mr-2" />
                 Start Exploration

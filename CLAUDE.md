@@ -1156,7 +1156,67 @@ interface ComparisonResult { passed, diff_percentage, diff_pixel_count, total_pi
 | Anthropic Claude | Active (dev) | Complex reasoning, prompt caching |
 | Ollama/vLLM | Disabled | Local inference on DGX |
 
-**Key Files:**
+**AI is OFF by default.** Users opt-in at org level, bring their own keys (BYOK), and toggle 20 features granularly.
+
+#### BYOK Architecture (v3.14.0+)
+
+**Toggle Hierarchy:**
+```
+Server env (OPENAI_API_KEY)       ← Platform-provided key (fallback)
+  └── Org settings (ai_settings)  ← Admin enables AI, stores BYOK key
+       └── Project override        ← Optional per-project settings
+            └── Feature toggles     ← 20 granular feature flags
+```
+
+**Key Resolution Chain (backend):**
+1. Check `ai_settings` for org/project-specific BYOK key (Fernet-encrypted) → use it
+2. Else check server env var (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`) → use it
+3. Else → AI unavailable, return 503 for AI endpoints
+
+**Frontend Key Security:**
+- API keys are NEVER stored in frontend state or localStorage
+- Frontend only tracks `hasApiKey: boolean` / `hasAnthropicKey: boolean`
+- Keys sent to backend via `POST /api/ai/settings/key`, encrypted with Fernet, stored in `ai_encrypted_keys` table
+- After save, key input is cleared — only "Key stored securely" badge shown
+
+#### AI Settings API (`/api/ai/settings`)
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET` | `/api/ai/settings` | Get org AI settings (enabled, provider, features, has_key) |
+| `PUT` | `/api/ai/settings` | Update settings (enabled, provider, model, features) |
+| `POST` | `/api/ai/settings/key` | Store BYOK API key (Fernet-encrypted) |
+| `DELETE` | `/api/ai/settings/key/{provider}` | Remove stored key |
+| `POST` | `/api/ai/settings/test` | Test connection with stored/provided key |
+| `GET` | `/api/ai/settings/providers` | List providers + which have keys configured |
+| `GET` | `/api/ai/settings/usage` | Get current period usage stats |
+
+#### AI Settings Key Files
+
+| File | Purpose |
+|------|---------|
+| `supabase/migrations/034_ai_settings.sql` | ai_settings + ai_usage_log tables |
+| `backend/app/services/core/ai_settings_service.py` | AISettingsService — CRUD, key encryption, resolution, budget tracking (704 lines) |
+| `backend/app/routers/platform/ai_settings_api.py` | REST API for AI settings (7 endpoints) |
+| `backend/app/routers/ai/ai_key_resolver.py` | Shared helper: `resolve_ai_key(request, provider)` for all AI routers |
+| `src/contexts/AIContext.tsx` | React context — backend-synced, 20 feature areas, `useAI()`, `AIFeatureGate` |
+| `src/components/AIConfiguration.tsx` | Settings > AI tab — multi-provider BYOK UI, feature toggles, usage/budget |
+
+#### 20 AI Feature Areas
+
+| Category | Features |
+|----------|----------|
+| Test Generation | `test_case_generation`, `test_step_suggestions` |
+| Self-Healing | `self_healing`, `smart_locators` |
+| API Testing | `api_test_generation`, `api_mock_generation` |
+| Performance | `perf_analysis`, `load_pattern_suggestions` |
+| Visual & A11y | `visual_analysis`, `a11y_suggestions` |
+| Defects & Code | `defect_analysis`, `defect_triage`, `code_generation`, `code_optimization` |
+| Requirements | `requirement_analysis`, `gherkin_generation` |
+| Salesforce | `sf_test_generation`, `sf_data_generation` |
+| Assistants | `chat_assistant`, `smart_fill` |
+
+**Key Files (LLM Services):**
 - `backend/app/services/llm/` — LLM services with prompt caching
 - `backend/app/services/ai/` — AI generation, failure analysis
 - `backend/app/config/llm_config.py` — Provider configuration
@@ -1271,7 +1331,7 @@ PostgreSQL (primary) with **in-memory fallback**:
 - Demo data seeding via `SEED_DEMO_DATA=true` env var (auto-triggered in `auto_migrate.py`)
 - `backend/app/scripts/seed_demo_data.py` — Idempotent seed script (fixed UUIDs + ON CONFLICT DO UPDATE): 1 org, 3 projects, 3 users, 50 test cases, 20 runs, 10 defects, 8 requirements, 5 API collections, 3 environments, 2 a11y scans, 3 perf runs
 - Supabase for auth and file storage
-- 33 migrations (`supabase/migrations/001_initial_schema.sql` through `033_mobile_test_flows.sql`)
+- 34 migrations (`supabase/migrations/001_initial_schema.sql` through `034_ai_settings.sql`)
 - PgBouncer for connection pooling at scale (`deploy/pgbouncer/pgbouncer.ini`)
 
 ### Electron Desktop
@@ -1354,6 +1414,7 @@ PostgreSQL (primary) with **in-memory fallback**:
 | | framework_analyzer_api | `/api/framework` | Framework detection |
 | | code_alchemy_api | `/api/code-alchemy` | Repository import |
 | | audit_api | `/api/audit` | Audit trail logging & queries (4 endpoints) |
+| | ai_settings_api | `/api/ai/settings` | BYOK key management, AI config, usage tracking (7 endpoints) |
 
 ---
 

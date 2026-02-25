@@ -229,6 +229,44 @@ CREATE TABLE IF NOT EXISTS migration_history (
     checksum TEXT
 );
 
+-- AI Settings (BYOK key management, per-org/project AI configuration)
+CREATE TABLE IF NOT EXISTS ai_settings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    org_id UUID NOT NULL,
+    project_id UUID,
+    enabled BOOLEAN DEFAULT false,
+    provider TEXT DEFAULT 'openai',
+    model TEXT DEFAULT 'gpt-4o-mini',
+    api_key_secret_id UUID,
+    anthropic_key_secret_id UUID,
+    custom_endpoint TEXT,
+    max_requests_per_day INT DEFAULT 1000,
+    max_cost_per_day_cents INT DEFAULT 1000,
+    requests_today INT DEFAULT 0,
+    cost_today_cents INT DEFAULT 0,
+    budget_reset_at TIMESTAMPTZ DEFAULT NOW(),
+    budget_tracking BOOLEAN DEFAULT true,
+    enabled_features JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- AI Usage Log (daily AI usage tracking per org)
+CREATE TABLE IF NOT EXISTS ai_usage_log (
+    id BIGSERIAL PRIMARY KEY,
+    org_id UUID NOT NULL,
+    project_id UUID,
+    provider TEXT NOT NULL,
+    model TEXT,
+    endpoint TEXT,
+    tokens_in INT DEFAULT 0,
+    tokens_out INT DEFAULT 0,
+    cost_cents INT DEFAULT 0,
+    success BOOLEAN DEFAULT true,
+    error_message TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Create indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_test_cases_project ON test_cases(project_id);
 CREATE INDEX IF NOT EXISTS idx_test_cases_plan ON test_cases(plan_id);
@@ -238,6 +276,8 @@ CREATE INDEX IF NOT EXISTS idx_defects_project ON defects(project_id);
 CREATE INDEX IF NOT EXISTS idx_defects_run ON defects(run_id);
 CREATE INDEX IF NOT EXISTS idx_artifacts_run ON artifacts(run_id);
 CREATE INDEX IF NOT EXISTS idx_requirements_project ON requirements(project_id);
+CREATE INDEX IF NOT EXISTS idx_ai_settings_org ON ai_settings(org_id);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_org_date ON ai_usage_log(org_id, created_at);
 """
 
 

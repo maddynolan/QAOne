@@ -141,19 +141,18 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
 
   // Analyze current page
   const handleAnalyze = useCallback(async () => {
-    if (!config.apiKey) {
+    if (!config.hasApiKey) {
       toast.error('OpenAI API key not configured. Go to Settings to add it.');
       return;
     }
-    
+
     setIsAnalyzing(true);
     setError(null);
     setAnalysis(null);
-    
+
     try {
       // @ts-ignore - Electron API
       const result = await window.electronAPI?.invoke('ai-analyze-page', {
-        apiKey: config.apiKey,
         model: config.model
       });
       
@@ -171,25 +170,24 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
     } finally {
       setIsAnalyzing(false);
     }
-  }, [config.apiKey, config.model]);
+  }, [config.hasApiKey, config.model]);
 
   // Generate tests for current page
   const handleGenerate = useCallback(async () => {
-    if (!config.apiKey) {
+    if (!config.hasApiKey) {
       toast.error('OpenAI API key not configured. Go to Settings to add it.');
       return;
     }
-    
+
     setIsGenerating(true);
     setError(null);
     setProgress(0);
     setProgressMessage('Starting...');
     setGeneratedTests([]);
-    
+
     try {
       // @ts-ignore - Electron API
       const result = await window.electronAPI?.invoke('ai-generate-current-page', {
-        apiKey: config.apiKey,
         model: config.model
       });
       
@@ -214,7 +212,7 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
     } finally {
       setIsGenerating(false);
     }
-  }, [config.apiKey, config.model]);
+  }, [config.hasApiKey, config.model]);
 
   // Save selected tests
   const handleSaveTests = useCallback(() => {
@@ -294,7 +292,7 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
           </div>
         )}
 
-        {!config.apiKey && config.enabled && (
+        {!config.hasApiKey && config.enabled && (
           <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span>OpenAI API key not configured. Add it in Settings.</span>
@@ -307,7 +305,7 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
           <div className="flex items-center gap-3">
             <Button
               onClick={handleAnalyze}
-              disabled={!config.enabled || !config.apiKey || isAnalyzing || isGenerating}
+              disabled={!config.enabled || !config.hasApiKey || isAnalyzing || isGenerating}
               variant="outline"
               className="gap-2"
             >
@@ -321,7 +319,7 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
             
             <Button
               onClick={handleGenerate}
-              disabled={!config.enabled || !config.apiKey || isGenerating}
+              disabled={!config.enabled || !config.hasApiKey || isGenerating}
               className="gap-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700"
             >
               {isGenerating ? (

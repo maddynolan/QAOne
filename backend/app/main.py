@@ -790,6 +790,14 @@ except Exception as e:
 from app.routers.platform.audit_api import router as audit_router
 app.include_router(audit_router)
 
+# AI Settings API - BYOK key management, per-org/project AI configuration, usage tracking
+try:
+    from app.routers.platform.ai_settings_api import router as ai_settings_router
+    app.include_router(ai_settings_router)
+    logger.info("AI Settings API registered")
+except Exception as e:
+    logger.warning(f"AI Settings API not loaded (non-critical): {e}")
+
 # AI Enhancements API - False positive persistence, flaky step detection, AI failure explainer
 # Independent module: works with or without AI keys, never blocks existing flows
 try:

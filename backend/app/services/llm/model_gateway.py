@@ -173,6 +173,42 @@ class ModelGateway:
                 logger.warning(f"Anthropic client not available: {e}")
         return self._anthropic_client
     
+    def _get_openai_client_for_key(self, api_key: str):
+        """Get OpenAI client for a specific BYOK key."""
+        if not api_key:
+            return self._get_openai_client()
+        import hashlib
+        key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:16]
+        cache_key = f"openai_{key_hash}"
+        if not hasattr(self, '_byok_clients'):
+            self._byok_clients = {}
+        if cache_key not in self._byok_clients:
+            try:
+                import openai
+                self._byok_clients[cache_key] = openai.AsyncOpenAI(api_key=api_key)
+            except Exception as e:
+                logger.warning(f"BYOK OpenAI client failed: {e}")
+                return self._get_openai_client()
+        return self._byok_clients[cache_key]
+
+    def _get_anthropic_client_for_key(self, api_key: str):
+        """Get Anthropic client for a specific BYOK key."""
+        if not api_key:
+            return self._get_anthropic_client()
+        import hashlib
+        key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:16]
+        cache_key = f"anthropic_{key_hash}"
+        if not hasattr(self, '_byok_clients'):
+            self._byok_clients = {}
+        if cache_key not in self._byok_clients:
+            try:
+                import anthropic
+                self._byok_clients[cache_key] = anthropic.AsyncAnthropic(api_key=api_key)
+            except Exception as e:
+                logger.warning(f"BYOK Anthropic client failed: {e}")
+                return self._get_anthropic_client()
+        return self._byok_clients[cache_key]
+
     # ==================== Provider Selection ====================
     
     def _select_provider(self, request_provider: Optional[LLMProvider] = None) -> LLMProvider:
