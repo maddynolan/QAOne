@@ -1,9 +1,13 @@
 /**
  * Global AI Context
- * 
+ *
  * Manages AI settings across the entire application.
  * When AI is disabled, all AI features are hidden.
  * When enabled, AI features appear throughout the app.
+ *
+ * API keys are NEVER stored in frontend state or localStorage.
+ * Instead, keys are stored securely on the backend via storeApiKey().
+ * Frontend only tracks hasApiKey / hasAnthropicKey booleans.
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
@@ -28,7 +32,7 @@ export const AI_FEATURE_AREAS = {
     pages: ['Build', 'Record'],
     icon: '💡'
   },
-  
+
   // Self-Healing & Locators
   SELF_HEALING: {
     id: 'self_healing',
@@ -44,7 +48,7 @@ export const AI_FEATURE_AREAS = {
     pages: ['Record', 'Build'],
     icon: '🎯'
   },
-  
+
   // API Testing
   API_TEST_GENERATION: {
     id: 'api_test_generation',
@@ -60,7 +64,7 @@ export const AI_FEATURE_AREAS = {
     pages: ['API'],
     icon: '🎭'
   },
-  
+
   // Performance
   PERF_ANALYSIS: {
     id: 'perf_analysis',
@@ -76,7 +80,7 @@ export const AI_FEATURE_AREAS = {
     pages: ['Perf'],
     icon: '📈'
   },
-  
+
   // Visual Testing
   VISUAL_ANALYSIS: {
     id: 'visual_analysis',
@@ -85,7 +89,7 @@ export const AI_FEATURE_AREAS = {
     pages: ['Visual'],
     icon: '👁️'
   },
-  
+
   // Accessibility
   A11Y_SUGGESTIONS: {
     id: 'a11y_suggestions',
@@ -94,7 +98,7 @@ export const AI_FEATURE_AREAS = {
     pages: ['A11y'],
     icon: '♿'
   },
-  
+
   // Defect Analysis
   DEFECT_ANALYSIS: {
     id: 'defect_analysis',
@@ -110,7 +114,7 @@ export const AI_FEATURE_AREAS = {
     pages: ['Defects'],
     icon: '📋'
   },
-  
+
   // Code Generation
   CODE_GENERATION: {
     id: 'code_generation',
@@ -126,7 +130,7 @@ export const AI_FEATURE_AREAS = {
     pages: ['Alchemy'],
     icon: '⚡'
   },
-  
+
   // Requirements
   REQUIREMENT_ANALYSIS: {
     id: 'requirement_analysis',
@@ -142,7 +146,7 @@ export const AI_FEATURE_AREAS = {
     pages: ['Requirements', 'Build'],
     icon: '🥒'
   },
-  
+
   // Salesforce
   SF_TEST_GENERATION: {
     id: 'sf_test_generation',
@@ -158,7 +162,7 @@ export const AI_FEATURE_AREAS = {
     pages: ['SF'],
     icon: '📦'
   },
-  
+
   // Smart Assistants
   CHAT_ASSISTANT: {
     id: 'chat_assistant',
@@ -185,7 +189,8 @@ export interface AIConfig {
   enabled: boolean;
   provider: 'openai' | 'anthropic' | 'ollama' | 'custom';
   model: string;
-  apiKey: string;
+  hasApiKey: boolean;       // Whether BYOK key is stored on backend
+  hasAnthropicKey: boolean; // Whether Anthropic key is stored
   endpoint?: string;
   maxTokens: number;
   temperature: number;
@@ -193,6 +198,8 @@ export interface AIConfig {
   costTracking: boolean;
   totalCost: number;
   requestCount: number;
+  maxRequestsPerDay: number;
+  requestsToday: number;
 }
 
 export interface AIStatus {
@@ -209,6 +216,8 @@ export interface AIContextType {
   toggleFeature: (featureId: AIFeatureId, enabled: boolean) => void;
   isFeatureEnabled: (featureId: AIFeatureId) => boolean;
   testConnection: () => Promise<boolean>;
+  storeApiKey: (provider: string, apiKey: string) => Promise<boolean>;
+  deleteApiKey: (provider: string) => Promise<boolean>;
   getEnabledFeaturesForPage: (page: string) => typeof AI_FEATURE_AREAS[keyof typeof AI_FEATURE_AREAS][];
   trackUsage: (tokens: number, cost: number) => void;
 }
@@ -217,17 +226,20 @@ export interface AIContextType {
 // Default Configuration
 // ============================================================================
 const DEFAULT_CONFIG: AIConfig = {
-  enabled: false,
+  enabled: false,    // OFF by default
   provider: 'openai',
-  model: 'gpt-4o-mini', // Cost-effective default
-  apiKey: '',
+  model: 'gpt-4o-mini',
+  hasApiKey: false,
+  hasAnthropicKey: false,
   endpoint: 'https://api.openai.com/v1',
   maxTokens: 4096,
   temperature: 0.7,
   enabledFeatures: new Set(Object.values(AI_FEATURE_AREAS).map(f => f.id)),
   costTracking: true,
   totalCost: 0,
-  requestCount: 0
+  requestCount: 0,
+  maxRequestsPerDay: 1000,
+  requestsToday: 0,
 };
 
 const DEFAULT_STATUS: AIStatus = {
@@ -247,7 +259,7 @@ const AIContext = createContext<AIContextType | undefined>(undefined);
 // ============================================================================
 export function AIProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<AIConfig>(() => {
-    // Load from localStorage
+    // Load from localStorage cache for instant render
     const saved = localStorage.getItem('aristrace_ai_config');
     if (saved) {
       try {
@@ -255,7 +267,10 @@ export function AIProvider({ children }: { children: React.ReactNode }) {
         return {
           ...DEFAULT_CONFIG,
           ...parsed,
-          enabledFeatures: new Set(parsed.enabledFeatures || [])
+          // Never restore apiKey from localStorage — only booleans
+          hasApiKey: parsed.has_api_key ?? parsed.hasApiKey ?? false,
+          hasAnthropicKey: parsed.has_anthropic_key ?? parsed.hasAnthropicKey ?? false,
+          enabledFeatures: new Set(parsed.enabledFeatures || parsed.enabled_features || [])
         };
       } catch {
         return DEFAULT_CONFIG;
@@ -263,29 +278,70 @@ export function AIProvider({ children }: { children: React.ReactNode }) {
     }
     return DEFAULT_CONFIG;
   });
-  
+
   const [status, setStatus] = useState<AIStatus>(DEFAULT_STATUS);
-  
-  // Save config to localStorage when it changes
+
+  // On mount, load settings from backend
   useEffect(() => {
-    const toSave = {
-      ...config,
-      enabledFeatures: Array.from(config.enabledFeatures)
+    const loadFromBackend = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/ai/settings`);
+        if (response.ok) {
+          const data = await response.json();
+          setConfig(prev => ({
+            ...prev,
+            enabled: data.enabled,
+            provider: data.provider || prev.provider,
+            model: data.model || prev.model,
+            hasApiKey: data.has_api_key,
+            hasAnthropicKey: data.has_anthropic_key,
+            enabledFeatures: new Set(data.enabled_features || []),
+            maxRequestsPerDay: data.max_requests_per_day || 1000,
+            requestsToday: data.requests_today || 0,
+            costTracking: data.budget_tracking ?? true,
+          }));
+          // Also cache to localStorage for offline mode
+          localStorage.setItem('aristrace_ai_config', JSON.stringify({
+            ...data,
+            _cachedAt: Date.now()
+          }));
+        }
+      } catch (error) {
+        console.warn('Could not load AI settings from backend, using cached config');
+        // Fall back to localStorage cache — already loaded in initial state
+      }
     };
-    localStorage.setItem('aristrace_ai_config', JSON.stringify(toSave));
-  }, [config]);
-  
-  // Auto-check connection when API key changes
+    loadFromBackend();
+  }, []);
+
+  // Auto-check connection when key presence or provider changes
   useEffect(() => {
-    if (config.enabled && config.apiKey) {
+    if (config.enabled && (config.hasApiKey || config.hasAnthropicKey)) {
       testConnection();
     }
-  }, [config.enabled, config.apiKey, config.provider]);
-  
-  const updateConfig = useCallback((updates: Partial<AIConfig>) => {
+  }, [config.enabled, config.hasApiKey, config.hasAnthropicKey, config.provider]);
+
+  const updateConfig = useCallback(async (updates: Partial<AIConfig>) => {
     setConfig(prev => ({ ...prev, ...updates }));
+
+    // Sync to backend (fire-and-forget)
+    try {
+      await fetch(`${API_BASE_URL}/api/ai/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: updates.enabled,
+          provider: updates.provider,
+          model: updates.model,
+          enabled_features: updates.enabledFeatures ? Array.from(updates.enabledFeatures) : undefined,
+          budget_tracking: updates.costTracking,
+        })
+      });
+    } catch (error) {
+      console.warn('Could not sync AI settings to backend:', error);
+    }
   }, []);
-  
+
   const toggleFeature = useCallback((featureId: AIFeatureId, enabled: boolean) => {
     setConfig(prev => {
       const newFeatures = new Set(prev.enabledFeatures);
@@ -294,71 +350,52 @@ export function AIProvider({ children }: { children: React.ReactNode }) {
       } else {
         newFeatures.delete(featureId);
       }
-      return { ...prev, enabledFeatures: newFeatures };
+      const updated = { ...prev, enabledFeatures: newFeatures };
+
+      // Sync feature toggles to backend (fire-and-forget)
+      fetch(`${API_BASE_URL}/api/ai/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled_features: Array.from(newFeatures),
+        })
+      }).catch(() => {});
+
+      return updated;
     });
   }, []);
-  
+
   const isFeatureEnabled = useCallback((featureId: AIFeatureId): boolean => {
     return config.enabled && config.enabledFeatures.has(featureId);
   }, [config.enabled, config.enabledFeatures]);
-  
+
   const getEnabledFeaturesForPage = useCallback((page: string) => {
     if (!config.enabled) return [];
-    
-    return Object.values(AI_FEATURE_AREAS).filter(feature => 
+
+    return Object.values(AI_FEATURE_AREAS).filter(feature =>
       config.enabledFeatures.has(feature.id) &&
       (feature.pages.includes(page) || feature.pages.includes('All'))
     );
   }, [config.enabled, config.enabledFeatures]);
-  
+
   const testConnection = useCallback(async (): Promise<boolean> => {
-    if (!config.apiKey) {
-      setStatus({
-        connected: false,
-        lastCheck: new Date(),
-        error: 'No API key configured',
-        latency: null
-      });
-      return false;
-    }
-    
     const startTime = Date.now();
-    
     try {
-      // Test via backend
-      const response = await fetch(`${API_BASE_URL}/api/ai/vision/status`);
+      const response = await fetch(`${API_BASE_URL}/api/ai/settings/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: config.provider })
+      });
       const data = await response.json();
-      
-      const latency = Date.now() - startTime;
-      
-      if (data.available) {
-        setStatus({
-          connected: true,
-          lastCheck: new Date(),
-          error: null,
-          latency
-        });
-        return true;
-      } else {
-        // Try direct OpenAI test
-        const openaiResponse = await fetch('https://api.openai.com/v1/models', {
-          headers: {
-            'Authorization': `Bearer ${config.apiKey}`
-          }
-        });
-        
-        if (openaiResponse.ok) {
-          setStatus({
-            connected: true,
-            lastCheck: new Date(),
-            error: null,
-            latency: Date.now() - startTime
-          });
-          return true;
-        } else {
-          throw new Error('Invalid API key');
-        }
-      }
+      const latency = data.latency_ms || (Date.now() - startTime);
+
+      setStatus({
+        connected: data.connected,
+        lastCheck: new Date(),
+        error: data.error || null,
+        latency
+      });
+      return data.connected;
     } catch (error: any) {
       setStatus({
         connected: false,
@@ -368,18 +405,59 @@ export function AIProvider({ children }: { children: React.ReactNode }) {
       });
       return false;
     }
-  }, [config.apiKey]);
-  
+  }, [config.provider]);
+
+  const storeApiKey = useCallback(async (provider: string, apiKey: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/ai/settings/key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, api_key: apiKey })
+      });
+      if (response.ok) {
+        setConfig(prev => ({
+          ...prev,
+          hasApiKey: provider === 'openai' ? true : prev.hasApiKey,
+          hasAnthropicKey: provider === 'anthropic' ? true : prev.hasAnthropicKey,
+        }));
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const deleteApiKey = useCallback(async (provider: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/ai/settings/key/${provider}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        setConfig(prev => ({
+          ...prev,
+          hasApiKey: provider === 'openai' ? false : prev.hasApiKey,
+          hasAnthropicKey: provider === 'anthropic' ? false : prev.hasAnthropicKey,
+        }));
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const trackUsage = useCallback((tokens: number, cost: number) => {
     if (config.costTracking) {
       setConfig(prev => ({
         ...prev,
         totalCost: prev.totalCost + cost,
-        requestCount: prev.requestCount + 1
+        requestCount: prev.requestCount + 1,
+        requestsToday: prev.requestsToday + 1
       }));
     }
   }, [config.costTracking]);
-  
+
   const value: AIContextType = {
     config,
     status,
@@ -387,10 +465,12 @@ export function AIProvider({ children }: { children: React.ReactNode }) {
     toggleFeature,
     isFeatureEnabled,
     testConnection,
+    storeApiKey,
+    deleteApiKey,
     getEnabledFeaturesForPage,
     trackUsage
   };
-  
+
   return (
     <AIContext.Provider value={value}>
       {children}
@@ -414,7 +494,7 @@ export function useAI() {
 // ============================================================================
 export function useAIFeature(featureId: AIFeatureId) {
   const { config, isFeatureEnabled, status } = useAI();
-  
+
   return {
     enabled: isFeatureEnabled(featureId),
     available: config.enabled && status.connected,
@@ -425,17 +505,17 @@ export function useAIFeature(featureId: AIFeatureId) {
 // ============================================================================
 // Utility Component - Conditionally render AI features
 // ============================================================================
-export function AIFeatureGate({ 
-  featureId, 
+export function AIFeatureGate({
+  featureId,
   children,
-  fallback = null 
-}: { 
-  featureId: AIFeatureId; 
+  fallback = null
+}: {
+  featureId: AIFeatureId;
   children: React.ReactNode;
   fallback?: React.ReactNode;
 }) {
   const { enabled } = useAIFeature(featureId);
-  
+
   if (!enabled) return <>{fallback}</>;
   return <>{children}</>;
 }
@@ -445,9 +525,9 @@ export function AIFeatureGate({
 // ============================================================================
 export function AIBadge({ className = '' }: { className?: string }) {
   const { config, status } = useAI();
-  
+
   if (!config.enabled) return null;
-  
+
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-gradient-to-r from-purple-500/20 to-blue-500/20 text-purple-400 border border-purple-500/30 ${className}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${status.connected ? 'bg-green-400' : 'bg-yellow-400'} animate-pulse`} />
@@ -457,4 +537,3 @@ export function AIBadge({ className = '' }: { className?: string }) {
 }
 
 export default AIContext;
-

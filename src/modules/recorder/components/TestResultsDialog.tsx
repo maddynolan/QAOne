@@ -12,6 +12,7 @@ import {
   ChevronLeft, ChevronRight, MousePointer, RefreshCw, SkipForward,
   Circle, Eye,
 } from 'lucide-react';
+import { useAI } from '@/contexts/AIContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -142,6 +143,9 @@ export default function TestResultsDialog({
   setRightPanelTab,
   setShowTestResultModal,
 }: TestResultsDialogProps) {
+  const { config: aiConfig } = useAI();
+  const aiAvailable = aiConfig.enabled && aiConfig.hasApiKey;
+
   return (
     <Dialog open={open} onOpenChange={(openVal) => {
       if (!openVal && testExecutionResult?.status === 'running') {
@@ -457,7 +461,7 @@ export default function TestResultsDialog({
                 </div>
                 {/* AI MULTI-FIX section */}
                 {isViewingFailed && <div className="border-t border-red-500/20 pt-2">
-                  {!aiExplanation && !aiExplanationLoading && isOnCanonicalFailed && (
+                  {!aiExplanation && !aiExplanationLoading && isOnCanonicalFailed && aiAvailable && (
                     <button
                       onClick={async () => {
                         setAiExplanationLoading(true);
@@ -850,8 +854,14 @@ export default function TestResultsDialog({
                               ) : (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleAutoFixStep(idx); }}
-                                  className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
-                                  title="AI Auto-Fix: automatically repair this step using AI healing chain"
+                                  disabled={!aiAvailable}
+                                  className={cn(
+                                    "px-2 py-0.5 text-[10px] rounded border",
+                                    aiAvailable
+                                      ? "bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border-blue-500/30"
+                                      : "bg-gray-500/10 text-gray-500 border-gray-500/20 cursor-not-allowed"
+                                  )}
+                                  title={aiAvailable ? "AI Auto-Fix: automatically repair this step using AI healing chain" : "Enable AI in Settings to use Auto-Fix"}
                                 >
                                   Fix
                                 </button>
@@ -859,8 +869,14 @@ export default function TestResultsDialog({
                               {action.id && !falsePositiveSteps.has(action.id) && !autoFixingSteps.has(idx) && !autoFixResults.get(idx)?.success && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleAutoFixStep(idx, { flagFirst: true }); }}
-                                  className="px-2 py-0.5 text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded border border-amber-500/30"
-                                  title="Flag as false positive and auto-fix with AI"
+                                  disabled={!aiAvailable}
+                                  className={cn(
+                                    "px-2 py-0.5 text-[10px] rounded border",
+                                    aiAvailable
+                                      ? "bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border-amber-500/30"
+                                      : "bg-gray-500/10 text-gray-500 border-gray-500/20 cursor-not-allowed"
+                                  )}
+                                  title={aiAvailable ? "Flag as false positive and auto-fix with AI" : "Enable AI in Settings to use Flag & Fix"}
                                 >
                                   Flag
                                 </button>
@@ -869,8 +885,14 @@ export default function TestResultsDialog({
                                 <>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleAutoFixStep(idx); }}
-                                    className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
-                                    title="AI Auto-Fix this flagged step"
+                                    disabled={!aiAvailable}
+                                    className={cn(
+                                      "px-2 py-0.5 text-[10px] rounded border",
+                                      aiAvailable
+                                        ? "bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border-blue-500/30"
+                                        : "bg-gray-500/10 text-gray-500 border-gray-500/20 cursor-not-allowed"
+                                    )}
+                                    title={aiAvailable ? "AI Auto-Fix this flagged step" : "Enable AI in Settings to use Auto-Fix"}
                                   >
                                     Fix
                                   </button>
@@ -883,6 +905,7 @@ export default function TestResultsDialog({
                                   </button>
                                 </>
                               )}
+                              {/* Manual button - always available, does not require AI */}
                               {!autoFixingSteps.has(idx) && !autoFixResults.get(idx)?.success && (
                                 <button
                                   onClick={(e) => {
@@ -917,8 +940,14 @@ export default function TestResultsDialog({
                               ) : (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleAutoFixStep(idx); }}
-                                  className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
-                                  title="AI Auto-Fix: automatically repair this step"
+                                  disabled={!aiAvailable}
+                                  className={cn(
+                                    "px-2 py-0.5 text-[10px] rounded border",
+                                    aiAvailable
+                                      ? "bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border-blue-500/30"
+                                      : "bg-gray-500/10 text-gray-500 border-gray-500/20 cursor-not-allowed"
+                                  )}
+                                  title={aiAvailable ? "AI Auto-Fix: automatically repair this step" : "Enable AI in Settings to use Auto-Fix"}
                                 >
                                   Fix
                                 </button>
@@ -928,10 +957,10 @@ export default function TestResultsDialog({
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     markStepAsFalsePositive(idx, stepResult?.screenshot || null, 'Wrong element — step passed but clicked incorrect element');
-                                    handleAutoFixStep(idx);
+                                    if (aiAvailable) handleAutoFixStep(idx);
                                   }}
                                   className="px-2 py-0.5 text-[10px] bg-red-500/10 hover:bg-red-500/30 text-red-400/70 hover:text-red-400 rounded border border-red-500/20 hover:border-red-500/30"
-                                  title="Wrong element — flags and auto-fixes with AI"
+                                  title={aiAvailable ? "Wrong element — flags and auto-fixes with AI" : "Wrong element — flags step (enable AI for auto-fix)"}
                                 >
                                   Wrong
                                 </button>
@@ -1068,9 +1097,16 @@ export default function TestResultsDialog({
                             });
                           }}
                           variant="outline"
-                          className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
-                          disabled={isAutoFixingAll}
-                          title={`AI Auto-Fix ${failedStepIndices.length} failed step${failedStepIndices.length > 1 ? 's' : ''}`}
+                          className={cn(
+                            aiAvailable
+                              ? "border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
+                              : "border-gray-500/30 text-gray-500 cursor-not-allowed"
+                          )}
+                          disabled={isAutoFixingAll || !aiAvailable}
+                          title={aiAvailable
+                            ? `AI Auto-Fix ${failedStepIndices.length} failed step${failedStepIndices.length > 1 ? 's' : ''}`
+                            : "Enable AI in Settings to use Auto-Fix"
+                          }
                         >
                           {isAutoFixingAll ? (
                             <><svg className="w-4 h-4 mr-1 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round"/></svg> Fixing...</>

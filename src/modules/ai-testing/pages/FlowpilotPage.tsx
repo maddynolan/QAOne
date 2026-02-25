@@ -14,6 +14,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAI } from '@/contexts/AIContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -209,6 +210,8 @@ function getColors(color: string, theme: string) {
 
 export default function FlowpilotPage() {
   const { theme } = useTheme();
+  const { config: aiConfig } = useAI();
+  const aiAvailable = aiConfig.enabled && aiConfig.hasApiKey;
   const [selectedAgent, setSelectedAgent] = useState(agents[0]); // Start with Generator
   const [goal, setGoal] = useState('');
   const [targetUrl, setTargetUrl] = useState('');
@@ -523,8 +526,10 @@ export default function FlowpilotPage() {
 
   // ─── Determine if execute button is enabled ────────────────────
 
+  const agentNeedsAI = selectedAgent.id === 'generator' || selectedAgent.id === 'self-healer';
   const canExecute = (() => {
     if (isProcessing) return false;
+    if (agentNeedsAI && !aiAvailable) return false;
     if (selectedAgent.id === 'explorer' || selectedAgent.id === 'flowmap') return !!targetUrl.trim();
     return !!goal.trim();
   })();
@@ -551,6 +556,19 @@ export default function FlowpilotPage() {
             <Brain className="w-3 h-3 mr-1" /> Live AI
           </Badge>
         </div>
+        {!aiAvailable && (
+          <div className={cn(
+            "mt-3 px-4 py-2 rounded-lg border text-sm flex items-center gap-2",
+            theme === 'light' ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-amber-500/10 border-amber-500/30 text-amber-400"
+          )}>
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span>
+              Configure AI in{' '}
+              <a href="/settings?tab=ai" className="underline font-medium hover:opacity-80">Settings</a>
+              {' '}to enable Generator and Self-Healer agents. Explorer works without AI.
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-4 gap-6">
@@ -563,6 +581,8 @@ export default function FlowpilotPage() {
             const Icon = agent.icon;
             const c = getColors(agent.color, theme);
             const isSelected = selectedAgent.id === agent.id;
+            const needsAI = agent.id === 'generator' || agent.id === 'self-healer';
+            const isAgentDisabled = needsAI && !aiAvailable;
 
             return (
               <button
@@ -574,7 +594,8 @@ export default function FlowpilotPage() {
                     ? cn(c.bg, c.border, "border-2")
                     : theme === 'light'
                       ? "bg-white border-gray-200 hover:border-gray-300"
-                      : "bg-gray-900 border-gray-800 hover:border-gray-700"
+                      : "bg-gray-900 border-gray-800 hover:border-gray-700",
+                  isAgentDisabled && "opacity-60"
                 )}
               >
                 <div className="flex items-center gap-3">
@@ -587,6 +608,13 @@ export default function FlowpilotPage() {
                   <div className="flex-1 min-w-0">
                     <div className={cn("font-semibold", isSelected ? c.text : theme === 'light' ? 'text-gray-900' : 'text-white')}>
                       {agent.name}
+                      {isAgentDisabled && (
+                        <span className={cn("ml-2 text-[10px] font-normal px-1.5 py-0.5 rounded",
+                          theme === 'light' ? "bg-amber-100 text-amber-600" : "bg-amber-500/20 text-amber-400"
+                        )}>
+                          AI Required
+                        </span>
+                      )}
                     </div>
                     <div className={cn("text-xs truncate", theme === 'light' ? 'text-gray-500' : 'text-gray-400')}>
                       {agent.description}
@@ -600,6 +628,11 @@ export default function FlowpilotPage() {
                     {agent.features.map((f) => (
                       <Badge key={f} className={cn("text-[10px]", c.bg, c.text, "border-0")}>{f}</Badge>
                     ))}
+                    {agent.id === 'flowmap' && !aiAvailable && (
+                      <Badge className={cn("text-[10px]", theme === 'light' ? "bg-gray-100 text-gray-500" : "bg-gray-800 text-gray-400", "border-0")}>
+                        Enhanced with AI when configured
+                      </Badge>
+                    )}
                   </div>
                 )}
               </button>
@@ -654,6 +687,18 @@ export default function FlowpilotPage() {
                 </div>
               )}
 
+              {agentNeedsAI && !aiAvailable && (
+                <div className={cn(
+                  "p-3 rounded-lg border text-sm",
+                  theme === 'light' ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                )}>
+                  {selectedAgent.name} requires AI to be configured.{' '}
+                  <a href="/settings?tab=ai" className="underline font-medium hover:opacity-80">
+                    Configure AI in Settings
+                  </a>
+                </div>
+              )}
+
               <div className="flex gap-3">
                 {isProcessing ? (
                   <Button onClick={handleStop} variant="destructive" className="flex-1">
@@ -664,6 +709,7 @@ export default function FlowpilotPage() {
                     onClick={handleExecute}
                     disabled={!canExecute}
                     className={cn("flex-1", `bg-gradient-to-r ${colors.gradient}`, "hover:opacity-90 text-white")}
+                    title={agentNeedsAI && !aiAvailable ? "AI must be configured in Settings to use this agent" : undefined}
                   >
                     <Wand2 className="w-4 h-4 mr-2" /> Execute with {selectedAgent.name}
                   </Button>

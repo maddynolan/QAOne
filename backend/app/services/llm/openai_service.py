@@ -78,6 +78,28 @@ class OpenAIService:
         self.input_cost_per_1m = 0.15
         self.output_cost_per_1m = 0.60
     
+    def get_client_for_key(self, api_key: str) -> Optional[Any]:
+        """Get or create an AsyncOpenAI client for a specific API key (BYOK support)."""
+        if not api_key:
+            return self._client  # Fall back to default
+
+        import hashlib
+        key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:16]
+
+        if not hasattr(self, '_client_cache'):
+            self._client_cache = {}
+
+        if key_hash not in self._client_cache:
+            try:
+                from openai import AsyncOpenAI
+                self._client_cache[key_hash] = AsyncOpenAI(api_key=api_key)
+                logger.debug(f"Created BYOK OpenAI client (hash: {key_hash})")
+            except Exception as e:
+                logger.error(f"Failed to create BYOK OpenAI client: {e}")
+                return self._client  # Fallback
+
+        return self._client_cache[key_hash]
+
     def is_available(self) -> bool:
         """Check if OpenAI service is available"""
         return self._client is not None and self.api_key is not None
