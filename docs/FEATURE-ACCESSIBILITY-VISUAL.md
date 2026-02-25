@@ -394,7 +394,19 @@ Regions are painted with a neutral color before comparison to eliminate false po
 
 | Variable | Service | Description |
 |----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | VisualTestingEngine | Required for AI Semantic comparison mode (Claude Vision) |
+| `ANTHROPIC_API_KEY` | VisualTestingEngine | Optional server-level fallback for AI Semantic comparison (Claude Vision) |
+| `ENCRYPTION_KEY` | BYOK key encryption | Required for Fernet encryption of user-provided API keys |
+
+### AI Configuration (v3.14.0 — BYOK)
+
+AI-powered features are **OFF by default**:
+
+- **AI Semantic visual comparison** (Claude Vision): Requires Anthropic key (BYOK or server env var)
+- **AI accessibility suggestions**: Requires OpenAI/Anthropic key
+- All other modes (pixel_perfect, anti_aliased, perceptual, structural, layout) work without AI
+- All accessibility scanning (axe-core) works without AI
+- Key resolution: BYOK key (Settings > AI tab) → server env var → disabled
+- AI feature toggles (per org/project): `visual_analysis`, `a11y_suggestions`
 | `GOOGLE_CLOUD_VISION_KEY` | ScreenshotAnalyzer | Required for Google Vision OCR (alternative to Tesseract) |
 | `DATABASE_URL` | ComplianceReporter | PostgreSQL for compliance report storage |
 

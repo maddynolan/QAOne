@@ -14,7 +14,8 @@
 7. [Agent Deep Dive](#7-agent-deep-dive)
 8. [LLM Integration](#8-llm-integration)
 9. [Configuration](#9-configuration)
-10. [Known Gaps & TODOs](#10-known-gaps--todos)
+10. [BYOK AI Integration (v3.14.0)](#10-byok-ai-integration-v3140)
+11. [Known Gaps & TODOs](#11-known-gaps--todos)
 
 ---
 
@@ -41,8 +42,8 @@ Flowpilot sub-routes (`/flowpilot/explorer`, `/flowpilot/generator`, `/flowpilot
 | Blinq.io | Records but no AI generation | NLP-to-test without any recording |
 | Testers.ai | Crawls but no deep DOM extraction | Real DOM scan + 10+ fallback selector strategies + Vision AI |
 
-**Version:** v3.12.18+
-**Last updated:** 2026-02-20
+**Version:** v3.14.0+
+**Last updated:** 2026-02-25
 
 ---
 
@@ -353,6 +354,15 @@ Key files for AI Testing:
 | `agents_api.py` | 95 | `/agents` | Agent registry and health checks |
 | `vision_healing_api.py` | -- | `/api/vision` | Vision-based selector healing |
 | `llm_api.py` | -- | `/api/llm` | LLM gateway endpoints |
+| `ai_key_resolver.py` | -- | (shared helper) | `resolve_ai_key()` and `require_ai_key()` for all AI routers (v3.14.0+) |
+
+### AI Settings Router (v3.14.0+)
+
+**Directory:** `backend/app/routers/platform/`
+
+| File | Lines | Prefix | Purpose |
+|------|-------|--------|---------|
+| `ai_settings_api.py` | -- | `/api/ai/settings` | 7 endpoints: settings CRUD, key management, connection testing, provider listing, usage stats |
 
 ### Exploration Routers
 
@@ -394,6 +404,18 @@ Key files for AI Testing:
 |--------|------|---------|----------|---------|
 | `POST` | `/api/exploration/start` | `{ base_url, max_depth?, max_pages?, allowed_domains?, excluded_paths?, login_flow?, headless?, screenshot? }` | `{ status, exploration_run_id, capability_map_id, exploration_result, capability_map, defects_detected, defects_saved }` | Start app mapping |
 | `GET` | `/api/exploration/health` | -- | `{ status, table_exists, database_info, message }` | Health check with DB validation |
+
+### AI Settings Router (`/api/ai/settings`) — v3.14.0+
+
+| Method | Path | Request | Response | Purpose |
+|--------|------|---------|----------|---------|
+| `GET` | `/api/ai/settings` | -- | `{ enabled, provider, model, features, has_key, has_anthropic_key }` | Get org AI settings |
+| `PUT` | `/api/ai/settings` | `{ enabled?, provider?, model?, features? }` | `{ status, settings }` | Update AI settings |
+| `POST` | `/api/ai/settings/key` | `{ provider, api_key }` | `{ status, message }` | Store BYOK API key (Fernet-encrypted) |
+| `DELETE` | `/api/ai/settings/key/{provider}` | -- | `{ status, message }` | Remove stored key |
+| `POST` | `/api/ai/settings/test` | `{ provider?, api_key? }` | `{ status, provider, model, latency_ms }` | Test connection with stored/provided key |
+| `GET` | `/api/ai/settings/providers` | -- | `{ providers[] }` | List providers with key configuration status |
+| `GET` | `/api/ai/settings/usage` | -- | `{ period, total_calls, total_tokens, by_feature, budget }` | Get current period usage stats |
 
 ### SSE Event Types (Generator / Self-Healer)
 
@@ -663,7 +685,172 @@ Return ONLY a JSON array of alternative selectors.
 
 ---
 
-## 10. Known Gaps & TODOs
+## 10. BYOK AI Integration (v3.14.0)
+
+### Overview
+
+As of v3.14.0, **AI is OFF by default** across the entire platform. Users must explicitly opt-in at the organization level, bring their own API keys (BYOK), and can toggle 20 individual AI feature areas on or off. This applies to all AI-dependent features in the AI Testing module, including the Generator agent, Self-Healer agent, and LLM-enhanced Flowmap analysis.
+
+The Explorer agent is unaffected because it operates without any AI dependency (purely deterministic crawling).
+
+### Toggle Hierarchy
+
+```
+Server env (OPENAI_API_KEY)       <-- Platform-provided key (fallback)
+  +-- Org settings (ai_settings)  <-- Admin enables AI, stores BYOK key
+       +-- Project override        <-- Optional per-project settings
+            +-- Feature toggles     <-- 20 granular feature flags
+```
+
+**Key Resolution Chain (backend):**
+1. Check `ai_settings` for org/project-specific BYOK key (Fernet-encrypted) -> use it
+2. Else check server env var (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`) -> use it
+3. Else -> AI unavailable, return 503 for AI endpoints
+
+### Frontend AI Gates
+
+#### FlowpilotPage Gates
+
+When AI is not configured (no key stored, AI disabled at org level):
+
+- **Generator and Self-Healer cards** are visually dimmed with an "AI Required" badge overlay
+- **Explorer card** always remains fully active (no AI dependency)
+- **Flowmap card** remains active but LLM analysis will be skipped if no AI key
+- **Execute button** is disabled for AI-dependent agents when no AI is available
+- **Amber setup banner** appears at the top of the page with a link to `/settings?tab=ai` for configuration
+
+The `useAI()` hook from `AIContext` provides `isAvailable`, `isFeatureEnabled(feature)`, and `hasApiKey` checks used by the component to determine gate states.
+
+#### AIChatTesting Gates
+
+When AI is not available:
+
+- **Textarea** is disabled (read-only) with placeholder text indicating AI is not configured
+- **Quick example prompts** are hidden
+- **"Start AI Testing" button** is disabled
+- **Amber info card** is displayed with a "Configure AI in Settings" link pointing to `/settings?tab=ai`
+- When AI is re-enabled, all controls become active immediately (reactive via context)
+
+### Backend: AI Key Resolver
+
+**File:** `backend/app/routers/ai/ai_key_resolver.py`
+
+A shared helper module used by all AI routers to resolve API keys from the BYOK hierarchy:
+
+| Function | Purpose |
+|----------|---------|
+| `resolve_ai_key(request, provider)` | Resolves API key using the 3-level chain (BYOK -> env -> None). Returns `(key, source)` tuple where source is `"byok"`, `"env"`, or `None` |
+| `require_ai_key(request, provider)` | Same as `resolve_ai_key` but raises `HTTPException(503)` if no key is found. Used as a dependency in AI endpoints |
+
+All AI routers (`ai_testing.py`, `ai_generation_api.py`, `ai_automation_api.py`, `ai_enhancements_api.py`, `vision_healing_api.py`, `llm_api.py`) use `require_ai_key()` as a FastAPI dependency to gate access when no AI key is available.
+
+### Backend: AI Settings Service
+
+**File:** `backend/app/services/core/ai_settings_service.py` (704 lines)
+
+| Method | Purpose |
+|--------|---------|
+| `get_settings(org_id)` | Retrieve org-level AI settings (enabled, provider, model, feature toggles) |
+| `update_settings(org_id, updates)` | Update settings (enabled, provider, model, features) |
+| `store_key(org_id, provider, api_key)` | Encrypt key with Fernet, store in `ai_encrypted_keys` table |
+| `delete_key(org_id, provider)` | Remove stored encrypted key |
+| `resolve_key(org_id, provider)` | 3-level key resolution chain: BYOK -> env -> None |
+| `test_connection(org_id, provider, api_key?)` | Test API connection with stored or provided key, returns latency |
+| `get_providers(org_id)` | List all providers with `has_key` status |
+| `get_usage(org_id)` | Get current billing period usage stats by feature |
+| `track_usage(org_id, feature, tokens)` | Record AI usage for budget tracking |
+
+**Database tables** (migration `034_ai_settings.sql`):
+- `ai_settings` -- org-level settings (enabled, provider, model, feature toggles as JSONB)
+- `ai_encrypted_keys` -- Fernet-encrypted API keys per org/provider
+- `ai_usage_log` -- per-call usage tracking (feature, tokens, timestamp)
+
+### Frontend: AIContext (Rewritten for v3.14.0)
+
+**File:** `src/contexts/AIContext.tsx`
+
+The `AIContext` was rewritten to sync with the backend AI settings API instead of using localStorage:
+
+| Export | Type | Purpose |
+|--------|------|---------|
+| `AIProvider` | Component | Wraps app, fetches settings from `GET /api/ai/settings` on mount |
+| `useAI()` | Hook | Returns `{ isEnabled, isAvailable, hasApiKey, hasAnthropicKey, provider, model, features, isFeatureEnabled(feature), refreshSettings() }` |
+| `AIFeatureGate` | Component | Conditional render wrapper: `<AIFeatureGate feature="self_healing">...</AIFeatureGate>` -- renders children only if feature is enabled |
+
+**Key behaviors:**
+- Settings fetched from backend on mount and cached in context state
+- `isAvailable` = `isEnabled && (hasApiKey || hasAnthropicKey)` -- true only when AI is both enabled and has a key
+- `isFeatureEnabled(feature)` checks the 20-feature toggle map from backend settings
+- `refreshSettings()` re-fetches from backend (called after settings page changes)
+- API keys are NEVER stored in frontend state or localStorage -- only `hasApiKey: boolean` flags
+
+### Frontend: AIConfiguration (Rewritten for v3.14.0)
+
+**File:** `src/components/AIConfiguration.tsx`
+
+The Settings > AI tab was rewritten as a multi-provider BYOK management UI:
+
+**Sections:**
+1. **Master Toggle** -- Enable/disable AI for the entire organization
+2. **Provider Selection** -- Choose between OpenAI and Anthropic (with model selection per provider)
+3. **API Key Management** -- Per-provider key input with "Store Key" button; keys sent to `POST /api/ai/settings/key`; after save, input clears and "Key stored securely" badge shown; "Test Connection" button validates the key
+4. **Feature Toggles** -- 20 individual feature toggles organized in 7 categories
+5. **Usage & Budget** -- Current period usage stats, per-feature breakdown, budget limits
+
+**Key security:**
+- API keys are NEVER displayed after storage (only `hasApiKey` boolean shown)
+- Key input field clears immediately after successful save
+- "Remove Key" button calls `DELETE /api/ai/settings/key/{provider}`
+- Connection test uses `POST /api/ai/settings/test` (can test with stored key or newly entered key before saving)
+
+### 20 AI Feature Toggles
+
+| Category | Feature Flag | Description |
+|----------|-------------|-------------|
+| **Test Generation** | `test_case_generation` | AI-powered test case generation from requirements |
+| | `test_step_suggestions` | Smart step suggestions during test building |
+| **Self-Healing** | `self_healing` | Auto-fix broken selectors during execution |
+| | `smart_locators` | AI-enhanced locator strategies |
+| **API Testing** | `api_test_generation` | Generate API tests from specs |
+| | `api_mock_generation` | Generate mock responses |
+| **Performance** | `perf_analysis` | AI-powered performance analysis |
+| | `load_pattern_suggestions` | Suggest optimal load patterns |
+| **Visual & A11y** | `visual_analysis` | AI semantic visual comparison |
+| | `a11y_suggestions` | AI accessibility fix suggestions |
+| **Defects & Code** | `defect_analysis` | AI defect root cause analysis |
+| | `defect_triage` | Automated defect triage and prioritization |
+| | `code_generation` | Generate test code from descriptions |
+| | `code_optimization` | Optimize existing test code |
+| **Requirements** | `requirement_analysis` | AI requirement analysis and gap detection |
+| | `gherkin_generation` | Generate Gherkin from requirements |
+| **Salesforce** | `sf_test_generation` | Salesforce-specific test generation |
+| | `sf_data_generation` | Salesforce test data generation |
+| **Assistants** | `chat_assistant` | AI chat assistant for debugging |
+| | `smart_fill` | Smart form fill suggestions |
+
+### Impact on AI Testing Agents
+
+| Agent | AI Required? | Behavior When AI Unavailable |
+|-------|-------------|------------------------------|
+| **Generator** | Yes | Card dimmed, execute button disabled, amber banner shown |
+| **Self-Healer** | Yes | Card dimmed, execute button disabled, amber banner shown |
+| **Explorer** | No | Always available -- purely deterministic crawling |
+| **Flowmap** | Partial | Crawling works, LLM-enhanced analysis skipped |
+
+### Key Files Summary
+
+| File | Purpose |
+|------|---------|
+| `src/contexts/AIContext.tsx` | React context -- backend-synced, 20 feature areas, `useAI()`, `AIFeatureGate` |
+| `src/components/AIConfiguration.tsx` | Settings > AI tab -- multi-provider BYOK UI, feature toggles, usage/budget |
+| `backend/app/services/core/ai_settings_service.py` | AISettingsService -- CRUD, key encryption, resolution, budget tracking (704 lines) |
+| `backend/app/routers/platform/ai_settings_api.py` | REST API for AI settings (7 endpoints) |
+| `backend/app/routers/ai/ai_key_resolver.py` | Shared helper: `resolve_ai_key()` and `require_ai_key()` for all AI routers |
+| `supabase/migrations/034_ai_settings.sql` | Database migration: `ai_settings`, `ai_encrypted_keys`, `ai_usage_log` tables |
+
+---
+
+## 11. Known Gaps & TODOs
 
 ### Frontend
 

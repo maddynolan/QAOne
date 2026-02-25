@@ -21,7 +21,9 @@
 12. [Step 10: Backup and Disaster Recovery](#step-10-backup-and-disaster-recovery)
 13. [Cost Estimation](#cost-estimation)
 14. [Security Checklist](#security-checklist)
-15. [Troubleshooting](#troubleshooting)
+15. [Chrome Web Store Publishing (v3.14.0)](#chrome-web-store-publishing-v3140)
+16. [Client Demo Quick Setup](#client-demo-quick-setup)
+17. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -127,7 +129,7 @@ From the Supabase dashboard, navigate to **Settings > API** and record:
 
 ### 1.3 Run Database Migrations
 
-The Flowstral schema is defined in 30 migration files under `supabase/migrations/`. Apply them in order:
+The Flowstral schema is defined in 34 migration files under `supabase/migrations/`. Apply them in order:
 
 **Option A: Using Supabase CLI (recommended)**
 
@@ -150,7 +152,7 @@ supabase db push
    - `002_ai_generations.sql` -- AI generation tracking
    - `003_ai_templates.sql` -- AI prompt templates
    - `004_requirements_table.sql` -- Requirements management
-   - ... through `030_compliance_mappings.sql`
+   - ... through `034_ai_settings.sql` (BYOK AI settings, usage tracking)
 3. Verify each migration completes without errors
 
 **Migration files location:** `supabase/migrations/`
@@ -264,16 +266,19 @@ SUPABASE_SERVICE_ROLE_KEY=[your-service-role-key]
 # Redis (auto-set by Railway if using their Redis add-on)
 # REDIS_URL=redis://default:...@...railway.internal:6379
 
-# AI / LLM
-OPENAI_API_KEY=sk-proj-[your-key]
+# AI / LLM (AI is OFF by default -- users opt-in via Settings > AI tab)
+# Server-provided fallback keys (optional). Used when an org has no BYOK key.
+# OPENAI_API_KEY=sk-proj-[your-key]
+# ANTHROPIC_API_KEY=sk-ant-[your-key]
 OPENAI_TEST_CASE_MODEL=gpt-4o-mini
 OPENAI_TEMPERATURE=0.2
 OPENAI_MAX_TOKENS=2000
 TEST_CASE_LLM_PROVIDER=auto
 DEFAULT_LLM_PROVIDER=openai
 
-# Optional: Anthropic Claude (for prompt caching features)
-# ANTHROPIC_API_KEY=sk-ant-[your-key]
+# BYOK Key Encryption (required for users to store their own AI keys)
+# Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+ENCRYPTION_KEY=[generate-a-fernet-key]
 
 # Application
 PYTHONPATH=/app
@@ -301,6 +306,9 @@ python -c "import secrets; print(secrets.token_hex(32))"
 
 # Generate JWT_SECRET
 python -c "import secrets; print(secrets.token_hex(32))"
+
+# Generate ENCRYPTION_KEY (Fernet key for BYOK API key encryption)
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
 ### 2.5 Add Custom Domain
@@ -499,9 +507,10 @@ The FastAPI backend configures CORS middleware in `backend/app/main.py` using th
 | `SUPABASE_ANON_KEY` | Yes | Supabase anon/public key | `eyJhbGci...` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key (server-side only) | `eyJhbGci...` |
 | `REDIS_URL` | Recommended | Redis connection string (auto-set by Railway Redis add-on) | `redis://default:pw@host:6379` |
-| `OPENAI_API_KEY` | Yes | OpenAI API key for AI features | `sk-proj-...` |
-| `ANTHROPIC_API_KEY` | Optional | Anthropic Claude API key | `sk-ant-...` |
+| `OPENAI_API_KEY` | Optional | Server-provided OpenAI API key (fallback for orgs without BYOK keys) | `sk-proj-...` |
+| `ANTHROPIC_API_KEY` | Optional | Server-provided Anthropic Claude API key (fallback) | `sk-ant-...` |
 | `DEFAULT_LLM_PROVIDER` | No | Default LLM provider | `openai` (default) |
+| `ENCRYPTION_KEY` | Recommended | Fernet key for encrypting BYOK API keys at rest | Fernet key string |
 | `TEST_CASE_LLM_PROVIDER` | No | Provider for test case generation | `auto` (default) |
 | `OPENAI_TEST_CASE_MODEL` | No | OpenAI model for test generation | `gpt-4o-mini` (default) |
 | `OPENAI_TEMPERATURE` | No | LLM temperature | `0.2` (default) |
@@ -904,8 +913,10 @@ pg_restore --dbname="[connection-string]" flowstral-backup-20260223.dump
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` only on backend (Railway), never on frontend (Vercel)
 - [ ] `OPENAI_API_KEY` only on backend (Railway), never on frontend (Vercel)
 - [ ] `SECRET_KEY` and `JWT_SECRET` are unique, cryptographically random, 64+ characters
+- [ ] `ENCRYPTION_KEY` is set (Fernet key) for BYOK API key encryption at rest
 - [ ] `.env` file is listed in `.gitignore` (do not commit production secrets)
 - [ ] API keys rotated quarterly (set calendar reminders)
+- [ ] BYOK keys are encrypted in `ai_encrypted_keys` table (Fernet), never in localStorage or frontend state
 
 ### Network and CORS
 
@@ -938,6 +949,327 @@ pg_restore --dbname="[connection-string]" flowstral-backup-20260223.dump
 - [ ] Error alerting set up (email or Slack) for 5xx responses
 - [ ] LLM usage tracking enabled (`TRACK_LLM_USAGE=true`) to monitor API costs
 - [ ] Railway deployment notifications enabled
+
+---
+
+## AI Configuration (v3.14.0+)
+
+### AI is OFF by Default
+
+AI features are disabled by default for all organizations. No AI API keys are required for the platform to function. Users opt-in to AI via **Settings > AI** in the web application.
+
+### BYOK (Bring Your Own Key)
+
+Users can provide their own OpenAI or Anthropic API keys through the Settings UI. BYOK keys are:
+
+- Encrypted at rest using Fernet symmetric encryption (requires `ENCRYPTION_KEY` env var on Railway)
+- Never stored in the frontend -- only a `hasApiKey: boolean` flag is tracked client-side
+- Resolved per-request: BYOK org key > server env var > AI unavailable (503)
+
+**Setup:** Ensure `ENCRYPTION_KEY` is set in Railway environment variables (see Step 5). Generate it with:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+### Server-Provided Fallback Keys (Optional)
+
+If you want to offer AI capabilities to all users without requiring BYOK, set `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` in Railway. These are used as fallbacks when an org has not configured their own key.
+
+### Budget Tracking and Usage Monitoring
+
+AI usage is tracked per-organization in the `ai_usage_log` table. Each LLM API call records:
+- Provider, model, prompt/completion tokens, estimated cost
+- Feature area (e.g., `test_case_generation`, `self_healing`, `chat_assistant`)
+- Timestamp for time-series analysis
+
+Admins can view usage stats and set budget limits via **Settings > AI > Usage** or query the API directly:
+
+```bash
+# Get current period usage stats for an org
+curl -H "Authorization: Bearer $TOKEN" \
+  https://api.flowstral.com/api/ai/settings/usage
+```
+
+### AI Settings API Endpoints
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET` | `/api/ai/settings` | Get org AI settings (enabled, provider, features, has_key) |
+| `PUT` | `/api/ai/settings` | Update settings (enabled, provider, model, 20 feature toggles) |
+| `POST` | `/api/ai/settings/key` | Store BYOK API key (Fernet-encrypted) |
+| `DELETE` | `/api/ai/settings/key/{provider}` | Remove stored key |
+| `POST` | `/api/ai/settings/test` | Test connection with stored/provided key |
+| `GET` | `/api/ai/settings/providers` | List providers + which have keys configured |
+| `GET` | `/api/ai/settings/usage` | Get current period usage stats and budget status |
+
+### Database Tables
+
+Migration `034_ai_settings.sql` (applied via `supabase db push`) creates:
+- `ai_settings` -- Per-org AI configuration, provider selection, 20 feature toggles, budget limits
+- `ai_usage_log` -- LLM call tracking per org for cost monitoring
+
+The `ai_encrypted_keys` table is created at runtime by `AISettingsService` to store Fernet-encrypted BYOK keys. All three tables are also bootstrapped by `auto_migrate.py` on backend startup.
+
+---
+
+## Chrome Web Store Publishing (v3.14.0)
+
+### Prerequisites
+
+- **Chrome Developer account** -- one-time $5 registration fee at [https://chrome.google.com/webstore/devconsole](https://chrome.google.com/webstore/devconsole)
+- **Hosted privacy policy** -- must be publicly accessible at `https://app.flowstral.com/privacy` (already implemented in `PrivacyPage.tsx`, Section 8 covers Chrome Extension data practices)
+- **Extension source** -- `flowstral-extension/` directory in the repository
+
+### Step-by-Step Publishing Process
+
+**1. Create a Chrome Developer Account**
+
+1. Go to [https://chrome.google.com/webstore/devconsole](https://chrome.google.com/webstore/devconsole)
+2. Sign in with a Google account (use a team/company account, not personal)
+3. Pay the one-time $5 developer registration fee
+4. Complete identity verification (may take 24-48 hours for new accounts)
+
+**2. Package the Extension**
+
+```bash
+cd C:\QAAI\flowstral-extension
+
+# Ensure manifest.json has the correct version number
+# The version must be incremented for each submission
+
+# Create a zip file for upload (exclude development files)
+zip -r flowstral-extension.zip \
+  manifest.json \
+  src/ \
+  icons/ \
+  PRIVACY_POLICY.md \
+  -x "*.DS_Store" "node_modules/*" ".git/*"
+```
+
+**3. Create the Store Listing**
+
+1. In the Developer Console, click **New Item**
+2. Upload the `flowstral-extension.zip` file
+3. Fill in the listing details:
+   - **Name:** Flowstral QA Recorder
+   - **Summary:** Browser test recorder with AI self-healing for enterprise QA automation
+   - **Description:** Detailed description covering recording capabilities, AI features, and enterprise integration
+   - **Category:** Developer Tools
+   - **Language:** English
+
+**4. Upload Required Assets**
+
+| Asset | Specification | Purpose |
+|-------|---------------|---------|
+| Icon (128x128) | PNG, 128x128 pixels | Store listing icon |
+| Screenshots (5+) | PNG/JPEG, 1280x800 or 640x400 | Store listing screenshots |
+| Small promo tile | PNG, 440x280 | Optional promotional tile |
+| Marquee promo | PNG, 1400x560 | Optional large promotional banner |
+
+Recommended screenshots:
+1. Recording a browser session (side panel open)
+2. AI auto-fix healing a broken selector
+3. Generated Playwright script output
+4. Manual Assist card with selector suggestions
+5. Extension settings / configuration panel
+
+**5. Complete Privacy Declarations**
+
+Under **Privacy practices**, declare the following data types:
+
+| Data Type | Usage | Disclosure |
+|-----------|-------|------------|
+| **User Activity** (clicks, scrolls, mouse movements) | Core functionality (test recording) | Disclosed -- sent to user's configured backend server |
+| **Web History** (URLs visited during recording) | Core functionality (test step URLs) | Disclosed -- sent to user's configured backend server |
+
+Additional declarations:
+- Data is **not sold** to third parties
+- Data is **not used for purposes unrelated** to the extension's functionality
+- Data is **not used for creditworthiness or lending** purposes
+- Sensitive data (passwords, auth headers) is **masked before transmission**
+
+**6. Submit for Review**
+
+1. Review all listing details and privacy declarations
+2. Click **Submit for Review**
+3. Review typically takes 1-5 business days
+4. You will receive email notification of approval or rejection
+
+### Pre-Submission Compliance Checklist
+
+All items below were completed in v3.13.3 and are maintained going forward:
+
+- [x] `optional_host_permissions` restricted to `["https://*/*", "http://localhost/*", "http://127.0.0.1/*"]` (no `<all_urls>`)
+- [x] Sensitive headers masked in network captures: Authorization, Cookie, Set-Cookie, X-API-Key, X-Auth-Token, X-CSRF-Token
+- [x] Password fields and sensitive inputs masked as `[MASKED]` in recorded actions
+- [x] No remote code execution -- all code is bundled in the extension package
+- [x] Backend URL validation enforces HTTPS for non-localhost URLs
+- [x] Privacy policy hosted at `/privacy` and linked from `manifest.json` `homepage_url`
+- [x] Auto-dropdown scanning disabled (was auto-triggering clicks on page elements)
+- [x] Correlation patterns (auto-detection of API keys/tokens) disabled in extension
+
+### Common Rejection Reasons and Fixes
+
+| Rejection Reason | Fix |
+|-----------------|-----|
+| **Broad host permissions** | Use `optional_host_permissions` instead of `permissions` for host access; already restricted in v3.13.3 |
+| **Missing privacy policy** | Ensure `/privacy` route is accessible and covers extension data practices (Section 8) |
+| **Unclear data usage** | Update description to explain why User Activity and Web History are collected |
+| **Remote code loading** | Ensure no `eval()`, no remote script injection; all code must be in the zip |
+| **Excessive permissions** | Only request permissions actually used; `webRequest` is in `optional_permissions` |
+| **Missing purpose description** | Each permission in manifest.json should have a clear justification in the store listing |
+
+---
+
+## Client Demo Quick Setup
+
+> 30-minute setup for deploying a fully functional Flowstral demo environment using Coolify on a Hetzner VPS. Ideal for client demos, proof-of-concept evaluations, and sales engineering.
+
+### Prerequisites
+
+- [ ] Hetzner Cloud account ([https://console.hetzner.cloud](https://console.hetzner.cloud))
+- [ ] Cloudflare account for DNS management (free tier works)
+- [ ] Domain or subdomain (e.g., `demo.flowstral.com`)
+- [ ] SSH key pair for server access
+
+### Step 1: Provision the Server (5 minutes)
+
+1. In Hetzner Cloud Console, create a new server:
+   - **Location:** Nuremberg (eu-central) or your nearest region
+   - **Image:** Ubuntu 22.04
+   - **Type:** CX32 (4 vCPU, 8 GB RAM, 80 GB SSD) -- $8.50/month
+   - **SSH Key:** Add your public key
+   - **Name:** `flowstral-demo`
+2. Note the server's public IP address
+
+### Step 2: Install Coolify (5 minutes)
+
+```bash
+# SSH into the server
+ssh root@<server-ip>
+
+# Install Coolify (one-liner)
+curl -fsSL https://cdn.coollabs.io/coolify/install.sh | bash
+
+# Coolify will be available at http://<server-ip>:8000
+# Create your admin account on first visit
+```
+
+### Step 3: Configure DNS (2 minutes)
+
+In Cloudflare, add an A record:
+
+```
+Type    Name              Content         Proxy
+A       demo.flowstral    <server-ip>     DNS only (grey cloud)
+```
+
+If using a wildcard for Coolify subdomains:
+
+```
+A       *.demo.flowstral  <server-ip>     DNS only
+```
+
+### Step 4: Deploy Services in Coolify (15 minutes)
+
+Deploy the following 6 services in order through the Coolify dashboard:
+
+**Service 1: PostgreSQL**
+- Type: Database > PostgreSQL 16
+- Config: Database name `qaai`, user `qaai`, generate password
+- Note the internal connection string
+
+**Service 2: Redis**
+- Type: Database > Redis 7
+- Default configuration
+
+**Service 3: MinIO**
+- Type: Service > MinIO
+- Set `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD`
+- Create bucket `qa-artifacts` after deployment
+
+**Service 4: Backend API**
+- Type: Application > Docker
+- Source: GitHub `maddynolan/QAOne`, root directory `backend`
+- Dockerfile: `backend/Dockerfile`
+- Domain: `api.demo.flowstral.com`
+- Environment variables (see `deploy/coolify/.env.example`):
+
+```env
+DATABASE_URL=postgresql://qaai:<password>@<postgres-internal>:5432/qaai
+REDIS_URL=redis://<redis-internal>:6379
+S3_ENDPOINT_URL=http://<minio-internal>:9000
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=<minio-password>
+S3_BUCKET_NAME=qa-artifacts
+JWT_SECRET=<generate-64-char-hex>
+ENCRYPTION_KEY=<generate-fernet-key>
+DEFAULT_LLM_PROVIDER=openai
+CORS_ORIGINS=https://demo.flowstral.com
+PYTHONPATH=/app
+PYTHONUNBUFFERED=1
+SEED_DEMO_DATA=true
+```
+
+**Service 5: Frontend**
+- Type: Application > Docker
+- Source: GitHub `maddynolan/QAOne`, root directory `/`
+- Dockerfile: `Dockerfile.frontend`
+- Build arg: `VITE_API_BASE_URL=https://api.demo.flowstral.com`
+- Domain: `demo.flowstral.com`
+
+**Service 6 (Optional): Monitoring**
+- Type: Application > Docker Compose
+- Use `docker-compose.monitoring.yml` for Prometheus + Grafana
+
+### Step 5: Seed Demo Data
+
+The `SEED_DEMO_DATA=true` environment variable triggers automatic demo data seeding on backend startup via `auto_migrate.py`. This creates:
+
+- 1 organization, 3 projects, 3 sample users
+- 50 test cases across multiple categories
+- 20 test runs with pass/fail results
+- 10 defects with varying severities
+- 8 requirements linked to test cases
+- 5 API collections with sample requests
+- 3 environments (dev, staging, prod)
+- 2 accessibility scan results
+- 3 performance test runs
+
+Demo user credentials are output in the backend logs on first startup.
+
+### Step 6: Verification Checklist
+
+```bash
+# Backend health
+curl -s https://api.demo.flowstral.com/health
+# Expected: {"status": "healthy", "database": "connected"}
+
+# Dashboard data populated
+curl -s https://api.demo.flowstral.com/dashboard/stats
+# Expected: non-zero counts for test cases, runs, defects
+
+# Frontend loads
+curl -s -o /dev/null -w "%{http_code}" https://demo.flowstral.com
+# Expected: 200
+```
+
+Verify in browser:
+- [ ] Landing page renders at `https://demo.flowstral.com`
+- [ ] Dashboard shows populated metrics after sign-in
+- [ ] Test Repository displays 50 seeded test cases
+- [ ] API Testing page loads with sample collections
+- [ ] Recorder page renders without errors
+
+### Cost Summary
+
+| Resource | Monthly Cost |
+|----------|-------------|
+| Hetzner CX32 (4 vCPU, 8 GB, 80 GB) | $8.50 |
+| Cloudflare DNS (free tier) | $0 |
+| Domain (if needed, annual/12) | ~$1 |
+| **Total** | **~$9.50/month** |
 
 ---
 
@@ -993,11 +1325,14 @@ Do not include trailing slashes. Do not include ports unless non-standard.
 **Symptom:** Test generation, AI self-healing, or Flowpilot agents fail.
 
 **Check:**
-1. `OPENAI_API_KEY` is set and has billing enabled on the OpenAI dashboard
-2. `DEFAULT_LLM_PROVIDER` is set to `openai` (not `local_ollama`)
-3. `AIR_GAPPED_MODE` is `false`
-4. Check Railway logs for `openai.AuthenticationError` or `openai.RateLimitError`
-5. Verify with: `curl https://api.flowstral.com/api/ai-testing/status`
+1. AI must be enabled for the org via **Settings > AI** (AI is OFF by default)
+2. Either a BYOK key must be stored (via `POST /api/ai/settings/key`) or `OPENAI_API_KEY` must be set as a server-level fallback
+3. If using BYOK, verify `ENCRYPTION_KEY` is set in Railway env vars (required for key decryption)
+4. `DEFAULT_LLM_PROVIDER` is set to `openai` (not `local_ollama`)
+5. `AIR_GAPPED_MODE` is `false`
+6. Check Railway logs for `openai.AuthenticationError` or `openai.RateLimitError`
+7. Verify with: `curl https://api.flowstral.com/api/ai-testing/status`
+8. Check AI settings: `curl -H "Authorization: Bearer $TOKEN" https://api.flowstral.com/api/ai/settings`
 
 ### Database Migration Failures
 

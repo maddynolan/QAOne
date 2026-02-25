@@ -500,8 +500,22 @@ Output: Polished, deduplicated test cases
 
 | Variable | Service | Description |
 |----------|---------|-------------|
-| `OPENAI_API_KEY` | AI generation, LLM rewrite, beautifier, gap analyzer | Required for AI-powered features |
+| `OPENAI_API_KEY` | AI generation, LLM rewrite, beautifier, gap analyzer | Optional server-level fallback for AI features |
+| `ANTHROPIC_API_KEY` | AI generation (Claude provider) | Optional server-level fallback |
 | `OLLAMA_BASE_URL` | LLM rewrite fallback | Ollama server URL for local LLM |
+| `ENCRYPTION_KEY` | BYOK key encryption | Required for Fernet encryption of user-provided API keys |
+
+### AI Configuration (v3.14.0 — BYOK)
+
+AI-powered features (test generation, LLM rewrite, beautifier, gap analyzer) are **OFF by default** and require explicit configuration:
+
+1. **Server-provided key**: Set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` env var as a fallback for all users
+2. **BYOK (Bring Your Own Key)**: Users provide their own key via Settings > AI tab → encrypted with Fernet, stored server-side
+3. **Key resolution**: BYOK key → server env var → disabled (no AI calls made)
+
+When AI is not configured, test generation endpoints return 503. Non-AI features (visual builder, step editor, import, CI/CD export) work normally without any API key.
+
+**AI feature toggles** (configurable per org/project): `test_case_generation`, `test_step_suggestions`, `gherkin_generation`, `requirement_analysis`
 
 ### Test Management Service
 

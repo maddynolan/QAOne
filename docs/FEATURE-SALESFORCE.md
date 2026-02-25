@@ -575,6 +575,16 @@ interface SalesforceField {
 
 ## 9. Configuration
 
+### AI Configuration (v3.14.0 — BYOK)
+
+AI-powered Salesforce features (test generation, data generation) are **OFF by default**:
+
+- Users provide their own OpenAI/Anthropic key via Settings > AI tab (BYOK — encrypted with Fernet, stored server-side)
+- Server admins can set `OPENAI_API_KEY` env var as fallback for all users
+- Key resolution: BYOK key → server env var → disabled
+- AI feature toggles (per org/project): `sf_test_generation`, `sf_data_generation`
+- Core Salesforce features (multi-org management, SOQL editor, metadata validation, Apex execution, OAuth) work fully without AI
+
 ### Environment Variables
 
 | Variable | Purpose | Used By |

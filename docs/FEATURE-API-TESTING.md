@@ -438,6 +438,18 @@ All demos use real public APIs (no localhost):
 
 ## Configuration
 
+### AI Configuration (v3.14.0 — BYOK)
+
+AI-powered API testing features (test generation from specs, mock generation) are **OFF by default** and require explicit configuration:
+
+- Users provide their own OpenAI/Anthropic key via Settings > AI tab (BYOK — encrypted with Fernet, stored server-side)
+- Server admins can set `OPENAI_API_KEY` env var as fallback for all users
+- Key resolution: BYOK key → server env var → disabled
+- AI feature toggles (per org/project): `api_test_generation`, `api_mock_generation`
+- Core API testing (request builder, execution, assertions, chaining, environments, import) works fully without AI
+
+### Backend URL
+
 The API testing module uses the centralized backend URL from `src/lib/api-config.ts`:
 
 ```typescript

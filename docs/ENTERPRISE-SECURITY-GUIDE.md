@@ -4,7 +4,7 @@
 > Covers authentication, authorization, multi-tenancy, encryption, network hardening, container security, audit logging, secret management, vulnerability scanning, compliance, and incident response.
 >
 > **Audience:** Security engineers, DevOps, compliance officers, IT administrators.
-> **Last updated:** 2026-02-23
+> **Last updated:** 2026-02-25
 
 ---
 
@@ -15,13 +15,14 @@
 3. [Multi-Tenancy](#3-multi-tenancy)
 4. [Rate Limiting](#4-rate-limiting)
 5. [Data Encryption](#5-data-encryption)
-6. [Network Security](#6-network-security)
-7. [Container Security](#7-container-security)
-8. [Audit Logging](#8-audit-logging)
-9. [Secret Management](#9-secret-management)
-10. [Security Scanning](#10-security-scanning)
-11. [Compliance Considerations](#11-compliance-considerations)
-12. [Incident Response](#12-incident-response)
+6. [BYOK AI Key Security](#6-byok-ai-key-security)
+7. [Network Security](#7-network-security)
+8. [Container Security](#8-container-security)
+9. [Audit Logging](#9-audit-logging)
+10. [Secret Management](#10-secret-management)
+11. [Security Scanning](#11-security-scanning)
+12. [Compliance Considerations](#12-compliance-considerations)
+13. [Incident Response](#13-incident-response)
 
 ---
 
@@ -204,6 +205,7 @@ Permissions follow the `resource:action` format:
 | `users` | `invite`, `manage_roles`, `remove` |
 | `secrets` | `create`, `read`, `update`, `delete` |
 | `defects` | `create`, `read`, `update`, `delete` |
+| `ai_settings` | `read`, `update`, `manage_keys` |
 
 The wildcard permission `*` grants unrestricted access and is reserved for the `owner` role.
 
@@ -221,6 +223,9 @@ The wildcard permission `*` grants unrestricted access and is reserved for the `
 | `secrets:create` | Yes | Yes | No | No |
 | `secrets:read` | Yes | Yes | Yes | No |
 | `integrations:manage` | Yes | Yes | No | No |
+| `ai_settings:read` | Yes | Yes | Yes | Yes |
+| `ai_settings:update` | Yes | Yes | No | No |
+| `ai_settings:manage_keys` | Yes | Yes | No | No |
 
 ---
 
@@ -267,6 +272,8 @@ The `OR tenant_id IS NULL` pattern allows system-level resources (shared templat
 | API collections, environments | `tenant_id` column + query filter |
 | Secrets | `tenant_id` column + encrypted storage |
 | Uploaded files (screenshots, HARs) | Tenant-prefixed S3/MinIO paths |
+| AI settings and encrypted keys | `org_id` column + Fernet encryption at rest |
+| AI usage logs | `org_id` column for usage tracking and billing |
 | Audit logs | `tenant_id` column for log partitioning |
 
 ---
@@ -348,7 +355,8 @@ The nginx reverse proxy (`nginx/default.conf`) adds a second layer of rate limit
 |-----------|-------------------|
 | PostgreSQL data | `pgcrypto` extension available; AES-256 column-level encryption for sensitive fields |
 | Supabase storage | Supabase-managed encryption at rest (AES-256) |
-| Secrets table | Fernet symmetric encryption via `cryptography` library (see Section 9) |
+| Secrets table | Fernet symmetric encryption via `cryptography` library (see Section 10) |
+| BYOK AI API keys | Fernet symmetric encryption via `cryptography` library (see [Section 6](#6-byok-ai-key-security)) |
 | S3/MinIO objects | Server-side encryption (SSE-S3 or SSE-KMS) configurable |
 | Redis cache | Enable `requirepass` and TLS in production |
 
@@ -387,6 +395,7 @@ The following environment variables must be set securely and never committed to 
 |----------|---------|
 | `JWT_SECRET` | Signing key for JWT tokens |
 | `SECRETS_ENCRYPTION_KEY` | Master key for Fernet encryption of stored secrets |
+| `ENCRYPTION_KEY` | Alternative encryption key used by BYOK AI key encryption (fallback: `SECRETS_ENCRYPTION_KEY`) |
 | `DATABASE_URL` | PostgreSQL connection string with credentials |
 | `OPENAI_API_KEY` | OpenAI API key for AI features |
 | `ANTHROPIC_API_KEY` | Anthropic API key for Claude integration |
@@ -395,9 +404,176 @@ The following environment variables must be set securely and never committed to 
 
 ---
 
-## 6. Network Security
+## 6. BYOK AI Key Security
 
-### 6.1 Nginx Security Headers
+> Added in v3.14.0. Covers the Bring Your Own Key (BYOK) architecture that allows organizations to use their own AI provider API keys with full encryption, isolation, and budget controls.
+
+### 6.1 AI Disabled by Default
+
+Flowstral makes **no AI API calls** unless a user explicitly enables AI at the organization level and provides API keys. This is enforced at multiple layers:
+
+| Layer | Default State | Override Mechanism |
+|-------|--------------|-------------------|
+| Organization `ai_settings` | `ai_enabled: false` | Admin enables via Settings > AI |
+| Feature toggles (20 areas) | All `false` | Admin enables individual features |
+| API key presence | None stored | Admin submits key via `POST /api/ai/settings/key` |
+| Backend AI endpoints | Return `503 Service Unavailable` | Only respond when key resolves successfully |
+
+The key resolution chain ensures no AI calls are made without explicit configuration:
+
+```
+1. Check ai_encrypted_keys for org/project-specific BYOK key  ->  use it
+2. Else check server env var (OPENAI_API_KEY / ANTHROPIC_API_KEY)  ->  use it
+3. Else  ->  AI unavailable, return 503
+```
+
+This chain is implemented in `backend/app/routers/ai/ai_key_resolver.py` via the shared `resolve_ai_key(request, provider)` helper, which is called by all AI router endpoints.
+
+### 6.2 BYOK API Key Encryption at Rest
+
+User-provided AI API keys are encrypted using Fernet symmetric encryption from the `cryptography` library before storage. Keys are **never stored in plaintext** anywhere in the system.
+
+**Encryption details:**
+
+| Aspect | Implementation |
+|--------|---------------|
+| Algorithm | Fernet (AES-128-CBC + HMAC-SHA256) via `cryptography.fernet.Fernet` |
+| Key derivation | SHA-256 hash of `ENCRYPTION_KEY` or `SECRETS_ENCRYPTION_KEY` env var, base64url-encoded to 32 bytes |
+| Storage table | `ai_encrypted_keys` in PostgreSQL |
+| Decryption | On-demand in `AISettingsService.resolve_key()`, never cached in plaintext |
+| Key columns | `encrypted_key` (ciphertext), `provider` (openai/anthropic), `org_id` (tenant scope) |
+
+**Encryption flow:**
+
+```
+User submits key via POST /api/ai/settings/key
+  -> AISettingsService._encrypt_key(raw_key)
+    -> SHA-256(ENCRYPTION_KEY) -> base64url -> Fernet key
+    -> Fernet.encrypt(raw_key.encode())
+  -> INSERT INTO ai_encrypted_keys (org_id, provider, encrypted_key)
+  -> Return { success: true, has_key: true }  (key value NOT returned)
+```
+
+**Decryption flow:**
+
+```
+AI endpoint called (e.g., POST /api/ai-testing/start)
+  -> resolve_ai_key(request, "openai")
+    -> AISettingsService.resolve_key(org_id, "openai")
+      -> SELECT encrypted_key FROM ai_encrypted_keys WHERE org_id = $1 AND provider = $2
+      -> Fernet.decrypt(encrypted_key) -> raw key
+    -> Return raw key (held in memory only for the duration of the request)
+```
+
+### 6.3 Frontend Key Security
+
+API keys are never stored in frontend state, localStorage, sessionStorage, or any client-side storage:
+
+| Principle | Implementation |
+|-----------|---------------|
+| No client-side storage | Frontend only tracks `hasApiKey: boolean` / `hasAnthropicKey: boolean` flags |
+| Input clearing | After successful key submission, the input field is cleared immediately |
+| Display | Only a "Key stored securely" badge is shown; the key value is never displayed |
+| Transmission | Keys are sent once via `POST /api/ai/settings/key` over HTTPS; never included in GET requests or URL parameters |
+| React context | `AIContext.tsx` stores feature flags and `hasApiKey` booleans, never the keys themselves |
+
+### 6.4 Client Caching Strategy
+
+To avoid creating a new HTTP client for every AI API call (which would be expensive), the `AISettingsService` caches instantiated AI provider clients keyed by a truncated hash of the decrypted key:
+
+```
+cache_key = SHA-256(decrypted_key)[:16]
+```
+
+This approach:
+
+- **Prevents key leakage:** The full key is never used as a cache key or logged. Only a 16-character hex digest is used for cache lookup.
+- **Avoids per-request overhead:** Once a client is created for a given key, it is reused for subsequent requests from the same org.
+- **Supports key rotation:** When an org updates their key, the new key produces a different hash, so a new client is created automatically. The old cached client is eventually garbage-collected.
+
+### 6.5 Budget Controls and Rate Limiting
+
+AI usage is constrained by configurable daily limits stored in the `ai_settings` table:
+
+| Control | Column | Default | Description |
+|---------|--------|---------|-------------|
+| Request limit | `max_requests_per_day` | 1000 | Maximum AI API calls per 24-hour period per org |
+| Cost limit | `max_cost_per_day_cents` | 5000 (= $50) | Maximum estimated cost in cents per day per org |
+| Auto-reset | Midnight UTC | — | Counters reset automatically at 00:00 UTC daily |
+
+**Enforcement flow:**
+
+1. Before every AI API call, `AISettingsService` checks the current day's usage from `ai_usage_log`.
+2. If `requests_today >= max_requests_per_day` or `cost_today_cents >= max_cost_per_day_cents`, the request is rejected with `429 Too Many Requests` and a descriptive error message.
+3. After a successful AI call, a usage record is inserted into `ai_usage_log` with `org_id`, `provider`, `model`, `tokens_used`, `estimated_cost_cents`, and `timestamp`.
+4. The budget state is also enforced within the healing orchestrator: `ai_automation_api._budget_state` limits AI healing calls to 3 per test run to prevent runaway costs.
+
+### 6.6 AI Usage Audit Trail
+
+All AI API calls are logged to the `ai_usage_log` table for cost tracking, compliance, and forensic analysis:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `org_id` | UUID | Organization (tenant) scope |
+| `project_id` | UUID | Optional project scope |
+| `user_id` | UUID | User who triggered the AI call |
+| `provider` | TEXT | `openai` or `anthropic` |
+| `model` | TEXT | Model used (e.g., `gpt-4o-mini`, `claude-3-5-sonnet`) |
+| `feature_area` | TEXT | Which of the 20 AI features was used |
+| `tokens_used` | INTEGER | Token count (prompt + completion) |
+| `estimated_cost_cents` | INTEGER | Estimated cost for the call |
+| `timestamp` | TIMESTAMPTZ | When the call was made |
+
+This table supports:
+
+- **Billing reports:** Aggregate cost per org/project/user over any time period.
+- **Anomaly detection:** Identify unusual spikes in AI usage that may indicate abuse.
+- **Compliance audits:** Demonstrate exactly when, where, and how AI was used.
+- **Budget enforcement:** Real-time daily totals for the budget control system.
+
+### 6.7 Database Tables
+
+Three new tables were added in migration `034_ai_settings.sql`:
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `ai_settings` | Organization/project AI configuration | `org_id`, `project_id`, `ai_enabled`, `provider`, `model`, `feature_toggles` (JSONB), `max_requests_per_day`, `max_cost_per_day_cents` |
+| `ai_encrypted_keys` | Fernet-encrypted BYOK API keys | `org_id`, `provider`, `encrypted_key`, `created_at`, `updated_at` |
+| `ai_usage_log` | Audit trail of all AI API calls | `org_id`, `user_id`, `provider`, `model`, `feature_area`, `tokens_used`, `estimated_cost_cents`, `timestamp` |
+
+All three tables use `org_id` for tenant isolation and are subject to the same query-level filtering as all other tenant-scoped data (see [Section 3](#3-multi-tenancy)).
+
+### 6.8 RBAC for AI Settings
+
+AI settings endpoints follow the existing RBAC middleware patterns:
+
+| Endpoint | Required Permission | Purpose |
+|----------|-------------------|---------|
+| `GET /api/ai/settings` | `ai_settings:read` | Read org AI configuration |
+| `PUT /api/ai/settings` | `ai_settings:update` | Update AI config, feature toggles |
+| `POST /api/ai/settings/key` | `ai_settings:manage_keys` | Store a BYOK API key |
+| `DELETE /api/ai/settings/key/{provider}` | `ai_settings:manage_keys` | Remove a stored key |
+| `POST /api/ai/settings/test` | `ai_settings:update` | Test connection with key |
+| `GET /api/ai/settings/providers` | `ai_settings:read` | List providers and key status |
+| `GET /api/ai/settings/usage` | `ai_settings:read` | Get usage statistics |
+
+Only `admin` and `owner` roles can modify AI settings or manage keys. All users can read the AI configuration (to know which features are enabled). See [Section 2.5](#25-default-permissions-per-role) for the complete permission matrix.
+
+### 6.9 Security Recommendations for BYOK Deployments
+
+- **Key rotation:** Rotate BYOK API keys at your AI provider at least every 90 days. After rotating at the provider, update the key in Flowstral via `POST /api/ai/settings/key`.
+- **Encryption key management:** The `ENCRYPTION_KEY` / `SECRETS_ENCRYPTION_KEY` environment variable is the master key for all BYOK encryption. Protect it with the same rigor as your database credentials. Store it in a secrets manager (HashiCorp Vault, AWS Secrets Manager) rather than a `.env` file.
+- **Budget limits:** Set conservative daily budget limits initially and increase as you understand your usage patterns. Review `ai_usage_log` regularly.
+- **Principle of least privilege:** Enable only the AI feature areas your team actually uses. The 20 granular feature toggles allow fine-grained control.
+- **Network isolation:** AI API calls to OpenAI/Anthropic are made from the backend only. The frontend never communicates with AI providers directly. In air-gapped environments, disable cloud AI and use Ollama with local models.
+- **Key deletion:** When offboarding an organization or rotating keys, use `DELETE /api/ai/settings/key/{provider}` to remove the encrypted key. The deletion is immediate and the cached client is invalidated.
+
+---
+
+## 7. Network Security
+
+### 7.1 Nginx Security Headers
 
 The nginx configuration (`nginx/default.conf`) enforces OWASP-recommended security headers:
 
@@ -433,7 +609,7 @@ frame-src 'none';
 server_tokens off;
 ```
 
-### 6.2 CORS Configuration
+### 7.2 CORS Configuration
 
 The backend FastAPI application configures CORS with a whitelist of allowed origins. The middleware stack order is:
 
@@ -447,7 +623,7 @@ CORS -> RateLimit -> RBAC -> TenantContext -> TraceLogging
 - Allowed methods are restricted to `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`.
 - `Authorization`, `Content-Type`, `X-Tenant-ID`, `X-User-ID`, and `X-Trace-ID` are the only allowed request headers.
 
-### 6.3 API Proxy Through Nginx
+### 7.3 API Proxy Through Nginx
 
 All API traffic is proxied through nginx, which:
 
@@ -456,7 +632,7 @@ All API traffic is proxied through nginx, which:
 - Sets read timeout to 300 seconds (for long-running performance tests).
 - Enables WebSocket upgrade (`Connection: upgrade`) for real-time test execution.
 
-### 6.4 Sensitive Path Blocking
+### 7.4 Sensitive Path Blocking
 
 Nginx blocks access to hidden files and sensitive extensions:
 
@@ -465,7 +641,7 @@ location ~ /\. { deny all; return 404; }
 location ~* \.(env|git|htpasswd|htaccess)$ { deny all; return 404; }
 ```
 
-### 6.5 Firewall Recommendations
+### 7.5 Firewall Recommendations
 
 For production deployments, configure network firewalls to expose only the required ports:
 
@@ -486,9 +662,9 @@ For production deployments, configure network firewalls to expose only the requi
 
 ---
 
-## 7. Container Security
+## 8. Container Security
 
-### 7.1 Non-Root User in All Containers
+### 8.1 Non-Root User in All Containers
 
 Every Docker container runs as a non-root user (`appuser`, UID 1001), following CIS Docker Benchmark 4.1.
 
@@ -511,7 +687,7 @@ RUN addgroup -g 1001 -S appuser && \
     touch /var/run/nginx.pid && chown appuser:appuser /var/run/nginx.pid
 ```
 
-### 7.2 Minimal Base Images
+### 8.2 Minimal Base Images
 
 | Container | Base Image | Rationale |
 |-----------|-----------|-----------|
@@ -521,14 +697,14 @@ RUN addgroup -g 1001 -S appuser && \
 | PostgreSQL | `pgvector/pgvector:pg16` | Official PostgreSQL 16 with pgvector extension |
 | Redis | `redis:7-alpine` | Alpine-based Redis for minimal footprint |
 
-### 7.3 No Secrets in Docker Images
+### 8.3 No Secrets in Docker Images
 
 - All sensitive configuration is injected via environment variables at runtime.
 - The `docker-compose.full.yml` file uses `${VAR:-default}` syntax with a `.env` file.
 - Docker build arguments (`ARG`) are used only for non-sensitive build-time configuration (e.g., `VITE_API_BASE_URL`).
 - `.dockerignore` excludes `.env`, `node_modules`, `.git`, and other development artifacts.
 
-### 7.4 Health Checks
+### 8.4 Health Checks
 
 All containers define health checks for orchestrator awareness:
 
@@ -547,7 +723,7 @@ healthcheck:
   retries: 5
 ```
 
-### 7.5 Read-Only Filesystem Recommendations
+### 8.5 Read-Only Filesystem Recommendations
 
 For hardened production deployments:
 
@@ -562,7 +738,7 @@ services:
       - backend_logs:/app/logs
 ```
 
-### 7.6 CIS Docker Benchmark Compliance Checklist
+### 8.6 CIS Docker Benchmark Compliance Checklist
 
 | Control | Status | Notes |
 |---------|--------|-------|
@@ -579,9 +755,9 @@ services:
 
 ---
 
-## 8. Audit Logging
+## 9. Audit Logging
 
-### 8.1 Trace Logging Middleware
+### 9.1 Trace Logging Middleware
 
 `TraceLoggingMiddleware` (`backend/app/middleware/trace_logging_middleware.py`) assigns a unique `trace_id` to every request:
 
@@ -605,7 +781,7 @@ This enables structured log queries like:
 trace_id=abc123 | SELECT action, user_id, resource, timestamp
 ```
 
-### 8.2 Audit Trail Events
+### 9.2 Audit Trail Events
 
 All significant actions are logged with the following attributes:
 
@@ -622,7 +798,7 @@ All significant actions are logged with the following attributes:
 | `status` | `success` or `failure` |
 | `details` | Additional context (e.g., changed fields, error messages) |
 
-### 8.3 Filterable Audit Queries
+### 9.3 Filterable Audit Queries
 
 Audit logs support filtering by:
 
@@ -632,7 +808,7 @@ Audit logs support filtering by:
 - **Date range:** Time-bounded queries for compliance periods.
 - **Tenant:** Scope to a specific organization.
 
-### 8.4 Export to CSV for Compliance
+### 9.4 Export to CSV for Compliance
 
 Audit logs can be exported in CSV format for:
 
@@ -641,17 +817,21 @@ Audit logs can be exported in CSV format for:
 - Regulatory compliance documentation.
 - Third-party auditor access.
 
-### 8.5 Storage Architecture
+### 9.5 Storage Architecture
 
 - **Default:** In-memory with periodic flush to PostgreSQL `audit_logs` table.
 - **Production:** Direct PostgreSQL persistence with partitioning by month.
 - **High-volume:** Stream to external SIEM (Splunk, Datadog, ELK) via structured JSON logs.
 
+### 9.6 AI Usage Audit Trail (v3.14.0+)
+
+In addition to the general audit trail, all AI API calls are logged to a dedicated `ai_usage_log` table for cost tracking and compliance. This includes provider, model, token count, estimated cost, feature area, and the user who triggered the call. See [Section 6.6](#66-ai-usage-audit-trail) for full details on the AI usage logging schema and its use in budget enforcement.
+
 ---
 
-## 9. Secret Management
+## 10. Secret Management
 
-### 9.1 SecretsService Architecture
+### 10.1 SecretsService Architecture
 
 The `SecretsService` (`backend/app/services/core/secrets_service.py`) provides encrypted storage for API keys, tokens, passwords, and other credentials used during test execution.
 
@@ -671,7 +851,7 @@ The `SecretsService` (`backend/app/services/core/secrets_service.py`) provides e
 | `credential` | Composite credentials (username + password) |
 | `custom` | User-defined secrets |
 
-### 9.2 Secret Lifecycle
+### 10.2 Secret Lifecycle
 
 ```
 Create  ->  Encrypt  ->  Store in DB  ->  Resolve on demand  ->  Inject into test env  ->  Rotate  ->  Delete
@@ -688,7 +868,7 @@ Create  ->  Encrypt  ->  Store in DB  ->  Resolve on demand  ->  Inject into tes
 | Delete secret | `delete_secret()` | `secrets:delete` permission |
 | Inject into env | `inject_secrets_into_env()` | Called during test execution |
 
-### 9.3 Environment Variable Injection
+### 10.3 Environment Variable Injection
 
 During test execution, the `inject_secrets_into_env()` method:
 
@@ -698,14 +878,14 @@ During test execution, the `inject_secrets_into_env()` method:
 4. Returns a dictionary for subprocess environment injection.
 5. Logs injection events (name only, never the value).
 
-### 9.4 Rotation Policies
+### 10.4 Rotation Policies
 
 - **Recommended rotation interval:** Every 90 days for API keys and tokens.
 - **Immediate rotation triggers:** Suspected compromise, employee offboarding, security incident.
 - Update secrets via the `update_secret()` API; the old value is overwritten (not versioned).
 - For zero-downtime rotation, create a new secret with a versioned name, update references, then delete the old secret.
 
-### 9.5 Kubernetes Secrets (K8s Deployments)
+### 10.5 Kubernetes Secrets (K8s Deployments)
 
 For Kubernetes deployments, platform secrets should be managed via native K8s Secrets or an external vault:
 
@@ -727,9 +907,9 @@ data:
 
 ---
 
-## 10. Security Scanning
+## 11. Security Scanning
 
-### 10.1 Automated Security Scan Pipeline
+### 11.1 Automated Security Scan Pipeline
 
 Set up a weekly GitHub Actions workflow to scan all layers of the stack:
 
@@ -785,7 +965,7 @@ jobs:
           exit-code: '1'
 ```
 
-### 10.2 Frontend Dependency Scanning
+### 11.2 Frontend Dependency Scanning
 
 | Tool | Purpose | Command |
 |------|---------|---------|
@@ -794,7 +974,7 @@ jobs:
 | Dependabot | Automated PR creation for vulnerable dependencies | GitHub Settings > Security |
 | Snyk | Deep dependency analysis with fix suggestions | `npx snyk test` |
 
-### 10.3 Backend Dependency Scanning
+### 11.3 Backend Dependency Scanning
 
 | Tool | Purpose | Command |
 |------|---------|---------|
@@ -803,7 +983,7 @@ jobs:
 | `bandit` | Static analysis for common Python security issues | `bandit -r backend/app -ll` |
 | Dependabot | Automated PR creation for pip dependencies | GitHub Settings > Security |
 
-### 10.4 Container Image Scanning
+### 11.4 Container Image Scanning
 
 | Tool | Purpose | Integration |
 |------|---------|-------------|
@@ -811,7 +991,7 @@ jobs:
 | Grype | Anchore-based vulnerability scanner | GitHub Actions, CLI |
 | Docker Scout | Docker Hub native scanning | Docker Desktop, CLI |
 
-### 10.5 OWASP Security Testing
+### 11.5 OWASP Security Testing
 
 For API security testing, use Flowstral's own capabilities alongside OWASP ZAP:
 
@@ -821,9 +1001,9 @@ For API security testing, use Flowstral's own capabilities alongside OWASP ZAP:
 
 ---
 
-## 11. Compliance Considerations
+## 12. Compliance Considerations
 
-### 11.1 SOC 2 Readiness
+### 12.1 SOC 2 Readiness
 
 Flowstral includes features that support SOC 2 Type II compliance:
 
@@ -832,13 +1012,14 @@ Flowstral includes features that support SOC 2 Type II compliance:
 | **CC6.1** Logical access | RBAC with role hierarchy, permission-based endpoint protection |
 | **CC6.2** User provisioning | Organization-based user management, role assignment |
 | **CC6.3** Authentication | JWT + Supabase Auth with MFA support |
-| **CC6.6** Encryption | Fernet encryption at rest, TLS 1.2+ in transit |
+| **CC6.6** Encryption | Fernet encryption at rest (secrets + BYOK AI keys), TLS 1.2+ in transit |
 | **CC7.1** Change management | Git-based version control, CI/CD pipeline |
 | **CC7.2** System monitoring | Health checks, Prometheus metrics, trace logging |
+| **CC7.4** Change control | BYOK AI keys encrypted at rest, usage audit trail, budget controls |
 | **CC8.1** Incident response | Audit logs, trace IDs, health endpoints |
 | **A1.2** Availability | Container health checks, auto-restart policies |
 
-### 11.2 GDPR Data Handling
+### 12.2 GDPR Data Handling
 
 For deployments that process EU personal data:
 
@@ -849,7 +1030,7 @@ For deployments that process EU personal data:
 - **Data residency:** On-premise deployment option ensures data stays within the required jurisdiction.
 - **DPA compliance:** Multi-tenancy with strict tenant isolation supports data processor agreements.
 
-### 11.3 HIPAA Considerations for Healthcare
+### 12.3 HIPAA Considerations for Healthcare
 
 For healthcare organizations:
 
@@ -860,7 +1041,7 @@ For healthcare organizations:
 - **BAA support:** On-premise deployment enables Business Associate Agreement compliance.
 - **Session management:** Configurable session timeout (recommended: 15 minutes for HIPAA).
 
-### 11.4 Air-Gapped Deployment for Regulated Environments
+### 12.4 Air-Gapped Deployment for Regulated Environments
 
 Flowstral supports fully air-gapped deployments for classified, defense, and highly regulated environments:
 
@@ -888,9 +1069,9 @@ docker-compose -f docker-compose.full.yml up -d
 
 ---
 
-## 12. Incident Response
+## 13. Incident Response
 
-### 12.1 Health Check Endpoints
+### 13.1 Health Check Endpoints
 
 Flowstral exposes health check endpoints for monitoring and alerting:
 
@@ -906,7 +1087,7 @@ Flowstral exposes health check endpoints for monitoring and alerting:
 - Grafana dashboards visualize request rates, latencies, error rates, and resource usage.
 - AlertManager triggers notifications on anomalies (e.g., error rate > 5%, p99 latency > 5s).
 
-### 12.2 Prometheus Metrics
+### 13.2 Prometheus Metrics
 
 Key metrics exported:
 
@@ -920,7 +1101,7 @@ Key metrics exported:
 | `rate_limit_rejections_total` | Counter | Rate-limited requests |
 | `db_query_duration_seconds` | Histogram | Database query latency |
 
-### 12.3 Audit Log Analysis for Forensics
+### 13.3 Audit Log Analysis for Forensics
 
 In the event of a security incident, use audit logs for forensic analysis:
 
@@ -934,7 +1115,7 @@ In the event of a security incident, use audit logs for forensic analysis:
 6. **Remediate:** Patch the vulnerability, update security configurations, deploy fixes.
 7. **Report:** Generate CSV audit log export for stakeholders and regulatory bodies.
 
-### 12.4 Backup and Recovery Procedures
+### 13.4 Backup and Recovery Procedures
 
 | Component | Backup Method | Frequency | Retention |
 |-----------|--------------|-----------|-----------|
@@ -942,6 +1123,7 @@ In the event of a security incident, use audit logs for forensic analysis:
 | MinIO/S3 objects | Cross-region replication or `mc mirror` | Continuous | 90 days |
 | Redis | RDB snapshots + AOF | Every 5 minutes | 7 days |
 | Secrets encryption key | Offline secure backup (HSM or vault) | On rotation | Permanent |
+| BYOK AI encryption key | Same as secrets encryption key (shared `ENCRYPTION_KEY`) | On rotation | Permanent |
 | Docker images | Container registry with immutable tags | Per release | All releases |
 | Configuration | Git version control | Every commit | Permanent |
 
@@ -953,9 +1135,10 @@ In the event of a security incident, use audit logs for forensic analysis:
 | Database corruption | < 1 hour | Restore from most recent `pg_dump` + WAL replay |
 | Full cluster failure | < 4 hours | Re-deploy from Docker images + restore database backup |
 | Encryption key compromise | < 2 hours | Rotate `SECRETS_ENCRYPTION_KEY`, re-encrypt all secrets |
+| BYOK AI key compromise | < 30 minutes | Rotate key at AI provider, update via `POST /api/ai/settings/key`, old cached client auto-invalidated |
 | Complete disaster recovery | < 24 hours | Deploy from scratch using IaC + restore all backups |
 
-### 12.5 Incident Response Playbook
+### 13.5 Incident Response Playbook
 
 | Phase | Actions |
 |-------|---------|
@@ -988,6 +1171,11 @@ Use this checklist before promoting any environment to production:
 - [ ] Backup procedures tested and recovery validated
 - [ ] MFA enabled for all admin and owner accounts
 - [ ] API documentation endpoints (`/docs`, `/redoc`) disabled or restricted in production
+- [ ] `ENCRYPTION_KEY` or `SECRETS_ENCRYPTION_KEY` set for BYOK AI key encryption
+- [ ] AI features disabled by default (`ai_enabled: false` in `ai_settings`)
+- [ ] BYOK daily budget limits configured (`max_requests_per_day`, `max_cost_per_day_cents`)
+- [ ] AI usage logs (`ai_usage_log`) monitored for anomalies
+- [ ] No AI API keys stored in frontend state or localStorage (verify `hasApiKey` boolean pattern)
 - [ ] `.env` file permissions restricted (`chmod 600`)
 - [ ] Firewall rules restrict database and cache ports to internal network
 - [ ] WAF deployed in front of nginx (for SaaS deployments)
@@ -1007,6 +1195,12 @@ Use this checklist before promoting any environment to production:
 | Protected Route | `src/components/ProtectedRoute.tsx` | Frontend role-based route guard |
 | Auth Context | `src/contexts/AuthContext.tsx` | Supabase auth state management |
 | License Gate | `src/components/LicenseGate.tsx` | Enterprise feature gating |
+| AI Settings Service | `backend/app/services/core/ai_settings_service.py` | BYOK key encryption, resolution, budget tracking |
+| AI Settings API | `backend/app/routers/platform/ai_settings_api.py` | REST API for AI settings and key management |
+| AI Key Resolver | `backend/app/routers/ai/ai_key_resolver.py` | Shared helper for resolving BYOK keys in AI routers |
+| AI Context | `src/contexts/AIContext.tsx` | Frontend AI feature flags (no keys stored) |
+| AI Configuration UI | `src/components/AIConfiguration.tsx` | Settings > AI tab for BYOK key management |
+| AI Settings Migration | `supabase/migrations/034_ai_settings.sql` | Database tables for AI settings, keys, and usage |
 | Nginx Config | `nginx/default.conf` | Security headers, rate limiting, API proxy |
 | Backend Dockerfile | `backend/Dockerfile` | Non-root container, health check |
 | Frontend Dockerfile | `Dockerfile.frontend` | Non-root nginx, security headers |
