@@ -381,5 +381,15 @@ def run_auto_migrations(database_url: str):
             conn.rollback()
             logger.warning(f"[AutoMigrate] Default org/project creation skipped: {e}")
 
+        # Seed demo data if SEED_DEMO_DATA=true
+        if os.getenv("SEED_DEMO_DATA", "").lower() == "true":
+            try:
+                from backend.app.scripts.seed_demo_data import main as seed_demo
+                logger.info("[AutoMigrate] SEED_DEMO_DATA=true, seeding demo data...")
+                seed_demo()
+                logger.info("[AutoMigrate] Demo data seeded successfully")
+            except Exception as e:
+                logger.warning(f"[AutoMigrate] Demo data seeding skipped: {e}")
+
     finally:
         conn.close()

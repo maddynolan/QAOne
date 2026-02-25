@@ -15,8 +15,11 @@
     "downloads"
   ],
   "optional_host_permissions": [
-    "<all_urls>"
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
   ],
+  "homepage_url": "https://flowstral.com",
   "action": {
     "default_icon": {
       "16": "icons/icon16.png",
