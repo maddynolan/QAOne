@@ -14,14 +14,15 @@
 3. [Method 1: Docker Compose (Small Teams)](#method-1-docker-compose-small-teams)
 4. [Method 2: Kubernetes / Helm (Production Scale)](#method-2-kubernetes--helm-production-scale)
 5. [Method 3: Air-Gapped (Regulated Environments)](#method-3-air-gapped-regulated-environments)
-6. [Environment Variables Reference](#environment-variables-reference)
-7. [SSL/TLS Certificate Setup](#ssltls-certificate-setup)
-8. [Database Setup and Migration](#database-setup-and-migration)
-9. [Backup and Restore](#backup-and-restore)
-10. [Health Checks](#health-checks)
-11. [Monitoring Setup](#monitoring-setup)
-12. [Troubleshooting](#troubleshooting)
-13. [Upgrade Procedure](#upgrade-procedure)
+6. [Hybrid Deployment Mode](#hybrid-deployment-mode)
+7. [Environment Variables Reference](#environment-variables-reference)
+8. [SSL/TLS Certificate Setup](#ssltls-certificate-setup)
+9. [Database Setup and Migration](#database-setup-and-migration)
+10. [Backup and Restore](#backup-and-restore)
+11. [Health Checks](#health-checks)
+12. [Monitoring Setup](#monitoring-setup)
+13. [Troubleshooting](#troubleshooting)
+14. [Upgrade Procedure](#upgrade-procedure)
 
 ---
 
@@ -150,13 +151,20 @@ POSTGRES_DB=qaai
 MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=CHANGE_ME_minio_secret_here
 
-# --- LLM Provider (choose one or both) ---
-# OpenAI is the default provider for AI features
-OPENAI_API_KEY=sk-your-openai-api-key
+# --- AI / LLM Configuration ---
+# AI is OFF by default. No AI keys are required for deployment.
+# Users enable AI via Settings > AI tab and can bring their own keys (BYOK).
+#
+# Optional: Provide server-level fallback keys. These are used when a user/org
+# has not configured their own BYOK key.
+# OPENAI_API_KEY=sk-your-openai-api-key
+# ANTHROPIC_API_KEY=sk-ant-your-anthropic-key
 DEFAULT_LLM_PROVIDER=openai
 
-# Anthropic (optional, used for prompt caching / complex reasoning)
-# ANTHROPIC_API_KEY=sk-ant-your-anthropic-key
+# --- BYOK Key Encryption ---
+# Required if users will store their own AI API keys via Settings > AI tab.
+# Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+ENCRYPTION_KEY=CHANGE_ME_generate_fernet_key
 
 # --- JWT Authentication ---
 JWT_SECRET=CHANGE_ME_generate_with_openssl_rand_hex_32
@@ -171,13 +179,17 @@ TRACK_LLM_USAGE=true
 EOF
 ```
 
-Generate strong passwords:
+Generate strong passwords and keys:
 
 ```bash
 # Generate random passwords
 openssl rand -hex 16   # Use for POSTGRES_PASSWORD
 openssl rand -hex 16   # Use for MINIO_ROOT_PASSWORD
 openssl rand -hex 32   # Use for JWT_SECRET
+
+# Generate Fernet key for BYOK API key encryption
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Use for ENCRYPTION_KEY
 ```
 
 ### Step 3: Build the Docker Images
@@ -305,10 +317,13 @@ kubectl create namespace flowstral
 # Create secrets for sensitive values
 kubectl create secret generic qaai-secrets \
   --namespace flowstral \
-  --from-literal=OPENAI_API_KEY='sk-your-openai-api-key' \
   --from-literal=JWT_SECRET="$(openssl rand -hex 32)" \
   --from-literal=POSTGRES_PASSWORD="$(openssl rand -hex 16)" \
-  --from-literal=MINIO_ROOT_PASSWORD="$(openssl rand -hex 16)"
+  --from-literal=MINIO_ROOT_PASSWORD="$(openssl rand -hex 16)" \
+  --from-literal=ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+  # Optional: Add server-provided AI keys as fallbacks (AI is OFF by default)
+  # --from-literal=OPENAI_API_KEY='sk-your-openai-api-key' \
+  # --from-literal=ANTHROPIC_API_KEY='sk-ant-your-anthropic-key'
 ```
 
 ### Step 3: Build and Push Docker Images
@@ -731,6 +746,175 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:8080
 
 ---
 
+## Hybrid Deployment Mode
+
+> SaaS-hosted frontend with on-premises backend and database. Combines the convenience of managed frontend hosting with the data sovereignty of on-prem infrastructure.
+
+### When to Use Hybrid Mode
+
+Hybrid deployment is recommended when:
+
+- **Regulated industries** (healthcare, finance, government) require that test data, recordings, and AI processing stay within the organization's network
+- **Data sovereignty requirements** mandate that all data remains in a specific geographic region or jurisdiction
+- **Security policies** prohibit sensitive application data from leaving the corporate network
+- **Existing infrastructure** -- the customer already has Docker/Kubernetes clusters and wants to leverage them for the backend
+- **BYOK AI keys** must never leave the customer's infrastructure (encrypted keys stored on customer-controlled database)
+
+### Architecture
+
+```
+                  ┌──────────────────────────────────────┐
+                  │         Public Cloud (SaaS)           │
+                  │                                      │
+                  │   ┌──────────────────────────┐       │
+                  │   │  Frontend (Coolify/Vercel) │      │
+                  │   │  app.flowstral.com         │      │
+                  │   │  React SPA + CDN           │      │
+                  │   └────────────┬───────────────┘      │
+                  │                │                       │
+                  └────────────────┼───────────────────────┘
+                                   │
+                         HTTPS / WSS (encrypted)
+                         VITE_API_BASE_URL points here
+                                   │
+                  ┌────────────────┼───────────────────────┐
+                  │                ▼                        │
+                  │   Customer Network (On-Prem)            │
+                  │                                         │
+                  │   ┌────────────────────────┐            │
+                  │   │  Backend API            │           │
+                  │   │  FastAPI + Uvicorn       │          │
+                  │   │  Docker / K8s            │          │
+                  │   │  api.customer.internal   │          │
+                  │   └──────────┬───────────────┘          │
+                  │              │                           │
+                  │   ┌──────┬──┴──┬──────┬──────┐          │
+                  │   │      │     │      │      │          │
+                  │   ▼      ▼     ▼      ▼      ▼          │
+                  │ PgSQL  Redis  MinIO  Workers Ollama     │
+                  │ (data) (cache)(files)(tests) (optional) │
+                  │                                         │
+                  └─────────────────────────────────────────┘
+```
+
+### Key Principle
+
+All sensitive data (test recordings, AI API keys, test results, user data, screenshots, and artifacts) stays within the customer's network. The SaaS-hosted frontend is a static React SPA that communicates exclusively with the customer's backend over HTTPS.
+
+### Setup Instructions
+
+**1. Deploy the Frontend (SaaS-hosted)**
+
+Use Coolify on Hetzner or Vercel to host the frontend. The critical configuration is the `VITE_API_BASE_URL` build argument, which must point to the customer's backend URL:
+
+```bash
+# Build the frontend Docker image pointing to the customer backend
+docker build -t qaai/frontend:latest \
+  --build-arg VITE_API_BASE_URL=https://api.customer-domain.com \
+  -f Dockerfile.frontend .
+```
+
+Or set in Vercel environment variables:
+
+```env
+VITE_API_BASE_URL=https://api.customer-domain.com
+```
+
+The frontend is a static SPA with no server-side processing. It contains no secrets, no API keys, and no customer data. It is safe to host on any CDN or static hosting provider.
+
+**2. Deploy the Backend (Customer On-Prem)**
+
+Follow either [Method 1: Docker Compose](#method-1-docker-compose-small-teams) or [Method 2: Kubernetes / Helm](#method-2-kubernetes--helm-production-scale) from this runbook to deploy the backend on the customer's infrastructure.
+
+Key environment variables for the on-prem backend:
+
+```env
+# Database (on-prem PostgreSQL)
+DATABASE_URL=postgresql://qaai:password@postgres.internal:5432/qaai
+
+# Storage (on-prem MinIO)
+S3_ENDPOINT_URL=http://minio.internal:9000
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=<strong-password>
+S3_BUCKET_NAME=qa-artifacts
+
+# Redis (on-prem)
+REDIS_URL=redis://redis.internal:6379
+
+# CORS -- must include the SaaS frontend domain
+CORS_ORIGINS=https://app.flowstral.com,https://customer-app.flowstral.com
+
+# JWT and encryption
+JWT_SECRET=<generate-64-char-hex>
+ENCRYPTION_KEY=<generate-fernet-key>
+
+# AI -- keys stay on customer infrastructure
+# OPENAI_API_KEY=sk-... (optional server fallback)
+# Users store BYOK keys via Settings > AI; encrypted in customer's DB
+```
+
+**3. Configure CORS**
+
+The on-prem backend must allow cross-origin requests from the SaaS frontend domain. Set `CORS_ORIGINS` to include the exact frontend URL:
+
+```env
+CORS_ORIGINS=https://app.flowstral.com
+```
+
+The FastAPI middleware in `backend/app/main.py` reads this variable and configures CORS headers accordingly.
+
+**4. Configure TLS / HTTPS**
+
+The connection between the SaaS frontend and the on-prem backend **must use HTTPS**. Options:
+
+| Method | Description |
+|--------|-------------|
+| **Reverse proxy (recommended)** | Place nginx or a load balancer in front of the backend with a TLS certificate |
+| **cert-manager (Kubernetes)** | Use cert-manager with Let's Encrypt or a corporate CA |
+| **Self-signed + trust** | Use a self-signed cert and configure the browser to trust the corporate CA |
+
+The backend must be accessible from the public internet (or via VPN) at the URL specified in `VITE_API_BASE_URL`.
+
+### BYOK AI in Hybrid Mode
+
+BYOK (Bring Your Own Key) AI integration works naturally in hybrid mode because all key storage and AI API calls happen on the customer's backend:
+
+1. User enters their API key in **Settings > AI** in the frontend
+2. Key is sent via HTTPS to the customer's backend (`POST /api/ai/settings/key`)
+3. Backend encrypts the key with Fernet (`ENCRYPTION_KEY` on customer's server) and stores it in the customer's PostgreSQL database (`ai_encrypted_keys` table)
+4. When AI features are used, the backend decrypts the key and makes API calls to OpenAI/Anthropic directly from the customer's network
+5. The SaaS frontend never sees, stores, or transmits the decrypted API key
+
+This ensures AI API keys never leave the customer's infrastructure boundary.
+
+### Network Requirements
+
+| Connection | Protocol | Direction | Required |
+|-----------|----------|-----------|----------|
+| Frontend (SaaS) to Backend (On-Prem) | HTTPS (443) | Outbound from user browser | Yes |
+| Frontend (SaaS) to Backend (On-Prem) | WSS (443) | Outbound from user browser | Yes (for real-time test execution) |
+| Backend to PostgreSQL | TCP (5432) | Internal on-prem | Yes |
+| Backend to Redis | TCP (6379) | Internal on-prem | Yes |
+| Backend to MinIO | TCP (9000) | Internal on-prem | Yes |
+| Backend to OpenAI/Anthropic API | HTTPS (443) | Outbound from on-prem | Only if AI features are used |
+
+**WebSocket support is required** between the frontend and backend for real-time test execution progress updates. Ensure any reverse proxy, load balancer, or firewall between them supports the HTTP Upgrade header for WebSocket connections.
+
+### Comparison with Full SaaS and Full On-Prem
+
+| Aspect | Full SaaS | Hybrid | Full On-Prem |
+|--------|-----------|--------|-------------|
+| Frontend hosting | Cloud (Vercel/Coolify) | Cloud (Vercel/Coolify) | Customer infrastructure |
+| Backend hosting | Cloud (Railway) | Customer infrastructure | Customer infrastructure |
+| Database | Cloud (Supabase) | Customer infrastructure | Customer infrastructure |
+| Data location | Cloud provider | Customer network | Customer network |
+| AI key storage | Cloud (encrypted) | Customer network (encrypted) | Customer network (encrypted) |
+| Setup complexity | Low | Medium | High |
+| Maintenance | Managed | Shared | Customer-managed |
+| Frontend updates | Automatic (CI/CD) | Automatic (CI/CD) | Manual rebuild required |
+
+---
+
 ## Environment Variables Reference
 
 ### Required Variables
@@ -761,11 +945,13 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:8080
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DEFAULT_LLM_PROVIDER` | `openai` | LLM provider: `openai`, `anthropic`, or `local_qwen` |
-| `OPENAI_API_KEY` | none | OpenAI API key (required if provider is `openai`) |
-| `ANTHROPIC_API_KEY` | none | Anthropic API key (optional, for Claude) |
+| `OPENAI_API_KEY` | none | Server-provided OpenAI API key (optional fallback -- users can BYOK via Settings) |
+| `ANTHROPIC_API_KEY` | none | Server-provided Anthropic API key (optional fallback -- users can BYOK via Settings) |
 | `OLLAMA_URL` | `http://ollama:11434` | Ollama endpoint (air-gapped only) |
 | `TRACK_LLM_USAGE` | `false` | Track LLM token usage and costs |
 | `AIR_GAPPED_MODE` | `false` | Enable air-gapped mode (disables cloud LLM calls) |
+| `ENCRYPTION_KEY` | none | Fernet symmetric key for encrypting BYOK API keys at rest (**required for BYOK**) |
+| `SECRETS_ENCRYPTION_KEY` | none | Alias for `ENCRYPTION_KEY` (either may be used) |
 
 ### Frontend Build Variables
 
@@ -974,6 +1160,90 @@ To use an existing PostgreSQL 16+ instance instead of the containerized one:
    ```
 3. Set `DATABASE_URL` in `.env` to point to your external database.
 4. Run the initial migrations manually from `supabase/migrations/`.
+
+---
+
+## AI Configuration (v3.14.0+)
+
+### AI is OFF by Default
+
+The Flowstral platform does not require any AI/LLM API keys to deploy and operate. All core functionality -- recording, test management, execution, API testing, performance testing, accessibility scanning, visual testing, and mobile testing -- works without AI.
+
+AI-powered features (test generation, self-healing, Flowpilot agents, etc.) are disabled by default and must be explicitly enabled by an organization admin via **Settings > AI**.
+
+### Server-Provided AI Keys (Optional)
+
+If you want to provide AI capabilities as part of your deployment without requiring users to bring their own keys, set these environment variables:
+
+```bash
+# Server-level fallback keys (used when org has no BYOK key configured)
+OPENAI_API_KEY=sk-your-openai-api-key
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-key   # Optional
+```
+
+These server-provided keys are used as fallbacks. If an organization has configured their own BYOK key, the org-specific key takes precedence.
+
+### Bring Your Own Key (BYOK)
+
+Users can provide their own AI API keys via **Settings > AI tab** in the web application. BYOK keys are:
+
+- **Encrypted at rest** using Fernet symmetric encryption (AES-128-CBC)
+- **Never stored in frontend** state or localStorage (only `hasApiKey: boolean` is tracked)
+- **Sent to backend** via `POST /api/ai/settings/key`, encrypted, and stored in the `ai_encrypted_keys` table
+- **Resolved per-request** by the backend: BYOK key > server env var > AI unavailable
+
+**Required for BYOK:** The `ENCRYPTION_KEY` environment variable must be set to a valid Fernet key:
+
+```bash
+# Generate a Fernet key
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Set in .env
+ENCRYPTION_KEY=<generated-fernet-key>
+```
+
+If `ENCRYPTION_KEY` is not set, users will not be able to store BYOK keys (the platform will still function, but without BYOK capability).
+
+### AI Key Resolution Chain
+
+When an AI endpoint is called, the backend resolves the API key in this order:
+
+1. **BYOK key** -- Check `ai_encrypted_keys` table for an org/project-specific key (Fernet-decrypted)
+2. **Server env var** -- Check `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` environment variable
+3. **AI unavailable** -- Return HTTP 503 for AI endpoints
+
+### AI Toggle Hierarchy
+
+```
+Server env (OPENAI_API_KEY)       <-- Platform-provided key (fallback)
+  +-- Org settings (ai_settings)  <-- Admin enables AI, stores BYOK key
+       +-- Project override       <-- Optional per-project settings
+            +-- Feature toggles   <-- 20 granular feature flags
+```
+
+### AI API Endpoints
+
+The following endpoints are added for AI configuration management:
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET` | `/api/ai/settings` | Get org AI settings (enabled, provider, features, has_key) |
+| `PUT` | `/api/ai/settings` | Update settings (enabled, provider, model, features) |
+| `POST` | `/api/ai/settings/key` | Store BYOK API key (Fernet-encrypted) |
+| `DELETE` | `/api/ai/settings/key/{provider}` | Remove stored key |
+| `POST` | `/api/ai/settings/test` | Test connection with stored/provided key |
+| `GET` | `/api/ai/settings/providers` | List providers + which have keys configured |
+| `GET` | `/api/ai/settings/usage` | Get current period usage stats |
+
+### Database Tables (Auto-Created)
+
+Migration `034_ai_settings.sql` creates:
+- `ai_settings` -- Per-org AI configuration, 20 feature toggles, budget limits
+- `ai_usage_log` -- LLM call tracking per org (provider, model, tokens, cost, feature)
+
+The `ai_encrypted_keys` table is created at runtime by `AISettingsService` (not in SQL migrations) to store Fernet-encrypted BYOK API keys.
+
+All three tables are also bootstrapped by `auto_migrate.py` on backend startup, ensuring they exist regardless of whether the SQL migration file was applied.
 
 ---
 

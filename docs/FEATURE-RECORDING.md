@@ -15,7 +15,9 @@
 8. [Selector Engine & Confidence System](#8-selector-engine--confidence-system)
 9. [Playback & Self-Healing](#9-playback--self-healing)
 10. [Configuration](#10-configuration)
-11. [Known Gaps & TODOs](#11-known-gaps--todos)
+11. [Cross-Browser Recording](#11-cross-browser-recording-v3116)
+12. [BYOK AI Gating in Recorder](#12-byok-ai-gating-in-recorder-v3140)
+13. [Known Gaps & TODOs](#13-known-gaps--todos)
 
 ---
 
@@ -601,7 +603,81 @@ The Recorder supports Chromium, Firefox, and WebKit (Safari) via a browser selec
 
 ---
 
-## 12. Known Gaps & TODOs
+## 12. BYOK AI Gating in Recorder (v3.14.0+)
+
+As of v3.14.0, AI features in the recorder are gated behind the BYOK (Bring Your Own Key) configuration. AI is **OFF by default** — users must enable AI and configure an API key via **Settings > AI** before AI-powered features become available in the recorder.
+
+### How AI Availability is Determined
+
+The recorder uses the `useAI()` hook from `AIContext.tsx` to check AI readiness:
+
+```typescript
+const { aiConfig } = useAI();
+const aiAvailable = aiConfig.enabled && aiConfig.hasApiKey;
+```
+
+- `aiConfig.enabled` — whether the org admin has toggled AI on
+- `aiConfig.hasApiKey` — whether a valid API key has been stored server-side (boolean only; the actual key is never exposed to the frontend)
+
+### TestResultsDialog AI Gating
+
+The test results dialog in `PlaywrightRecorderPage.tsx` conditionally enables/disables AI buttons based on `aiAvailable`:
+
+| Button | Behavior when AI unavailable | Behavior when AI available |
+|--------|------------------------------|---------------------------|
+| **Fix** (auto-fix step) | Disabled with `cursor-not-allowed` styling, muted opacity | Enabled, triggers `autoFixStepApi()` healing chain |
+| **Flag** (false positive) | Disabled with `cursor-not-allowed` styling | Enabled, flags + auto-fixes |
+| **Auto-Fix All** (batch fix) | Disabled with `cursor-not-allowed` styling | Enabled, fixes all failed steps |
+| **"Why did this fail?"** (AI explanation) | Hidden entirely | Visible, calls `POST /api/ai/enhancements/explain-failure` |
+| **Manual** (manual assist) | **Always available** — does not require AI | Always available |
+| **Unflag** (remove false positive) | **Always available** — does not require AI | Always available |
+
+When AI buttons are disabled, users see the `cursor-not-allowed` visual cue but no tooltip or error — the expectation is that users configure AI keys in Settings before using AI features.
+
+### AITestGenerator apiKey Migration
+
+The `AITestGenerator` component (used for AI-powered test generation from recordings) was updated to remove all direct API key handling:
+
+| Change | Before (pre-3.14.0) | After (v3.14.0+) |
+|--------|---------------------|-------------------|
+| Config field | `config.apiKey` (string — actual key) | `config.hasApiKey` (boolean) |
+| IPC payloads | API key sent in Electron IPC `generate` calls | Key omitted; resolved server-side |
+| Guard checks | `if (!config.apiKey)` | `if (!config.hasApiKey)` |
+| JSX conditions | `{config.apiKey && <GenerateButton />}` | `{config.hasApiKey && <GenerateButton />}` |
+| Button disabled | `disabled={!config.apiKey}` | `disabled={!config.hasApiKey}` |
+| Dependency arrays | `[config.apiKey, ...]` | `[config.hasApiKey, ...]` |
+
+This was a 9-edit migration across guards, IPC calls, dependency arrays, JSX conditions, and button disabled states. The key principle: **API keys are never stored in frontend state or sent over IPC**. All key resolution happens server-side via `ai_key_resolver.py`.
+
+### Key Resolution Chain (Server-Side)
+
+When the frontend calls an AI endpoint (e.g., `POST /api/ai/enhancements/auto-fix-step`), the backend resolves the API key through this chain:
+
+1. Check `ai_settings` table for org/project-specific BYOK key (Fernet-encrypted) -- use it
+2. Else check server environment variable (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`) -- use it
+3. Else -- return 503 (AI unavailable)
+
+The shared helper `backend/app/routers/ai/ai_key_resolver.py` (`resolve_ai_key(request, provider)`) is used by all AI routers to implement this chain.
+
+### Key Files Changed
+
+| File | Change |
+|------|--------|
+| `src/modules/recorder/pages/PlaywrightRecorderPage.tsx` | Added `useAI()` hook, `aiAvailable` guard on Fix/Flag/Auto-Fix All buttons, hidden "Why did this fail?" link |
+| `src/modules/recorder/components/AITestGenerator.tsx` | Replaced all `config.apiKey` with `config.hasApiKey` (9 edits) |
+| `src/contexts/AIContext.tsx` | Provides `aiConfig.enabled` and `aiConfig.hasApiKey` to all consumers |
+| `backend/app/routers/ai/ai_key_resolver.py` | Shared `resolve_ai_key()` helper for server-side key resolution |
+| `backend/app/services/core/ai_settings_service.py` | AISettingsService — CRUD, Fernet encryption, key resolution, budget tracking |
+
+### User Experience
+
+1. **New installation / no AI configured:** All AI buttons in test results are visually disabled. Manual repair and Unflag remain functional. Users see no error — the disabled state signals that configuration is needed.
+2. **After configuring AI key in Settings > AI:** AI buttons become active on next page load. The `useAI()` hook fetches config from the backend on mount.
+3. **Server-provided key (env var):** If the platform operator sets `OPENAI_API_KEY` in the server environment, AI is available to all users without individual BYOK setup (the env var acts as a fallback).
+
+---
+
+## 13. Known Gaps & TODOs
 
 ### Critical Issues
 
@@ -632,5 +708,5 @@ The Recorder supports Chromium, Firefox, and WebKit (Safari) via a browser selec
 
 ---
 
-*Last updated: 2026-02-20*
+*Last updated: 2026-02-25*
 *Generated by code audit of the Flowstral recording feature.*

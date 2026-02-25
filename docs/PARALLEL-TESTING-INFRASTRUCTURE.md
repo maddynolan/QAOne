@@ -4,6 +4,122 @@
 
 ---
 
+## Current Implementation Status (v3.14.0)
+
+### TestExecutorQueue
+
+The queue system supports dual backends selected at startup based on the `REDIS_URL` environment variable:
+
+| Backend | Selection | Use Case |
+|---------|-----------|----------|
+| **Redis** | `REDIS_URL` is set | Production, multi-worker, crash recovery |
+| **InMemory** | No `REDIS_URL` | Development, single-process demo |
+
+**Core dataclass:**
+
+```python
+@dataclass
+class TestJob:
+    job_id: str           # UUID
+    test_run_id: str      # Links to test_runs table
+    test_case_id: str     # Links to test_cases table
+    project_id: str       # Tenant isolation
+    status: str           # QUEUED | RUNNING | COMPLETED | FAILED
+    created_at: datetime
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    result: Optional[dict]
+    error: Optional[str]
+```
+
+**Queue methods:**
+
+| Method | Purpose |
+|--------|---------|
+| `save_job(job)` | Persist job metadata (Redis hash or in-memory dict) |
+| `enqueue(job)` | Add job to tail of queue (`RPUSH` / `asyncio.Queue.put`) |
+| `dequeue()` | Atomic pop from queue (`RPOPLPUSH` / `asyncio.Queue.get`) |
+| `task_done(job_id)` | Remove from processing list, mark complete |
+| `update_job(job_id, updates)` | Update job fields (status, result, error) |
+| `get_job(job_id)` | Retrieve job by ID |
+| `restore_pending_jobs()` | On startup, move crashed jobs from processing list back to queue (Redis only) |
+
+### Worker Entry Point
+
+```bash
+python -m app.workers.test_worker
+```
+
+Defined in `Dockerfile.worker`. Each worker:
+1. Connects to Redis (or uses in-memory queue in single-process mode)
+2. Calls `dequeue()` in a loop (blocks until a job is available)
+3. Launches Playwright browser for the job
+4. Executes test steps, captures screenshots, reports via WebSocket
+5. Calls `task_done()` + `update_job()` on completion or failure
+
+### Trigger-to-Execution Flow
+
+```
+User clicks "Run" in UI
+        |
+        | POST /test-runs/execute  { test_case_id, environment, browser }
+        v
+test_runs_api.py
+        |
+        | 1. Create test_run row in PostgreSQL (status: "queued")
+        | 2. Build TestJob dataclass
+        | 3. save_job(job) → persist metadata
+        | 4. enqueue(job) → push to queue
+        v
+TestExecutorQueue
+        |
+        +--- Redis: RPUSH "test_queue" job_id
+        |           RPOPLPUSH "test_queue" "processing" (worker side)
+        |
+        +--- InMemory: asyncio.Queue.put(job)
+        |              asyncio.Queue.get() (worker side)
+        v
+test_worker.py (loop)
+        |
+        | dequeue() → TestJob
+        | update_job(status="RUNNING")
+        v
+PlaywrightRunner.execute(test_case)
+        |
+        | Launch browser (Chromium/Firefox/WebKit)
+        | For each step:
+        |   - Navigate / click / fill / assert
+        |   - Capture screenshot
+        |   - Send WebSocket: step_start, step_complete, screenshot
+        |   - If selector fails → HealingOrchestrator (4-layer chain)
+        v
+update_job(status="COMPLETED", result={...})
+task_done(job_id)
+        |
+        | WebSocket: execution_complete
+        v
+Frontend shows results in real-time
+```
+
+### What Works Today
+
+- TestExecutorQueue with Redis and InMemory backends
+- TestJob dataclass with full lifecycle tracking
+- Worker process via `python -m app.workers.test_worker`
+- WebSocket real-time progress (step_start, step_complete, screenshot, self_healing, execution_complete)
+- Self-healing during execution via HealingOrchestrator
+- Crash recovery: `restore_pending_jobs()` on worker restart (Redis only)
+
+### Planned
+
+- Horizontal auto-scaling of workers via Kubernetes HPA
+- Priority queues (critical tests run first)
+- Test sharding (split large suites across workers automatically)
+- Cross-browser matrix execution (run same test on Chromium + Firefox + WebKit in parallel)
+- Execution dashboard with per-worker utilization metrics
+
+---
+
 ## 1. Architecture Options
 
 ### Option A: Playwright Cloud (Recommended for Start)

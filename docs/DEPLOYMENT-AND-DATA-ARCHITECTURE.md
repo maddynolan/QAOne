@@ -138,6 +138,9 @@ DATABASE_URL=postgresql://qaai:password@postgres:5432/qaai
 S3_ENDPOINT_URL=http://minio:9000
 REDIS_URL=redis://redis:6379
 DEFAULT_LLM_PROVIDER=openai          # Cloud API keys still needed
+ENCRYPTION_KEY=<Fernet-key>          # Required for BYOK AI key encryption (generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+# AI is OFF by default. Users enable via Settings > AI tab and provide their own keys (BYOK).
+# Optionally set OPENAI_API_KEY / ANTHROPIC_API_KEY as server-level fallbacks.
 ```
 
 #### On-Prem (Kubernetes / Helm)
@@ -195,7 +198,7 @@ LLM:       Via backend API (cloud or on-prem, configured in settings)
 
 ## 3. Data Architecture -- Where Everything Is Stored
 
-### 3.1 Database Schema (33 Supabase Migrations)
+### 3.1 Database Schema (34 Supabase Migrations)
 
 ```
 organizations (id, name, slug, settings JSONB)
@@ -256,6 +259,18 @@ organizations (id, name, slug, settings JSONB)
             +-- secrets (name, encrypted_value BYTEA)  -- Fernet encryption
             +-- compliance_mappings (test_case_id, framework, requirement_id)
             +-- compliance_reports (frameworks JSONB, report_data JSONB)
+
+organizations (continued)
+    |
+    +-- ai_settings (org_id, enabled, provider, model, features JSONB, budget JSONB)
+    |       -- Per-org AI configuration: provider selection, 20 feature toggles, budget limits
+    |
+    +-- ai_usage_log (org_id, provider, model, prompt_tokens, completion_tokens, cost_usd, feature, timestamp)
+    |       -- Tracks all AI/LLM API calls per org for usage monitoring and budget enforcement
+    |
+    +-- ai_encrypted_keys (org_id, provider, encrypted_key BYTEA, created_at, updated_at)
+            -- BYOK API keys encrypted with Fernet (ENCRYPTION_KEY env var)
+            -- Created at runtime by AISettingsService (not in SQL migrations)
 
 users (id, email, name, avatar_url, preferences JSONB)
 roles (id, name, permissions JSONB, tenant_id)
@@ -680,6 +695,9 @@ CLOUD (Hetzner/Railway)              ON-PREM (Customer DC)
 | **Embeddings (RAG)** | Supabase PG (pgvector) | Docker PG 16 (pgvector) | Not available | Docker PG 16 (pgvector) |
 | **Full-text search** | PG full-text search | PG full-text search | SQLite FTS5 | PG full-text search |
 | **Compliance reports** | Supabase PG | Docker PG 16 | Not available | Docker PG 16 |
+| **AI settings** | Supabase PG | Docker PG 16 | Not available | Docker PG 16 |
+| **AI encrypted keys (BYOK)** | Supabase PG (Fernet) | Docker PG 16 (Fernet) | Not available | Docker PG 16 (Fernet) |
+| **AI usage logs** | Supabase PG | Docker PG 16 | Not available | Docker PG 16 |
 | **LLM provider** | OpenAI gpt-4o-mini | OpenAI/Anthropic (cloud keys) | Via backend API | Ollama (local Qwen) |
 
 ### Storage Limits by Deployment
@@ -691,6 +709,164 @@ CLOUD (Hetzner/Railway)              ON-PREM (Customer DC)
 | Bandwidth | 2 GB/month | 250 GB/month | Unlimited (LAN) | N/A |
 | MAU (auth) | 50,000 | Unlimited | Unlimited | N/A |
 | Realtime connections | 200 concurrent | 500 concurrent | Unlimited | 1 (local) |
+
+---
+
+## Client Demo Deployment Guide (v3.14.0)
+
+> Priority-ordered setup for getting a working demo environment online within a single day.
+
+### Deployment Modes
+
+| Mode | Stack | Best For |
+|------|-------|----------|
+| **SaaS** | Hetzner + Coolify (all services) | Client demos, early customers, free trials |
+| **On-Prem** | Docker Compose or Helm on customer hardware | Regulated industries, data-sovereign clients |
+| **Hybrid** | SaaS frontend + on-prem backend | Clients who want cloud UI but keep data local |
+
+### Step-by-Step Setup (SaaS via Coolify)
+
+**Priority order -- each step unlocks the next:**
+
+1. **Provision server** -- Hetzner CX32 (4 vCPU, 8 GB RAM, 80 GB NVMe) at $8.50/month
+2. **DNS** -- Point `app.yourdomain.com` A record to server IP via Cloudflare (free tier)
+3. **Install Coolify** -- `curl -fsSL https://get.coolify.io | bash` on the Hetzner box
+4. **Deploy 6 services** (in this order, each depends on the previous):
+   - **PostgreSQL 16** -- primary data store for all structured data
+   - **Redis 7** -- job queue for test execution workers + LLM response cache
+   - **MinIO** -- S3-compatible object storage for screenshots, HAR files, traces
+   - **Backend** (FastAPI) -- `ghcr.io/maddynolan/qaone-backend:latest`
+   - **Worker** -- `ghcr.io/maddynolan/qaone-worker:latest` (Playwright test executor)
+   - **Frontend** (React + nginx) -- `ghcr.io/maddynolan/qaone-frontend:latest`
+5. **Verify** -- Navigate to `https://app.yourdomain.com` and hit `/health` endpoint
+
+### Subscription Costs
+
+| Service | Cost | Notes |
+|---------|------|-------|
+| Hetzner CX32 | $8.50/month | 4 vCPU, 8 GB RAM, 80 GB NVMe |
+| Cloudflare DNS | Free | DNS + proxy + auto-SSL |
+| OpenAI API | Pay-per-use (BYOK) | Users bring their own key; AI is OFF by default |
+| Chrome Web Store | $5 one-time | Developer registration fee for extension publishing |
+
+**Total recurring: ~$8.50/month** (AI costs are per-customer BYOK, not platform cost)
+
+### Environment Variables Checklist
+
+```bash
+# Database
+DATABASE_URL=postgresql://qaai:password@postgres:5432/qaai
+
+# Redis
+REDIS_URL=redis://redis:6379
+
+# Object Storage
+S3_ENDPOINT_URL=http://minio:9000
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin
+S3_BUCKET=flowstral-artifacts
+
+# Security
+ENCRYPTION_KEY=<Fernet-key>     # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+SECRET_KEY=<random-string>       # JWT signing
+
+# AI (optional -- OFF by default, users enable via Settings > AI)
+# OPENAI_API_KEY=sk-...          # Server-level fallback (optional)
+# ANTHROPIC_API_KEY=sk-ant-...   # Server-level fallback (optional)
+
+# Frontend
+VITE_API_URL=https://api.yourdomain.com
+
+# Demo data (set to auto-seed 50 test cases, 20 runs, etc.)
+SEED_DEMO_DATA=true
+```
+
+### Health Check
+
+After deployment, verify:
+- App loads at `https://app.yourdomain.com`
+- Backend responds at `https://api.yourdomain.com/health` with `{"status": "healthy"}`
+- Demo data visible in dashboard (if `SEED_DEMO_DATA=true`)
+
+---
+
+## Parallel Test Execution Architecture
+
+> How test runs flow from frontend trigger to Playwright execution via the worker queue.
+
+### End-to-End Flow
+
+```
+Frontend (Run button)
+    |
+    | POST /test-runs/execute
+    v
+test_runs_api.py
+    |
+    | enqueue(TestJob)
+    v
+TestExecutorQueue
+    |
+    +-- Redis backend (REDIS_URL set)
+    |     RPUSH → RPOPLPUSH (atomic dequeue, no double-dispatch)
+    |
+    +-- InMemory backend (fallback when no Redis)
+    |     asyncio.Queue (single-process only)
+    v
+Worker (python -m app.workers.test_worker)
+    |
+    | dequeue() → TestJob
+    v
+PlaywrightRunner
+    |
+    | Launch browser → execute steps → capture screenshots
+    v
+WebSocket (wss://API_BASE_URL/test-runs/ws/{executionId})
+    |
+    | step_start, step_complete, screenshot, self_healing, execution_complete
+    v
+Frontend (real-time progress UI)
+```
+
+### Queue Backends
+
+| Backend | When Used | Concurrency | Persistence |
+|---------|-----------|-------------|-------------|
+| **Redis** | `REDIS_URL` env var is set | Multi-process, multi-machine | Yes (survives restarts via `restore_pending_jobs`) |
+| **InMemory** | No `REDIS_URL` (dev/demo) | Single-process only | No (lost on restart) |
+
+### Job Lifecycle
+
+```
+QUEUED → RUNNING → COMPLETED
+                 → FAILED
+```
+
+- **QUEUED**: Job enqueued via `RPUSH` (Redis) or `put()` (InMemory)
+- **RUNNING**: Worker dequeues via `RPOPLPUSH` (Redis atomic move to processing list) or `get()` (InMemory)
+- **COMPLETED/FAILED**: Worker calls `task_done()` + `update_job()` to persist final status
+
+**Redis atomic guarantee:** `RPOPLPUSH` moves the job from the queue to a processing list in one atomic operation. If the worker crashes, `restore_pending_jobs()` on startup moves unfinished jobs from the processing list back to the queue.
+
+### Scale Table
+
+| Tier | Workers | Tests/Hour | Infrastructure |
+|------|---------|------------|----------------|
+| Demo | 1-2 | ~50 | Single Hetzner CX32 |
+| Team | 4-5 | ~200 | Hetzner CX43 or 2x CX32 |
+| Enterprise | 10-20 | ~1,000 | Kubernetes (Helm chart) |
+| Scale | 50+ | ~5,000+ | Multi-node K8s with HPA |
+
+**Each worker = 1 Playwright browser = 1 test at a time.** Workers are stateless Docker containers that can be scaled horizontally.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `backend/app/services/executors/test_executor_queue.py` | TestExecutorQueue with Redis + InMemory backends |
+| `backend/app/services/executors/playwright_runner.py` | Playwright browser automation |
+| `backend/app/routers/test_management/test_runs_api.py` | REST + WebSocket endpoints for test execution |
+| `backend/app/services/executors/unified_runner_service.py` | Unified test execution interface |
 
 ---
 
@@ -717,6 +893,12 @@ CLOUD (Hetzner/Railway)              ON-PREM (Customer DC)
 | 027-028 | Page object model | page_objects, page_elements (5-layer selectors), test_case_element_mappings |
 | 029 | `element_models.sql` | element_models (Tosca-style), element_model_usage |
 | 030 | `compliance_reports.sql` | compliance_reports, framework mappings |
+| 031 | `test_case_versions.sql` | test_case_versions (JSONB snapshots, diff tracking, non-destructive revert) |
+| 032 | `api_collection_persistence.sql` | API collection, folder, request, environment, chain server-side persistence |
+| 033 | `mobile_flows_persistence.sql` | Mobile test flows, folders, and run history server-side persistence |
+| 034 | `ai_settings.sql` | ai_settings (per-org AI config, 20 feature toggles, budget), ai_usage_log (LLM call tracking per org). Note: `ai_encrypted_keys` table is created at runtime by `AISettingsService` for BYOK key storage (Fernet-encrypted) |
+
+**Auto-migration:** The backend's `auto_migrate.py` runs on startup and includes core table creation for `ai_settings`, `ai_usage_log`, and `ai_encrypted_keys` as part of its in-memory + PostgreSQL bootstrapping. The `ai_encrypted_keys` table requires the `ENCRYPTION_KEY` (or `SECRETS_ENCRYPTION_KEY`) environment variable to be set for Fernet symmetric encryption of stored API keys.
 
 ---
 

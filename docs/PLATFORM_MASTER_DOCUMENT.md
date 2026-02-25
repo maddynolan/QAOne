@@ -4,7 +4,7 @@
 
 **Product Name:** QAAI (QA + AI) / Flowstral
 **Tagline:** AI-Powered Quality Assurance & Test Automation Platform
-**Version:** v3.12.18 | Last Updated: 2026-02-20
+**Version:** v3.14.0 | Last Updated: 2026-02-25
 **Repository:** github.com/maddynolan/QAOne
 **Production API:** qaone-production.up.railway.app
 **Frontend:** Deployed via Vercel
@@ -72,7 +72,7 @@ The platform supports both **SaaS** (hosted) and **on-premises** deployment mode
 | **Frontend** | React 18, TypeScript, Vite, Tailwind CSS, Radix UI, Zustand, TanStack Query, Monaco Editor, React Router v6 |
 | **Backend** | Python, FastAPI, Pydantic, asyncio, WebSockets |
 | **Database** | PostgreSQL 16 (primary), Supabase (auth + cloud storage), SQLite (desktop/offline) |
-| **AI/LLM** | OpenAI gpt-4o-mini (active), Anthropic Claude (prompt caching, dev), Ollama (disabled), ModelGateway routing |
+| **AI/LLM** | OpenAI gpt-4o-mini (active), Anthropic Claude (prompt caching), Ollama (disabled), ModelGateway routing, BYOK key management (Fernet-encrypted), AI OFF by default (v3.14.0) |
 | **Test Engine** | Playwright 1.48 (core automation, cross-browser: Chromium/Firefox/WebKit), Flowstral Engine (TypeScript recording + healing) |
 | **Desktop** | Electron 28, electron-builder (Win/Mac/Linux), electron-store, better-sqlite3, 20+ mobile IPC handlers |
 | **Extension** | Chrome Manifest V3, side panel (5 tabs), content scripts, service worker, centralized api-config.js |
@@ -100,7 +100,7 @@ QAAI/
         visual_testing/ # Visual regression
         salesforce/     # Salesforce integration, auth
         exploration/    # Autonomous exploration, Blaze
-        platform/       # Health, dashboard, license, settings
+        platform/       # Health, dashboard, license, settings, AI settings (BYOK)
       schemas/          # Pydantic models
       services/         # 295+ services across 26 subdirectories
   src/                  # React frontend (Vite SPA)
@@ -196,11 +196,13 @@ The platform's flagship AI capability generates test cases from multiple input s
 - **Negative Test Generation** - Automatically generate negative/boundary/edge case tests
 - **Test Plan Expansion** - AI adds complementary test cases to existing plans
 
-**AI Models:**
-- OpenAI GPT-4o-mini (cloud, default)
+**AI Models (AI is OFF by default -- BYOK opt-in, see Section 6.5):**
+- OpenAI GPT-4o-mini (cloud, default when enabled)
+- Anthropic Claude (prompt caching, complex reasoning)
 - Ollama with custom fine-tuned `qa-expert:7b` model (local/on-prem)
-- Configurable provider switching (`auto`, `openai`, `ollama`)
+- Configurable provider switching (`auto`, `openai`, `anthropic`, `ollama`)
 - AI Gateway with usage tracking, rate limiting, cost accounting
+- BYOK key resolution: org key (Fernet-encrypted) -> server env var -> disabled
 
 **AI Services:**
 - Test generation (legacy + enhanced pipelines)
@@ -441,12 +443,22 @@ During a Flowstral session, the platform generates in real time:
 
 ### 6.1 AI Architecture
 
+**AI is OFF by default** as of v3.14.0. Users opt-in at the organization level, bring their own API keys (BYOK), and toggle 20 features granularly.
+
 ```
                     +------------------+
                     |   AI Gateway     |
                     | (Rate Limit,     |
                     |  Usage Track,    |
                     |  Cost Account)   |
+                    +--------+---------+
+                             |
+                    +--------v---------+
+                    | Key Resolution   |
+                    | Chain (BYOK)     |
+                    | 1. Org BYOK key  |
+                    | 2. Server env var|
+                    | 3. AI disabled   |
                     +--------+---------+
                              |
               +--------------+--------------+
@@ -489,6 +501,81 @@ During a Flowstral session, the platform generates in real time:
 - Data collection scripts capture real usage patterns
 - Training data export endpoint for model improvement
 - Feedback loop: user ratings and corrections feed back into training data
+
+### 6.5 BYOK AI Integration (v3.14.0)
+
+As of v3.14.0, **AI is OFF by default**. Organizations opt-in, bring their own API keys (BYOK), and control AI features through a multi-level toggle hierarchy. API keys are never stored in frontend state or localStorage.
+
+#### Toggle Hierarchy
+
+```
+Server env (OPENAI_API_KEY)       <-- Platform-provided key (fallback)
+  |-- Org settings (ai_settings)  <-- Admin enables AI, stores BYOK key
+       |-- Project override       <-- Optional per-project settings
+            |-- Feature toggles   <-- 20 granular feature flags
+```
+
+#### Key Resolution Chain (Backend)
+
+1. Check `ai_settings` table for org/project-specific BYOK key (Fernet-encrypted in `ai_encrypted_keys` table) -- use it
+2. Else check server environment variable (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`) -- use it
+3. Else -- AI unavailable, return 503 for AI endpoints
+
+The shared helper `backend/app/routers/ai/ai_key_resolver.py` (`resolve_ai_key(request, provider)`) is used by all AI routers to resolve the correct key before making LLM calls.
+
+#### 20 AI Feature Areas
+
+| Category | Features |
+|----------|----------|
+| Test Generation | `test_case_generation`, `test_step_suggestions` |
+| Self-Healing | `self_healing`, `smart_locators` |
+| API Testing | `api_test_generation`, `api_mock_generation` |
+| Performance | `perf_analysis`, `load_pattern_suggestions` |
+| Visual & A11y | `visual_analysis`, `a11y_suggestions` |
+| Defects & Code | `defect_analysis`, `defect_triage`, `code_generation`, `code_optimization` |
+| Requirements | `requirement_analysis`, `gherkin_generation` |
+| Salesforce | `sf_test_generation`, `sf_data_generation` |
+| Assistants | `chat_assistant`, `smart_fill` |
+
+#### AI Settings API (`/api/ai/settings`)
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET` | `/api/ai/settings` | Get org AI settings (enabled, provider, features, has_key) |
+| `PUT` | `/api/ai/settings` | Update settings (enabled, provider, model, features) |
+| `POST` | `/api/ai/settings/key` | Store BYOK API key (Fernet-encrypted) |
+| `DELETE` | `/api/ai/settings/key/{provider}` | Remove stored key |
+| `POST` | `/api/ai/settings/test` | Test connection with stored/provided key |
+| `GET` | `/api/ai/settings/providers` | List providers + which have keys configured |
+| `GET` | `/api/ai/settings/usage` | Get current period usage stats |
+
+#### BYOK Key Files
+
+| File | Purpose |
+|------|---------|
+| `supabase/migrations/034_ai_settings.sql` | `ai_settings` + `ai_usage_log` tables |
+| `backend/app/services/core/ai_settings_service.py` | AISettingsService -- CRUD, key encryption, resolution, budget tracking (704 lines, 10 methods) |
+| `backend/app/routers/platform/ai_settings_api.py` | REST API for AI settings (7 endpoints) |
+| `backend/app/routers/ai/ai_key_resolver.py` | Shared helper: `resolve_ai_key(request, provider)` for all AI routers |
+| `src/contexts/AIContext.tsx` | React context -- backend-synced, 20 feature areas, `useAI()` hook, `AIFeatureGate` component |
+| `src/components/AIConfiguration.tsx` | Settings > AI tab -- multi-provider BYOK UI, feature toggles, usage/budget display |
+
+#### Frontend Key Security
+
+- API keys are NEVER stored in frontend state or localStorage
+- Frontend only tracks `hasApiKey: boolean` / `hasAnthropicKey: boolean` flags
+- Keys are sent to backend via `POST /api/ai/settings/key`, encrypted with Fernet, stored in `ai_encrypted_keys` table
+- After save, key input is cleared -- only "Key stored securely" badge is shown
+
+#### Frontend AI Gating
+
+The `AIContext.tsx` provides `useAI()` hook and `AIFeatureGate` component used throughout the frontend:
+
+- **FlowpilotPage** -- Generator and Self-Healer agents gated by AI enabled + relevant feature toggles
+- **AIChatTesting** -- AI chat input gated; shows "AI not configured" message when disabled
+- **TestResultsDialog** -- AI auto-fix buttons gated; manual fix always available
+- **Explorer agent** -- always available (no AI dependency, uses deterministic crawling)
+- **Manual Assist** -- always available (Paste Element and Enter Selector modes work without AI)
 
 ---
 
@@ -565,6 +652,8 @@ The backend exposes **67 router modules** with hundreds of endpoints across thes
 | `ai_automation_api` | `/ai-automation` | Element resolution, failure analysis |
 | `ai_enhancements_api` | `/ai-enhancements` | False positives, flaky detection |
 | `ai_generation_api` | `/ai` | Test generation, triage, training data |
+| `ai_settings_api` | `/api/ai/settings` | BYOK key management, AI config, usage tracking (v3.14.0) |
+| `ai_key_resolver` | (shared helper) | `resolve_ai_key(request, provider)` for all AI routers (v3.14.0) |
 | `ai_testing` | `/ai-testing` | AI-powered test execution |
 | `api_import_api` | `/api-import` | OpenAPI/Postman/HAR import/export |
 | `app_first_flow` | `/app-first-flow` | Record-and-generate workflow |
@@ -765,6 +854,7 @@ Core tables include:
 - `performance_runs`, `performance_metrics` - Perf data
 - `flowstral_sessions`, `flowstral_events` - Recording sessions
 - `ai_generations`, `ai_feedback` - AI generation tracking
+- `ai_settings`, `ai_encrypted_keys`, `ai_usage_log` - BYOK AI configuration, encrypted key storage, usage tracking (v3.14.0)
 - `licenses`, `tenants`, `user_roles` - Enterprise features
 
 ### 15.2 In-Memory Fallback

@@ -369,7 +369,21 @@ The `failureClassification.ts` module converts raw Playwright errors into user-f
 | Variable | Service | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | test_runs_api | PostgreSQL connection for test run persistence |
-| `OPENAI_API_KEY` | AI triage, test generation | AI-powered failure analysis |
+| `OPENAI_API_KEY` | AI triage, self-healing (Vision layer) | Optional server-level fallback for AI features |
+| `ANTHROPIC_API_KEY` | AI failure analysis (Claude provider) | Optional server-level fallback |
+| `ENCRYPTION_KEY` | BYOK key encryption | Required for Fernet encryption of user-provided API keys |
+
+### AI Configuration (v3.14.0 — BYOK)
+
+AI-powered execution features (self-healing Vision layer, AI failure explanation, auto-fix) are **OFF by default**:
+
+- **Self-Healing Layers 1-2** (Knowledge + Deterministic): Always available, no AI key required
+- **Self-Healing Layer 3** (Vision AI): Requires OpenAI key (BYOK or server env var)
+- **Self-Healing Layer 4** (OCR): Requires Tesseract, no AI key needed
+- **AI Failure Explanation**: Requires configured AI key
+- **TestResultsDialog gates (v3.14.0)**: Fix/Flag/Auto-Fix All buttons disabled when AI not configured; Manual button always available; "Why did this fail?" link hidden when no AI
+
+Key resolution chain: BYOK key (Settings > AI tab) → server env var → disabled. Non-AI execution (Playwright automation, manual walkthrough, CI/CD) works fully without any API key.
 
 ### Test Runner Service
 
