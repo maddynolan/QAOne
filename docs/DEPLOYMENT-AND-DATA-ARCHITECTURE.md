@@ -94,6 +94,13 @@ Flowstral uses the same Docker images across all deployment modes. The only diff
 
 **Why Coolify?** Web dashboard (like Vercel), Git-push deploys, auto-SSL, and the same Docker containers work on any server -- cloud or on-prem.
 
+**Implementation files:**
+- `deploy/coolify/README.md` — Step-by-step Hetzner + Coolify setup guide
+- `deploy/coolify/.env.example` — Environment template for backend service
+- `deploy/pgbouncer/pgbouncer.ini` — PgBouncer connection pooling config (transaction mode, 200 max clients)
+- `.github/workflows/deploy-coolify.yml` — CI/CD: build Docker images → push to GHCR → trigger Coolify webhook deploy
+- Set `SEED_DEMO_DATA=true` in Coolify env vars to auto-populate demo data on first boot
+
 #### Phase 3: Scale & Enterprise ($40-100/month)
 
 | Component | Scale To | Cost |
@@ -188,7 +195,7 @@ LLM:       Via backend API (cloud or on-prem, configured in settings)
 
 ## 3. Data Architecture -- Where Everything Is Stored
 
-### 3.1 Database Schema (30 Supabase Migrations)
+### 3.1 Database Schema (33 Supabase Migrations)
 
 ```
 organizations (id, name, slug, settings JSONB)
