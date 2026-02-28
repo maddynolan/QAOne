@@ -428,15 +428,23 @@ class TestExecutionEngine:
     ) -> Dict[str, Any]:
         """Run assertions on response using enhanced assertion engine"""
         from app.services.api_testing.enhanced_assertion_engine import EnhancedAssertionEngine
-        
+        from app.services.api_testing import get_database_connector
+
         engine = EnhancedAssertionEngine()
+        # Pass db_connector and response_data in context so DB assertions
+        # (including cross-verify) can access the live connection and response
+        context = {
+            "db_connector": get_database_connector(),
+            "response_data": response_data,
+            "response_body": response_data,
+        }
         return engine.evaluate_assertions(
             assertions=assertions,
             response_data=response_data,
             status_code=status_code,
             response_headers=response_headers or {},
             response_time_ms=response_time_ms,
-            context={}
+            context=context
         )
     
     def _calculate_summary(self, test_results: List[Dict[str, Any]]) -> Dict[str, Any]:

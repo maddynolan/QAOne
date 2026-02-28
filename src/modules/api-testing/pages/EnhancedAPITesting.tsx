@@ -302,9 +302,9 @@ function DbQueryEditor({ connections, onAddAssertion, onAddStep }: {
       db_query: whereQuery,
       db_comparison: "field_equals_response",
       db_field: col,
-      response_jsonpath: `$.data.${col}`,
+      response_jsonpath: `$.${col}`,
     });
-    toast({ title: "Cross-Verify Added", description: `DB ${col} ↔ Response $.data.${col}` });
+    toast({ title: "Cross-Verify Added", description: `DB ${col} ↔ Response — edit the JSONPath to match your response structure (e.g. $.items[0].${col})` });
   };
 
   // Add as a step in chain/test
