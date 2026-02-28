@@ -863,7 +863,7 @@ class EnhancedAssertionEngine:
                 error="No connection_id provided",
                 message="Database assertion requires a connection_id in the assertion or context"
             )
-        
+
         query = assertion.get("query", "")
         if not query:
             return AssertionResult(
@@ -873,7 +873,38 @@ class EnhancedAssertionEngine:
                 error="No query provided",
                 message="Database assertion requires a 'query' field"
             )
-        
+
+        # For cross-verify assertions, resolve the response JSONPath value
+        comparison = assertion.get("comparison", "equals")
+        if comparison in ("field_equals_response", "field_contains_response", "row_matches_response"):
+            response_jsonpath = assertion.get("response_jsonpath", "")
+            response_data = context.get("response_data") or context.get("response_body")
+            if response_data and response_jsonpath:
+                try:
+                    import json
+                    if isinstance(response_data, str):
+                        try:
+                            response_data = json.loads(response_data)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    # Simple JSONPath resolution (supports $.field.nested)
+                    path_parts = response_jsonpath.lstrip("$").lstrip(".").split(".")
+                    value = response_data
+                    for part in path_parts:
+                        if part and isinstance(value, dict):
+                            value = value.get(part)
+                        elif part and isinstance(value, list):
+                            try:
+                                value = value[int(part)]
+                            except (ValueError, IndexError):
+                                value = None
+                                break
+                        else:
+                            break
+                    assertion = {**assertion, "response_value": value}
+                except Exception:
+                    assertion = {**assertion, "response_value": None}
+
         try:
             import asyncio
             # DatabaseConnector.assert_database_state is async, run it synchronously
@@ -882,7 +913,7 @@ class EnhancedAssertionEngine:
                 loop = asyncio.get_running_loop()
             except RuntimeError:
                 loop = None
-            
+
             if loop and loop.is_running():
                 # We're in an async context — create a task
                 import concurrent.futures

@@ -67,6 +67,9 @@ export const DB_ASSERTION_OPERATORS = [
   { value: "less_than", label: "Row Count Less Than" },
   { value: "not_empty", label: "Not Empty" },
   { value: "is_empty", label: "Is Empty" },
+  { value: "field_equals_response", label: "Field Equals Response JSONPath" },
+  { value: "field_contains_response", label: "Field Contains Response Value" },
+  { value: "row_matches_response", label: "Row Matches Response Object" },
 ] as const;
 
 // --- Assertion Operators ---
@@ -150,6 +153,9 @@ export interface AssertionConfig {
   db_connection_id?: string;
   db_query?: string;
   db_comparison?: string;
+  // Cross-verify: compare DB field with API response JSONPath
+  db_field?: string;
+  response_jsonpath?: string;
 }
 
 export interface ExtractionConfig {

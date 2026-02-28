@@ -314,11 +314,14 @@ class DatabaseConnector:
         query = assertion.get("query")
         expected_result = assertion.get("expected_result")
         comparison = assertion.get("comparison", "equals")
-        
+
         try:
             result = await self.execute_query(connection_id, query)
-            
+
             passed = False
+            actual_display = result
+            message_detail = ""
+
             if comparison == "equals":
                 passed = result == expected_result
             elif comparison == "contains":
@@ -330,13 +333,49 @@ class DatabaseConnector:
                 passed = len(result) > expected_result
             elif comparison == "less_than":
                 passed = len(result) < expected_result
-            
+            elif comparison == "not_empty":
+                passed = len(result) > 0
+                actual_display = f"{len(result)} rows"
+            elif comparison == "is_empty":
+                passed = len(result) == 0
+                actual_display = f"{len(result)} rows"
+            elif comparison in ("field_equals_response", "field_contains_response"):
+                # Cross-verify: compare a specific DB column value with an API response JSONPath value
+                db_field = assertion.get("db_field", "")
+                response_jsonpath = assertion.get("response_jsonpath", "")
+                response_value = assertion.get("response_value")  # Pre-resolved by the engine
+                if result and len(result) > 0 and db_field:
+                    db_value = result[0].get(db_field) if isinstance(result[0], dict) else None
+                    if comparison == "field_equals_response":
+                        passed = str(db_value) == str(response_value)
+                    else:
+                        passed = str(response_value) in str(db_value) if db_value else False
+                    actual_display = f"DB {db_field}={db_value}, Response {response_jsonpath}={response_value}"
+                    message_detail = f"DB[{db_field}]={db_value} vs Response[{response_jsonpath}]={response_value}"
+                else:
+                    actual_display = f"No results or missing field '{db_field}'"
+            elif comparison == "row_matches_response":
+                # Cross-verify: compare all fields of first DB row against a response object
+                response_jsonpath = assertion.get("response_jsonpath", "")
+                response_value = assertion.get("response_value")  # Pre-resolved dict by the engine
+                if result and len(result) > 0 and isinstance(response_value, dict):
+                    db_row = result[0] if isinstance(result[0], dict) else {}
+                    mismatches = []
+                    for k, v in db_row.items():
+                        if k in response_value and str(v) != str(response_value[k]):
+                            mismatches.append(f"{k}: DB={v} vs Response={response_value[k]}")
+                    passed = len(mismatches) == 0
+                    actual_display = f"{len(mismatches)} mismatches" if mismatches else "All fields match"
+                    message_detail = "; ".join(mismatches[:5]) if mismatches else "All DB fields match response"
+                else:
+                    actual_display = "No DB results or response is not an object"
+
             return {
                 "passed": passed,
-                "actual_result": result,
+                "actual_result": actual_display,
                 "expected_result": expected_result,
                 "comparison": comparison,
-                "message": f"Assertion {'passed' if passed else 'failed'}"
+                "message": message_detail or f"Assertion {'passed' if passed else 'failed'}"
             }
             
         except Exception as e:

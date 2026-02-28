@@ -90,9 +90,12 @@ interface RequestBuilderProps {
   collectionVariables?: Record<string, string>;
   /** Active database connections for database assertion type */
   dbConnections?: Array<{ connection_id: string; type: string }>;
+  /** Pending DB assertions pushed from Database Workbench — merged into assertions state and cleared */
+  pendingDbAssertions?: AssertionConfig[];
+  onClearPendingDbAssertions?: () => void;
 }
 
-export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initialRequest, activeEnvironment, globalVariables = {}, collectionVariables = {}, dbConnections = [] }: RequestBuilderProps) {
+export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initialRequest, activeEnvironment, globalVariables = {}, collectionVariables = {}, dbConnections = [], pendingDbAssertions = [], onClearPendingDbAssertions }: RequestBuilderProps) {
   const { toast } = useToast();
   const [request, setRequest] = useState<RequestConfig>(createEmptyRequest());
   const [assertions, setAssertions] = useState<AssertionConfig[]>([]);
@@ -119,6 +122,16 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
       localStorage.setItem("api_cookie_jar", JSON.stringify(cookieJar));
     } catch {}
   }, [cookieJar]);
+
+  // --- Merge pending DB assertions from Database Workbench ---
+  useEffect(() => {
+    if (pendingDbAssertions.length > 0) {
+      setAssertions(prev => [...prev, ...pendingDbAssertions]);
+      onClearPendingDbAssertions?.();
+      // Auto-switch to assertions section so user sees the new assertions
+      setActiveSection("assertions");
+    }
+  }, [pendingDbAssertions]);
 
   // --- Load initial request when prop changes (e.g. from collection test case click) ---
   useEffect(() => {

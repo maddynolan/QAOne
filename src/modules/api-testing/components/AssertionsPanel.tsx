@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Trash2, CheckCircle2, XCircle, AlertCircle,
-  Hash, Clock, Target, FileText, Search, X, Code, Mail, Equal, Tag, Database,
+  Hash, Clock, Target, FileText, Search, X, Code, Mail, Equal, Tag, Database, ArrowRightLeft,
 } from "lucide-react";
 import {
   ASSERTION_TYPES,
@@ -313,7 +313,43 @@ export default function AssertionsPanel({ assertions, onChange, results, compact
                       onChange={e => updateAssertion(assertion.id, "db_query", e.target.value)}
                     />
                   </div>
-                  {!["not_empty", "is_empty"].includes(assertion.db_comparison || "") && (
+
+                  {/* Cross-verify: compare DB field with API response JSONPath */}
+                  {["field_equals_response", "field_contains_response", "row_matches_response"].includes(assertion.db_comparison || "") && (
+                    <div className="space-y-2 border border-blue-500/20 rounded-md p-2 bg-blue-500/5">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Target className="w-3 h-3 text-blue-500" />
+                        <span className="text-[10px] font-medium text-blue-600">Cross-Verify: DB ↔ Response</span>
+                      </div>
+                      {assertion.db_comparison !== "row_matches_response" && (
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground mb-1 block">DB Column / Field</Label>
+                          <Input
+                            className="h-7 text-xs font-mono"
+                            placeholder="e.g. email, name, status"
+                            value={assertion.db_field || ""}
+                            onChange={e => updateAssertion(assertion.id, "db_field", e.target.value)}
+                          />
+                        </div>
+                      )}
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground mb-1 block">Response JSONPath</Label>
+                        <Input
+                          className="h-7 text-xs font-mono"
+                          placeholder={assertion.db_comparison === "row_matches_response" ? "$.data (object to compare)" : "$.data.email"}
+                          value={assertion.response_jsonpath || ""}
+                          onChange={e => updateAssertion(assertion.id, "response_jsonpath", e.target.value)}
+                        />
+                      </div>
+                      <p className="text-[9px] text-muted-foreground">
+                        {assertion.db_comparison === "row_matches_response"
+                          ? "Compares all DB row fields against the response object at the given JSONPath."
+                          : "Compares the DB query result field with the value at the response JSONPath after the API call."}
+                      </p>
+                    </div>
+                  )}
+
+                  {!["not_empty", "is_empty", "field_equals_response", "field_contains_response", "row_matches_response"].includes(assertion.db_comparison || "") && (
                     <div>
                       <Label className="text-[10px] text-muted-foreground mb-1 block">Expected Value</Label>
                       <Input

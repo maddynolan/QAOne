@@ -195,7 +195,11 @@ function DbSchemaBrowser({ connections }: { connections: { connection_id: string
 }
 
 // --- Database Query Editor (inline) ---
-function DbQueryEditor({ connections }: { connections: { connection_id: string; type: string }[] }) {
+function DbQueryEditor({ connections, onAddAssertion, onAddStep }: {
+  connections: { connection_id: string; type: string }[];
+  onAddAssertion?: (assertion: any) => void;
+  onAddStep?: (step: any) => void;
+}) {
   const { toast } = useToast();
   const [connId, setConnId] = React.useState(connections[0]?.connection_id || "");
   const [query, setQuery] = React.useState("");
@@ -235,6 +239,94 @@ function DbQueryEditor({ connections }: { connections: { connection_id: string; 
       e.preventDefault();
       executeQuery();
     }
+  };
+
+  // Add entire result set as a database assertion step
+  const handleAssertAll = () => {
+    if (!results || results.length === 0 || !onAddAssertion) return;
+    onAddAssertion({
+      id: `db_assert_${Date.now()}`,
+      type: "database",
+      name: `DB Assert: ${query.substring(0, 50)}...`,
+      expected: String(results.length),
+      path: "",
+      operator: "equals",
+      schema: "",
+      db_connection_id: connId,
+      db_query: query,
+      db_comparison: "count",
+    });
+    toast({ title: "Assertion Added", description: `Row count assertion added (expected: ${results.length})` });
+  };
+
+  // Add a single row as a database assertion (per-field assertions matching response JSONPath)
+  const handleAssertRow = (row: any, rowIdx: number) => {
+    if (!onAddAssertion) return;
+    // Build a WHERE clause from the row's primary/first field to target this specific record
+    const firstCol = resultColumns[0];
+    const firstVal = row[firstCol];
+    const whereQuery = `SELECT * FROM (${query.replace(/;\s*$/, "")}) sub WHERE ${firstCol} = '${firstVal}'`;
+    const fields = Object.fromEntries(
+      Object.entries(row).filter(([k]) => k !== "__rownum").slice(0, 5)
+    );
+    onAddAssertion({
+      id: `db_assert_row_${Date.now()}_${rowIdx}`,
+      type: "database",
+      name: `DB Assert Row: ${firstCol}=${firstVal}`,
+      expected: JSON.stringify(fields),
+      path: "",
+      operator: "equals",
+      schema: "",
+      db_connection_id: connId,
+      db_query: whereQuery,
+      db_comparison: "equals",
+    });
+    toast({ title: "Row Assertion Added", description: `Asserts ${Object.keys(fields).length} fields for ${firstCol}=${firstVal}` });
+  };
+
+  // Add a single row as a cross-verify assertion (DB field vs response JSONPath)
+  const handleCrossVerifyRow = (row: any, col: string, rowIdx: number) => {
+    if (!onAddAssertion) return;
+    const firstCol = resultColumns[0];
+    const firstVal = row[firstCol];
+    const whereQuery = `SELECT ${col} FROM (${query.replace(/;\s*$/, "")}) sub WHERE ${firstCol} = '${firstVal}'`;
+    onAddAssertion({
+      id: `db_xverify_${Date.now()}_${rowIdx}_${col}`,
+      type: "database",
+      name: `DB ↔ Response: ${col}`,
+      expected: "",
+      path: "",
+      operator: "equals",
+      schema: "",
+      db_connection_id: connId,
+      db_query: whereQuery,
+      db_comparison: "field_equals_response",
+      db_field: col,
+      response_jsonpath: `$.data.${col}`,
+    });
+    toast({ title: "Cross-Verify Added", description: `DB ${col} ↔ Response $.data.${col}` });
+  };
+
+  // Add as a step in chain/test
+  const handleAddStep = (row: any, rowIdx: number) => {
+    if (!onAddStep) return;
+    const firstCol = resultColumns[0];
+    const firstVal = row[firstCol];
+    const fields = Object.fromEntries(
+      Object.entries(row).filter(([k]) => k !== "__rownum").slice(0, 5)
+    );
+    onAddStep({
+      type: "db_query",
+      action: "ExecuteQuery",
+      args: {
+        connection_id: connId,
+        query: query,
+        expectedRow: JSON.stringify(fields),
+        rowIdentifier: `${firstCol}=${firstVal}`,
+        description: `Query DB: ${query.substring(0, 60)}`,
+      },
+    });
+    toast({ title: "Step Added", description: `DB query step for ${firstCol}=${firstVal}` });
   };
 
   return (
@@ -288,6 +380,15 @@ function DbQueryEditor({ connections }: { connections: { connection_id: string; 
             <span>{results.length} row{results.length !== 1 ? "s" : ""} returned</span>
             {execTime !== null && <span className="text-muted-foreground">{execTime}ms</span>}
             <div className="flex gap-1">
+              {onAddAssertion && results.length > 0 && (
+                <Button
+                  variant="ghost" size="sm" className="h-5 text-[10px] px-1.5 text-amber-500 hover:text-amber-600 hover:bg-amber-500/10"
+                  onClick={handleAssertAll}
+                  title="Assert row count from this query"
+                >
+                  <CheckCircle2 className="w-3 h-3 mr-0.5" /> Assert All
+                </Button>
+              )}
               <Button
                 variant="ghost" size="sm" className="h-5 text-[10px] px-1"
                 onClick={() => {
@@ -317,22 +418,67 @@ function DbQueryEditor({ connections }: { connections: { connection_id: string; 
                   {resultColumns.map(col => (
                     <TableHead key={col} className="text-[10px] font-mono h-7">{col}</TableHead>
                   ))}
+                  {(onAddAssertion || onAddStep) && (
+                    <TableHead className="text-[10px] text-right h-7 w-[120px]">Actions</TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {results.slice(0, 200).map((row, i) => (
-                  <TableRow key={i}>
+                  <TableRow key={i} className="group">
                     <TableCell className="text-[10px] text-muted-foreground py-1">{i + 1}</TableCell>
                     {resultColumns.map(col => (
-                      <TableCell key={col} className="text-xs font-mono py-1 max-w-[200px] truncate">
+                      <TableCell key={col} className="text-xs font-mono py-1 max-w-[200px] truncate relative group/cell">
                         {row[col] === null ? <span className="text-muted-foreground italic">null</span> : String(row[col])}
+                        {/* Per-cell cross-verify button — appears on column hover */}
+                        {onAddAssertion && row[col] !== null && (
+                          <button
+                            onClick={() => handleCrossVerifyRow(row, col, i)}
+                            className="absolute right-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover/cell:opacity-100 transition-opacity h-4 px-1 text-[8px] rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 flex items-center gap-0.5"
+                            title={`Cross-verify ${col} with response`}
+                          >
+                            <svg className="w-2 h-2" viewBox="0 0 16 16" fill="none"><path d="M1 8h14M11 4l4 4-4 4M5 12L1 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>
+                        )}
                       </TableCell>
                     ))}
+                    {(onAddAssertion || onAddStep) && (
+                      <TableCell className="text-right py-1">
+                        <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {onAddStep && (
+                            <button
+                              onClick={() => handleAddStep(row, i)}
+                              className="h-5 px-1.5 text-[8px] rounded bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 flex items-center gap-0.5"
+                              title="Add as query step"
+                            >
+                              <Plus className="h-2.5 w-2.5" />
+                              Step
+                            </button>
+                          )}
+                          {onAddAssertion && (
+                            <button
+                              onClick={() => handleAssertRow(row, i)}
+                              className="h-5 px-1.5 text-[8px] rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 flex items-center gap-0.5"
+                              title="Assert this row's values"
+                            >
+                              <CheckCircle2 className="h-2.5 w-2.5" />
+                              Assert
+                            </button>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </ScrollArea>
+          {onAddAssertion && results.length > 0 && (
+            <div className="px-2 py-1.5 border-t bg-muted/30 text-[10px] text-muted-foreground flex items-center gap-1">
+              <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none"><path d="M1 8h14M11 4l4 4-4 4M5 12L1 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Hover any cell for cross-verify (DB ↔ Response) | Hover rows for Assert / Step buttons
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -398,6 +544,8 @@ export default function EnhancedAPITesting() {
   
   // Database state
   const [dbConnections, setDbConnections] = useState<any[]>([]);
+  // Pending DB assertions queue — pushed by DbQueryEditor, consumed by RequestBuilder
+  const [pendingDbAssertions, setPendingDbAssertions] = useState<any[]>([]);
   const [dbConfig, setDbConfig] = useState({
     connection_id: "",
     db_type: "postgresql",
@@ -2035,6 +2183,8 @@ export default function EnhancedAPITesting() {
               globalVariables={globalVariables}
               collectionVariables={collectionVariables}
               dbConnections={dbConnections}
+              pendingDbAssertions={pendingDbAssertions}
+              onClearPendingDbAssertions={() => setPendingDbAssertions([])}
               onSaveToChain={(req, asserts) => {
                 // Switch to Chains tab and add the request as a new step
                 setActiveTab("chains");
@@ -3430,8 +3580,31 @@ export default function EnhancedAPITesting() {
                   {/* Schema Browser */}
                   <DbSchemaBrowser connections={dbConnections} />
 
-                  {/* Query Editor */}
-                  <DbQueryEditor connections={dbConnections} />
+                  {/* Query Editor — per-row Assert/Step buttons push to RequestBuilder */}
+                  <DbQueryEditor
+                    connections={dbConnections}
+                    onAddAssertion={(assertion) => {
+                      setPendingDbAssertions(prev => [...prev, assertion]);
+                      setActiveTab("builder");
+                      toast({ title: "DB Assertion Added", description: `${assertion.name} → Builder Assertions` });
+                    }}
+                    onAddStep={(step) => {
+                      // Add as a test case step in the Execute tab
+                      setAssertions(prev => [...prev, {
+                        id: step.args?.description ? `step_${Date.now()}` : `db_step_${Date.now()}`,
+                        type: "database",
+                        name: step.args?.description || "DB Query Step",
+                        expected: step.args?.expectedRow || "",
+                        path: "",
+                        operator: "equals",
+                        schema: "",
+                        db_connection_id: step.args?.connection_id || "",
+                        db_query: step.args?.query || "",
+                        db_comparison: "not_empty",
+                      }]);
+                      toast({ title: "DB Step Added", description: `${step.args?.description || "Query step"} → Execute Assertions` });
+                    }}
+                  />
                 </div>
               )}
             </CardContent>
