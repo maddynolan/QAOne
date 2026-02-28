@@ -70,22 +70,19 @@ class DatabaseConnector:
             return False
     
     async def _connect_postgresql(self, config: Dict[str, Any]) -> Any:
-        """Connect to PostgreSQL"""
+        """Connect to PostgreSQL using a dedicated connection (never the shared backend pool)"""
         try:
-            from app.services.storage.postgres_direct import get_postgres_pool
-            pool = get_postgres_pool()
-            if pool:
-                return pool
-            else:
-                # Try direct connection
-                import psycopg2
-                return psycopg2.connect(
-                    host=config.get("host", "localhost"),
-                    port=config.get("port", 5432),
-                    database=config.get("database"),
-                    user=config.get("user"),
-                    password=config.get("password")
-                )
+            import psycopg2
+            conn = psycopg2.connect(
+                host=config.get("host", "localhost"),
+                port=config.get("port", 5432),
+                database=config.get("database"),
+                user=config.get("user"),
+                password=config.get("password")
+            )
+            conn.autocommit = True  # Read-only queries don't need transactions
+            logger.info(f"PostgreSQL direct connection established to {config.get('host', 'localhost')}:{config.get('port', 5432)}/{config.get('database')}")
+            return conn
         except Exception as e:
             logger.error(f"PostgreSQL connection failed: {e}")
             raise
@@ -162,11 +159,22 @@ class DatabaseConnector:
         """
         if connection_id not in self.connections:
             raise ValueError(f"Connection {connection_id} not found")
-        
+
         connection_info = self.connections[connection_id]
         db_type = connection_info["type"]
         connection = connection_info["connection"]
-        
+
+        # Auto-reconnect for PostgreSQL if connection was closed
+        if db_type == "postgresql" and hasattr(connection, 'closed') and connection.closed:
+            logger.info(f"PostgreSQL connection {connection_id} is closed — reconnecting...")
+            try:
+                new_conn = await self._connect_postgresql(connection_info["config"])
+                self.connections[connection_id]["connection"] = new_conn
+                connection = new_conn
+            except Exception as e:
+                logger.error(f"Auto-reconnect failed for {connection_id}: {e}")
+                raise
+
         try:
             if db_type == "postgresql":
                 return await self._execute_postgresql(connection, query, parameters)
@@ -180,7 +188,7 @@ class DatabaseConnector:
                 return await self._execute_mssql(connection, query, parameters)
             else:
                 raise ValueError(f"Unsupported database type: {db_type}")
-                
+
         except Exception as e:
             logger.error(f"Query execution failed: {e}", exc_info=True)
             raise
@@ -191,37 +199,28 @@ class DatabaseConnector:
         query: str,
         parameters: Optional[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """Execute PostgreSQL query"""
-        # Check if it's a pool
-        if hasattr(connection, 'getconn'):
-            conn = connection.getconn()
-            try:
-                with conn.cursor() as cur:
-                    if parameters:
-                        cur.execute(query, tuple(parameters.values()))
-                    else:
-                        cur.execute(query)
-                    
-                    if cur.description:
-                        columns = [desc[0] for desc in cur.description]
-                        rows = cur.fetchall()
-                        return [dict(zip(columns, row)) for row in rows]
-                    return []
-            finally:
-                connection.putconn(conn)
-        else:
-            # Direct connection
+        """Execute PostgreSQL query using a direct psycopg2 connection"""
+        try:
+            # Check if the connection is still alive; reconnect if needed
+            if hasattr(connection, 'closed') and connection.closed:
+                raise ConnectionError("PostgreSQL connection is closed")
+
             with connection.cursor() as cur:
                 if parameters:
                     cur.execute(query, tuple(parameters.values()))
                 else:
                     cur.execute(query)
-                
+
                 if cur.description:
                     columns = [desc[0] for desc in cur.description]
                     rows = cur.fetchall()
                     return [dict(zip(columns, row)) for row in rows]
                 return []
+        except ConnectionError:
+            raise
+        except Exception as e:
+            logger.error(f"PostgreSQL query execution error: {e}")
+            raise
     
     async def _execute_mysql(
         self,
@@ -419,6 +418,13 @@ class DatabaseConnector:
         db_type = connection_info["type"]
         connection = connection_info["connection"]
 
+        # Auto-reconnect for PostgreSQL if connection was closed
+        if db_type == "postgresql" and hasattr(connection, 'closed') and connection.closed:
+            logger.info(f"PostgreSQL connection {connection_id} is closed — reconnecting for list_tables...")
+            new_conn = await self._connect_postgresql(connection_info["config"])
+            self.connections[connection_id]["connection"] = new_conn
+            connection = new_conn
+
         try:
             if db_type == "postgresql":
                 rows = await self._execute_postgresql(connection, """
@@ -502,6 +508,13 @@ class DatabaseConnector:
         db_type = connection_info["type"]
         connection = connection_info["connection"]
 
+        # Auto-reconnect for PostgreSQL if connection was closed
+        if db_type == "postgresql" and hasattr(connection, 'closed') and connection.closed:
+            logger.info(f"PostgreSQL connection {connection_id} is closed — reconnecting for get_table_columns...")
+            new_conn = await self._connect_postgresql(connection_info["config"])
+            self.connections[connection_id]["connection"] = new_conn
+            connection = new_conn
+
         try:
             if db_type == "postgresql":
                 rows = await self._execute_postgresql(connection, """
@@ -573,25 +586,34 @@ class DatabaseConnector:
             raise
 
     async def disconnect(self, connection_id: str) -> bool:
-        """Disconnect from database"""
-        if connection_id in self.connections:
-            connection_info = self.connections[connection_id]
-            connection = connection_info["connection"]
-            
-            try:
-                if hasattr(connection, 'close'):
+        """Disconnect from database — safely closes only its own connection"""
+        if connection_id not in self.connections:
+            logger.warning(f"Disconnect: connection '{connection_id}' not found in {list(self.connections.keys())}")
+            return False
+
+        connection_info = self.connections[connection_id]
+        connection = connection_info["connection"]
+
+        try:
+            # Safety: never close a connection pool (getconn/putconn = psycopg2 pool).
+            # This should no longer happen since _connect_postgresql now creates direct
+            # connections, but keep the guard for safety.
+            if hasattr(connection, 'getconn'):
+                logger.warning(f"Skipping close for pool-type connection {connection_id} — removing reference only")
+            elif hasattr(connection, 'close') and callable(connection.close):
+                try:
                     connection.close()
-                elif hasattr(connection, 'closeall'):
-                    connection.closeall()
-                
-                del self.connections[connection_id]
-                logger.info(f"Disconnected from database: {connection_id}")
-                return True
-            except Exception as e:
-                logger.error(f"Error disconnecting: {e}")
-                return False
-        
-        return False
+                except Exception:
+                    pass  # already closed — that's fine
+
+            del self.connections[connection_id]
+            logger.info(f"Disconnected from database: {connection_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error disconnecting {connection_id}: {e}")
+            # Still remove the reference so the user can reconnect
+            self.connections.pop(connection_id, None)
+            return False
     
     def list_connections(self) -> List[Dict[str, Any]]:
         """List all active connections"""
