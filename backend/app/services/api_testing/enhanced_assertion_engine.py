@@ -854,7 +854,7 @@ class EnhancedAssertionEngine:
                     message="Database assertions require a database connection"
                 )
         
-        connection_id = assertion.get("connection_id") or context.get("connection_id")
+        connection_id = assertion.get("connection_id") or assertion.get("db_connection_id") or context.get("connection_id")
         if not connection_id:
             return AssertionResult(
                 "database",
@@ -864,7 +864,7 @@ class EnhancedAssertionEngine:
                 message="Database assertion requires a connection_id in the assertion or context"
             )
 
-        query = assertion.get("query", "")
+        query = assertion.get("query") or assertion.get("db_query") or ""
         if not query:
             return AssertionResult(
                 "database",
@@ -875,7 +875,7 @@ class EnhancedAssertionEngine:
             )
 
         # For cross-verify assertions, resolve the response JSONPath value
-        comparison = assertion.get("comparison", "equals")
+        comparison = assertion.get("comparison") or assertion.get("db_comparison") or "equals"
         if comparison in ("field_equals_response", "field_contains_response", "row_matches_response"):
             response_jsonpath = assertion.get("response_jsonpath", "")
             response_data = context.get("response_data") or context.get("response_body")
@@ -887,19 +887,35 @@ class EnhancedAssertionEngine:
                             response_data = json.loads(response_data)
                         except (json.JSONDecodeError, TypeError):
                             pass
-                    # Simple JSONPath resolution (supports $.field.nested)
-                    path_parts = response_jsonpath.lstrip("$").lstrip(".").split(".")
+                    # JSONPath resolution — supports $.field.nested, $.array[0].field, $.arr[0]
+                    import re
+                    # Tokenize: split on dots but handle bracket indices like [0]
+                    raw_path = response_jsonpath.lstrip("$").lstrip(".")
+                    tokens = []
+                    for segment in raw_path.split("."):
+                        if not segment:
+                            continue
+                        # Split "defects[0]" into ("defects", "0")
+                        bracket_match = re.match(r'^([^\[]*)\[(\d+)\]$', segment)
+                        if bracket_match:
+                            key_part, idx_part = bracket_match.groups()
+                            if key_part:
+                                tokens.append(key_part)
+                            tokens.append(int(idx_part))
+                        else:
+                            tokens.append(segment)
                     value = response_data
-                    for part in path_parts:
-                        if part and isinstance(value, dict):
-                            value = value.get(part)
-                        elif part and isinstance(value, list):
+                    for token in tokens:
+                        if isinstance(token, int) and isinstance(value, list):
                             try:
-                                value = value[int(part)]
-                            except (ValueError, IndexError):
+                                value = value[token]
+                            except IndexError:
                                 value = None
                                 break
+                        elif isinstance(token, str) and isinstance(value, dict):
+                            value = value.get(token)
                         else:
+                            value = None
                             break
                     assertion = {**assertion, "response_value": value}
                 except Exception:

@@ -659,6 +659,14 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   expected: a.expected,
                   path: a.path,
                   schema: a.schema,
+                  // DB assertion fields — map to backend-expected names
+                  ...(a.type === "database" ? {
+                    connection_id: a.db_connection_id,
+                    query: a.db_query,
+                    comparison: a.db_comparison,
+                    db_field: a.db_field,
+                    response_jsonpath: a.response_jsonpath,
+                  } : {}),
                 })),
                 test_type: "functional",
               },
