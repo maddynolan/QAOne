@@ -2069,8 +2069,14 @@ def test_${safeName}():
         code += `${indent}pass  # Unknown step type: ${step.type}\n`;
     }
     
-    // Add assertion code if defined
-    if (step.assertion?.enabled && step.assertion?.type) {
+    // Add assertion code if defined — support both single (legacy) and multiple assertions
+    if (step.assertions && step.assertions.length > 0) {
+      for (const assertion of step.assertions) {
+        if (assertion.enabled && assertion.type) {
+          code += generateAssertionCode(assertion, step, index, indent);
+        }
+      }
+    } else if (step.assertion?.enabled && step.assertion?.type) {
       code += generateAssertionCode(step.assertion, step, index, indent);
     }
 

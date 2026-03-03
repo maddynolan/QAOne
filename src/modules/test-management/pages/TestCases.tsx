@@ -698,7 +698,8 @@ export default function TestCases() {
             value: step.value || step.args?.[0],
             url: step.url,
             description: step.description,
-            assertion: step.assertion
+            assertion: step.assertion,
+            assertions: step.assertions,
           }))
         );
 

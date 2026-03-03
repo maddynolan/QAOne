@@ -139,8 +139,19 @@ const buildExpectedResult = (step: any): string => {
     const assertText = step.args?.[0] || step.args?.text || step.value;
     if (assertText) return `✓ Verify "${assertText}" is visible on the page`;
   }
+  // Handle multi-assertion array (new) and single assertion (legacy)
+  if (step.assertions && step.assertions.length > 0) {
+    const enabledAssertions = step.assertions.filter((a: any) => a.enabled);
+    if (enabledAssertions.length > 0) {
+      const descriptions = enabledAssertions.map((a: any) => {
+        if (a.expected) return `✓ ${a.type}: "${a.expected}"`;
+        return `✓ ${(a.type || 'verify').replace(/_/g, ' ')}`;
+      });
+      return descriptions.join('\n');
+    }
+  }
   if (step.assertion) {
-    const assertValue = step.assertion.value || step.assertion.expectedValue;
+    const assertValue = step.assertion.value || step.assertion.expectedValue || step.assertion.expected;
     if (assertValue) return `✓ Verify: ${assertValue}`;
   }
   if (step.expectedResult?.trim()) return step.expectedResult;
