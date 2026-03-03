@@ -28,7 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel, SelectSeparator } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
@@ -52,7 +52,7 @@ import { convertSelector } from '../lib/selector-utils';
 import {
   getAssertionDescription, getAssertionSuggestions, getQuickSuggestions,
   getQuickSuggestionsLegacy, STEP_TYPE_ASSERTIONS, getAssertionsForStepType,
-  shouldShowGenericAssertions
+  shouldShowGenericAssertions, generateExpectedResultFromAssertions
 } from '../lib/assertion-helpers';
 import { detectFieldType, generateSmartValue } from '../lib/test-data-generation';
 
@@ -2307,19 +2307,21 @@ function StepEditor({
       {shouldShowGenericAssertions(step.type) && (
       <div className="space-y-3 border-t pt-4">
         <div className="flex items-center justify-between">
-          <Label className="flex items-center gap-2">
+          <Label className="flex items-center gap-2 text-sm font-semibold">
             <CheckCircle className="h-4 w-4 text-green-500" />
-            Expected Result & Verification
+            Verification Checks
           </Label>
-          <span className="text-[10px] text-muted-foreground px-2 py-0.5 bg-green-500/10 rounded">
-            {step.type.toUpperCase()} specific
-          </span>
+          {(step.assertions?.length || 0) > 0 && (
+            <Badge variant="outline" className="text-[10px] bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30">
+              {step.assertions?.filter((a: any) => a.enabled).length || 0} active
+            </Badge>
+          )}
         </div>
-        
+
         {/* Quick Suggestions - Step-type specific, shown first for easy access */}
         <div className="space-y-2 p-3 bg-gradient-to-r from-green-500/5 to-emerald-500/5 rounded-lg border border-green-500/20">
           <Label className="text-xs font-medium text-green-600 dark:text-green-400">
-            ⚡ Quick Add for {step.type.charAt(0).toUpperCase() + step.type.slice(1).replace(/_/g, ' ')} Step
+            ⚡ Quick Add
           </Label>
           <div className="flex flex-wrap gap-1.5">
             {getQuickSuggestions(step.type).map((suggestion, idx) => (
@@ -2386,13 +2388,14 @@ function StepEditor({
                   <CheckCircle className={`h-3 w-3 ${assertion.enabled !== false ? 'text-green-500' : 'text-muted-foreground'}`} />
                   Check {idx + 1}
                 </label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 w-5 p-0 text-muted-foreground hover:text-red-500"
-                  onClick={() => {
+                <button
+                  type="button"
+                  className="h-6 w-6 p-0 flex items-center justify-center rounded text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
-                    const newAssertions = assertions.filter((_, i) => i !== idx);
+                    const newAssertions = assertions.filter((_: any, i: number) => i !== idx);
                     const newExpectedResult = generateExpectedResultFromAssertions(newAssertions, step.selector);
                     onUpdate({
                       assertions: newAssertions.length > 0 ? newAssertions : undefined,
@@ -2400,9 +2403,10 @@ function StepEditor({
                       expectedResult: newExpectedResult || step.expectedResult
                     });
                   }}
+                  title="Remove this check"
                 >
-                  <X className="h-3 w-3" />
-                </Button>
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
               
               {/* Assertion Type - Step-specific categorized dropdown */}
@@ -2425,19 +2429,16 @@ function StepEditor({
                 </SelectTrigger>
                 <SelectContent className="max-h-[400px]">
                   {getAssertionsForStepType(step.type).map((category, catIdx) => (
-                    <div key={catIdx}>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">
+                    <SelectGroup key={catIdx}>
+                      <SelectLabel className="text-xs font-semibold text-muted-foreground px-2 py-1.5">
                         {category.category}
-                      </div>
+                      </SelectLabel>
                       {category.assertions.map((a) => (
-                        <SelectItem key={a.type} value={a.type} className="pl-4">
-                          <div className="flex flex-col">
-                            <span>{a.icon || '•'} {a.label}</span>
-                            <span className="text-[10px] text-muted-foreground">{a.description}</span>
-                          </div>
+                        <SelectItem key={a.type} value={a.type}>
+                          <span>{a.icon || '•'} {a.label}</span>
                         </SelectItem>
                       ))}
-                    </div>
+                    </SelectGroup>
                   ))}
                   {/* Show cross-type assertions that may not be in the step-specific list */}
                   {(() => {
@@ -2452,14 +2453,15 @@ function StepEditor({
                     ].filter(g => !existingTypes.has(g.value));
                     if (generics.length === 0) return null;
                     return (
-                      <div className="border-t mt-1 pt-1">
-                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50">
+                      <SelectGroup>
+                        <SelectSeparator />
+                        <SelectLabel className="text-xs font-semibold text-muted-foreground px-2 py-1.5">
                           📋 Other Assertions
-                        </div>
+                        </SelectLabel>
                         {generics.map(g => (
-                          <SelectItem key={g.value} value={g.value} className="pl-4">{g.label}</SelectItem>
+                          <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
                         ))}
-                      </div>
+                      </SelectGroup>
                     );
                   })()}
                 </SelectContent>
@@ -2547,11 +2549,11 @@ function StepEditor({
             </div>
           )})}
           
-          {/* Add Assertion Button */}
+          {/* Add Check Button */}
           <Button
             variant="outline"
             size="sm"
-            className="w-full h-9 text-xs border-dashed border-green-500/30 hover:border-green-500/50 hover:bg-green-500/5"
+            className="w-full h-8 text-xs border-dashed border-green-500/30 hover:border-green-500/50 hover:bg-green-500/5"
             onClick={() => {
               const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
               const newAssertion: StepAssertion = {
@@ -2561,27 +2563,15 @@ function StepEditor({
                 target: step.selector || '',
                 expected: step.value || ''
               };
-              onUpdate({ 
+              onUpdate({
                 assertions: [...assertions, newAssertion],
                 assertion: assertions[0] || newAssertion
               });
             }}
           >
             <Plus className="h-3 w-3 mr-1" />
-            Add Expected Result
+            Add Verification Check
           </Button>
-        </div>
-        
-        {/* Free-form expected result */}
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Summary (auto-generated or custom)</Label>
-          <Textarea
-            value={step.expectedResult || ''}
-            onChange={(e) => onUpdate({ expectedResult: e.target.value })}
-            placeholder="Auto-generated from assertions above, or type custom expected result..."
-            rows={2}
-            className="text-sm"
-          />
         </div>
       </div>
       )}

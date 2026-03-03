@@ -132,7 +132,7 @@ export default function UnifiedWorkflowEditor() {
   const [showSettings, setShowSettings] = useState(false);
   const [showModules, setShowModules] = useState(false);
   const [showBlackbox, setShowBlackbox] = useState(false);
-  const [expandedCategories, setExpandedCategories] = useState<string[]>(['ui', 'verify']);
+  const [expandedCategories, setExpandedCategories] = useState<string[]>(['actions', 'verify']);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   
   // Saved state - tracks if this test case exists in backend
