@@ -2366,10 +2366,26 @@ function StepEditor({
             return (
             <div key={assertion.id || idx} className="p-3 bg-muted/50 rounded-lg border border-muted space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <CheckCircle className="h-3 w-3 text-green-500" />
-                  Expected Result {idx + 1}
-                </span>
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={assertion.enabled !== false}
+                    onChange={(e) => {
+                      const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+                      const newAssertions = [...assertions];
+                      newAssertions[idx] = { ...assertion, enabled: e.target.checked };
+                      const newExpectedResult = generateExpectedResultFromAssertions(newAssertions, step.selector);
+                      onUpdate({
+                        assertions: newAssertions,
+                        assertion: newAssertions[0],
+                        expectedResult: newExpectedResult
+                      });
+                    }}
+                    className="rounded border-green-500/50 text-green-500 focus:ring-green-500/30 h-3.5 w-3.5"
+                  />
+                  <CheckCircle className={`h-3 w-3 ${assertion.enabled !== false ? 'text-green-500' : 'text-muted-foreground'}`} />
+                  Check {idx + 1}
+                </label>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -2378,8 +2394,8 @@ function StepEditor({
                     const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
                     const newAssertions = assertions.filter((_, i) => i !== idx);
                     const newExpectedResult = generateExpectedResultFromAssertions(newAssertions, step.selector);
-                    onUpdate({ 
-                      assertions: newAssertions.length > 0 ? newAssertions : undefined, 
+                    onUpdate({
+                      assertions: newAssertions.length > 0 ? newAssertions : undefined,
                       assertion: newAssertions[0] || undefined,
                       expectedResult: newExpectedResult || step.expectedResult
                     });
@@ -2423,17 +2439,29 @@ function StepEditor({
                       ))}
                     </div>
                   ))}
-                  {/* Also show generic assertions if needed */}
-                  <div className="border-t mt-1 pt-1">
-                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50">
-                      📋 Generic Assertions
-                    </div>
-                    <SelectItem value="element_visible" className="pl-4">✓ Element visible</SelectItem>
-                    <SelectItem value="element_hidden" className="pl-4">✗ Element hidden</SelectItem>
-                    <SelectItem value="text_contains" className="pl-4">📝 Page contains text</SelectItem>
-                    <SelectItem value="url_contains" className="pl-4">🔗 URL contains</SelectItem>
-                    <SelectItem value="count_equals" className="pl-4">🔢 Element count</SelectItem>
-                  </div>
+                  {/* Show cross-type assertions that may not be in the step-specific list */}
+                  {(() => {
+                    const stepTypes = getAssertionsForStepType(step.type);
+                    const existingTypes = new Set(stepTypes.flatMap(c => c.assertions.map(a => a.type)));
+                    const generics = [
+                      { value: 'element_visible', label: '✓ Element visible' },
+                      { value: 'element_hidden', label: '✗ Element hidden' },
+                      { value: 'text_contains', label: '📝 Page contains text' },
+                      { value: 'url_contains', label: '🔗 URL contains' },
+                      { value: 'count_equals', label: '🔢 Element count' },
+                    ].filter(g => !existingTypes.has(g.value));
+                    if (generics.length === 0) return null;
+                    return (
+                      <div className="border-t mt-1 pt-1">
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50">
+                          📋 Other Assertions
+                        </div>
+                        {generics.map(g => (
+                          <SelectItem key={g.value} value={g.value} className="pl-4">{g.label}</SelectItem>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </SelectContent>
               </Select>
               
@@ -2444,8 +2472,8 @@ function StepEditor({
                 </p>
               )}
               
-              {/* Expected Value - Show for types that need it */}
-              {assertion.type && (assertionDef?.needsValue || !['element_visible', 'element_hidden', 'element_enabled', 'element_disabled', 'page_loaded', 'no_errors', 'loading_complete', 'url_changed', 'form_submitted', 'form_reset', 'download_starts', 'element_selected', 'element_expanded', 'confirmation_dialog', 'new_tab_opens', 'dropdown_closed', 'network_idle', 'animation_complete', 'screenshot_taken', 'visual_match', 'file_accepted', 'progress_complete', 'value_accepted', 'value_formatted', 'no_validation_error', 'field_valid', 'field_invalid', 'placeholder_hidden', 'row_count_greater', 'no_rows', 'status_200', 'status_201', 'status_2xx', 'status_4xx', 'not_empty', 'record_exists', 'record_not_exists', 'field_not_empty'].includes(assertion.type)) && (
+              {/* Expected Value - Show when assertion def says needsValue, or when no def found (custom types always show value) */}
+              {assertion.type && (assertionDef ? assertionDef.needsValue : true) && (
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground">Expected Value</Label>
                   <Input
@@ -2467,8 +2495,8 @@ function StepEditor({
                 </div>
               )}
               
-              {/* Target Element - Show for types that need it */}
-              {assertion.type && (assertionDef?.needsTarget || ['element_visible', 'element_hidden', 'value_contains', 'value_equals', 'text_equals', 'count_equals', 'count_greater', 'count_less', 'element_text_equals', 'element_appears', 'element_disappears', 'dependent_field_enabled', 'dependent_dropdown_updated', 'dependent_field_shown', 'dependent_field_hidden', 'price_updated'].includes(assertion.type)) && (
+              {/* Target Element - Show when assertion def says needsTarget, or when no def found (custom types always show target) */}
+              {assertion.type && (assertionDef ? assertionDef.needsTarget : true) && (
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground">Target Element (CSS Selector)</Label>
                   <div className="flex items-center gap-1">

@@ -536,8 +536,11 @@ export function getAssertionsForStepType(stepType: StepType): typeof STEP_TYPE_A
  * (Complex verify steps have their own specialized UI)
  */
 export function shouldShowGenericAssertions(stepType: StepType): boolean {
+  // Steps with their own specialized verification UI
   const typesWithSpecializedUI = ['email_verify', 'pdf_verify', 'file_verify'];
-  return !typesWithSpecializedUI.includes(stepType);
+  // Documentation/utility steps that don't need assertions
+  const utilitySteps = ['note', 'checkpoint', 'module'];
+  return !typesWithSpecializedUI.includes(stepType) && !utilitySteps.includes(stepType);
 }
 
 export function getQuickSuggestions(stepType: StepType): Array<{ label: string; type: string; expected?: string; text: string }> {

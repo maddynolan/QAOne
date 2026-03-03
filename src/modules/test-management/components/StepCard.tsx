@@ -152,10 +152,13 @@ function StepCard({
               Fallback
             </Badge>
           )}
-          {step.assertion?.enabled && (
+          {/* Show assertion badge for both legacy single assertion and new multi-assertions */}
+          {(step.assertion?.enabled || (step.assertions && step.assertions.length > 0 && step.assertions.some(a => a.enabled))) && (
             <Badge variant="outline" className="text-xs bg-success/20 text-success border-success/30">
               <CheckCircle className="h-3 w-3 mr-1" />
-              Assert
+              {step.assertions && step.assertions.filter(a => a.enabled).length > 1
+                ? `${step.assertions.filter(a => a.enabled).length} Checks`
+                : 'Assert'}
             </Badge>
           )}
           {/* Show automation status */}
