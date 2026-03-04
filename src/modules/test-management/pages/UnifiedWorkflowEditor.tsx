@@ -80,8 +80,10 @@ import QuickRerecordModal from "@/modules/recorder/components/QuickRerecordModal
 // ============================================================================
 import type {
   StepType, StepAssertion, SelectorObject, TestStep, TestVariable,
-  PreconditionRef, UnifiedTestCase, ExportMode, ViewMode
+  PreconditionRef, UnifiedTestCase, ExportMode, ViewMode, TestEnvironment
 } from '../types/workflow-editor.types';
+import { Tabs as TabsPrimitive, TabsContent as TabsContentPrimitive, TabsList as TabsListPrimitive, TabsTrigger as TabsTriggerPrimitive } from '@/components/ui/tabs';
+import TestEnvironmentManager from '../components/TestEnvironmentManager';
 import { STEP_CATEGORIES, getStepInfo } from '../constants/step-categories';
 import { convertSelector, extractSelectorString, extractSelectorObject, extractTargetName } from '../lib/selector-utils';
 import { detectFieldType, generateTestValue, RANDOM_DATA, randomPick, randomString, generateSmartValue } from '../lib/test-data-generation';
@@ -168,6 +170,12 @@ export default function UnifiedWorkflowEditor() {
   const [repairStepIndex, setRepairStepIndex] = useState<number | null>(null);
   const [keepBrowserOpenOnFailure, setKeepBrowserOpenOnFailure] = useState(true);
   const [browserKeptOpen, setBrowserKeptOpen] = useState(false);
+
+  // ═══════════════════════════════════════════════════════════════
+  // TEST ENVIRONMENTS (QA/Staging/Preprod switching)
+  // ═══════════════════════════════════════════════════════════════
+  const [environments, setEnvironments] = useState<TestEnvironment[]>([]);
+  const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<string>('');
   const [failureState, setFailureState] = useState<{
     stepIndex: number;
     step: TestStep;
@@ -712,6 +720,30 @@ export default function UnifiedWorkflowEditor() {
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
   
+  // Load test environments from server
+  useEffect(() => {
+    const loadEnvironments = async () => {
+      try {
+        // Use a default project ID (from the test case or fallback)
+        const projectId = searchParams.get('projectId') || 'default';
+        const res = await fetch(`${API_BASE_URL}/api/test-environments?project_id=${projectId}`);
+        if (res.ok) {
+          const data = await res.json();
+          const envs: TestEnvironment[] = data.environments || [];
+          setEnvironments(envs);
+          // Auto-select default environment
+          const defaultEnv = envs.find(e => e.is_default);
+          if (defaultEnv && !selectedEnvironmentId) {
+            setSelectedEnvironmentId(defaultEnv.id);
+          }
+        }
+      } catch (e) {
+        console.log('[Builder] Could not load environments (non-critical):', e);
+      }
+    };
+    loadEnvironments();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Load protocol data from localStorage (injected by recorder)
   useEffect(() => {
     // Check for unified test case with protocol data
@@ -1968,11 +2000,23 @@ export default function UnifiedWorkflowEditor() {
       // Add main test steps after precondition steps
       allSteps = [...allSteps, ...testCase.steps];
       
+      // Build environment config for URL rewriting at execution time
+      const envForExecution = environments.find(e => e.id === selectedEnvironmentId);
+      const environmentConfig = envForExecution ? {
+        test_base_url: (testCase.settings.baseUrl || '').replace(/\/+$/, ''),
+        env_base_url: envForExecution.base_url.replace(/\/+$/, ''),
+        env_name: envForExecution.name,
+        variables: Object.fromEntries(
+          envForExecution.variables.filter(v => v.enabled).map(v => [v.key, v.value])
+        ),
+      } : null;
+
       // Create merged test case for execution
-      const mergedTestCase: UnifiedTestCase = {
+      const mergedTestCase: any = {
         ...testCase,
         steps: allSteps,
         preconditions: [], // Clear preconditions since we're inlining them
+        environmentConfig, // Passed to Electron TestExecutor and backend
       };
       
       // In Electron, use FAST PATH via playwrightRecorder.runTest() (same engine as Record tab)
@@ -2025,7 +2069,41 @@ export default function UnifiedWorkflowEditor() {
 
           // Extract URL from first navigate step for the playback URL
           const firstNavStep = normalizedSteps.find(s => s.qword === 'goto' && s.args[0]);
-          const playbackUrl = firstNavStep?.args[0] || '';
+          let playbackUrl = firstNavStep?.args[0] || '';
+
+          // ═══════════════════════════════════════════════════════════
+          // ENVIRONMENT URL REWRITING — swap base URL at execution time
+          // ═══════════════════════════════════════════════════════════
+          const selectedEnv = environments.find(e => e.id === selectedEnvironmentId);
+          if (selectedEnv) {
+            const testBaseUrl = (testCase.settings.baseUrl || '').replace(/\/+$/, '');
+            const envBaseUrl = selectedEnv.base_url.replace(/\/+$/, '');
+
+            if (testBaseUrl && envBaseUrl && testBaseUrl !== envBaseUrl) {
+              console.log(`[Run Test] 🌍 Environment: "${selectedEnv.name}" — rewriting ${testBaseUrl} → ${envBaseUrl}`);
+
+              // Helper: rewrite a single URL
+              const rewriteUrl = (url: string): string => {
+                if (!url) return url;
+                if (url.startsWith(testBaseUrl)) {
+                  return envBaseUrl + url.substring(testBaseUrl.length);
+                }
+                return url;
+              };
+
+              // Rewrite playback launch URL
+              playbackUrl = rewriteUrl(playbackUrl);
+
+              // Rewrite all navigate step URLs
+              normalizedSteps.forEach(s => {
+                if (s.qword === 'goto' && s.args[0]) {
+                  s.args[0] = rewriteUrl(s.args[0]);
+                }
+              });
+
+              toast.info(`Running against: ${selectedEnv.name} (${envBaseUrl})`);
+            }
+          }
 
           // Subscribe to real-time IPC events for live progress
           const stepStartUnsub = electronApi?.on?.('playwright-test-step-start', ({ index, step }: any) => {
@@ -2194,6 +2272,20 @@ export default function UnifiedWorkflowEditor() {
       }
       
       // Fallback to backend execution
+      // Apply environment URL rewriting to steps before code generation
+      if (environmentConfig && environmentConfig.test_base_url && environmentConfig.env_base_url
+          && environmentConfig.test_base_url !== environmentConfig.env_base_url) {
+        const testBase = environmentConfig.test_base_url;
+        const envBase = environmentConfig.env_base_url;
+        console.log(`[Run Test] 🌍 Backend fallback: rewriting ${testBase} → ${envBase}`);
+        mergedTestCase.steps = mergedTestCase.steps.map((step: any) => {
+          if (step.type === 'navigate' && step.url && step.url.startsWith(testBase)) {
+            return { ...step, url: envBase + step.url.substring(testBase.length) };
+          }
+          return step;
+        });
+        toast.info(`Running against: ${environmentConfig.env_name} (${envBase})`);
+      }
       const safeName = testCase.name.replace(/[^a-z0-9]+/gi, '_').toLowerCase();
       const code = generateAutomationCode(mergedTestCase, safeName);
       const response = await fetch(`${API_BASE_URL}/api/flowstral/execute`, {
@@ -3133,10 +3225,28 @@ export default function UnifiedWorkflowEditor() {
                 {savedTestCaseId ? 'Save' : 'Save New'}
               </Button>
               
+              {/* Environment Selector (next to Run) */}
+              {environments.length > 0 && (
+                <Select value={selectedEnvironmentId || '__none__'} onValueChange={(v) => setSelectedEnvironmentId(v === '__none__' ? '' : v)}>
+                  <SelectTrigger className="h-8 w-[140px] text-xs border-gray-300 dark:border-gray-600">
+                    <Globe className="h-3.5 w-3.5 mr-1 text-muted-foreground shrink-0" />
+                    <SelectValue placeholder="No Env" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No Environment</SelectItem>
+                    {environments.map(env => (
+                      <SelectItem key={env.id} value={env.id}>
+                        {env.name} {env.is_default ? '⭐' : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
               {/* Automated Run Button with Options */}
               <div className="flex items-center">
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   onClick={runTest}
                   disabled={isRunning || testCase.steps.length === 0}
                   className="bg-green-600 hover:bg-green-500 text-white font-medium shadow-lg shadow-green-600/40 disabled:opacity-40 px-4 rounded-r-none border-r border-green-700"
@@ -4047,56 +4157,78 @@ export default function UnifiedWorkflowEditor() {
           </DialogContent>
         </Dialog>
 
-        {/* Settings Dialog */}
+        {/* Settings Dialog — Tabbed: General + Environments */}
         <Dialog open={showSettings} onOpenChange={setShowSettings}>
-          <DialogContent>
+          <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>Test Settings</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Base URL</Label>
-                <Input
-                  value={testCase.settings.baseUrl || ''}
-                  onChange={(e) => setTestCase(prev => ({
-                    ...prev,
-                    settings: { ...prev.settings, baseUrl: e.target.value }
-                  }))}
-                  placeholder="https://example.com"
+            <TabsPrimitive defaultValue="general" className="w-full">
+              <TabsListPrimitive className="grid w-full grid-cols-2 mb-4">
+                <TabsTriggerPrimitive value="general">General</TabsTriggerPrimitive>
+                <TabsTriggerPrimitive value="environments">
+                  Environments {environments.length > 0 && <Badge variant="secondary" className="ml-1 text-[10px] py-0 px-1">{environments.length}</Badge>}
+                </TabsTriggerPrimitive>
+              </TabsListPrimitive>
+
+              {/* General Tab */}
+              <TabsContentPrimitive value="general" className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Base URL <span className="text-xs text-muted-foreground ml-1">(used for env URL matching)</span></Label>
+                  <Input
+                    value={testCase.settings.baseUrl || ''}
+                    onChange={(e) => setTestCase(prev => ({
+                      ...prev,
+                      settings: { ...prev.settings, baseUrl: e.target.value }
+                    }))}
+                    placeholder="https://qa.example.com"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The URL this test was recorded against. Used to detect which URLs to rewrite when switching environments.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Timeout (ms)</Label>
+                  <Input
+                    type="number"
+                    value={testCase.settings.timeout}
+                    onChange={(e) => setTestCase(prev => ({
+                      ...prev,
+                      settings: { ...prev.settings, timeout: parseInt(e.target.value) }
+                    }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Retries</Label>
+                  <Input
+                    type="number"
+                    value={testCase.settings.retries}
+                    onChange={(e) => setTestCase(prev => ({
+                      ...prev,
+                      settings: { ...prev.settings, retries: parseInt(e.target.value) }
+                    }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Textarea
+                    value={testCase.description}
+                    onChange={(e) => setTestCase(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="What does this test verify?"
+                    rows={3}
+                  />
+                </div>
+              </TabsContentPrimitive>
+
+              {/* Environments Tab */}
+              <TabsContentPrimitive value="environments">
+                <TestEnvironmentManager
+                  environments={environments}
+                  onEnvironmentsChange={setEnvironments}
+                  projectId={searchParams.get('projectId') || 'default'}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label>Timeout (ms)</Label>
-                <Input
-                  type="number"
-                  value={testCase.settings.timeout}
-                  onChange={(e) => setTestCase(prev => ({
-                    ...prev,
-                    settings: { ...prev.settings, timeout: parseInt(e.target.value) }
-                  }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Retries</Label>
-                <Input
-                  type="number"
-                  value={testCase.settings.retries}
-                  onChange={(e) => setTestCase(prev => ({
-                    ...prev,
-                    settings: { ...prev.settings, retries: parseInt(e.target.value) }
-                  }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Textarea
-                  value={testCase.description}
-                  onChange={(e) => setTestCase(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="What does this test verify?"
-                  rows={3}
-                />
-              </div>
-            </div>
+              </TabsContentPrimitive>
+            </TabsPrimitive>
             <DialogFooter>
               <Button onClick={() => setShowSettings(false)}>Done</Button>
             </DialogFooter>

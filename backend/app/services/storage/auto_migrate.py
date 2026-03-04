@@ -123,6 +123,19 @@ CREATE TABLE IF NOT EXISTS test_runs (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Test Environments (project-level QA/Staging/Preprod switching)
+CREATE TABLE IF NOT EXISTS test_environments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    base_url TEXT NOT NULL,
+    variables JSONB DEFAULT '[]'::jsonb,
+    is_default BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(project_id, name)
+);
+
 -- Test Run Steps
 CREATE TABLE IF NOT EXISTS test_run_steps (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

@@ -200,6 +200,18 @@ export interface TestVariable {
   type: 'static' | 'env' | 'generated' | 'extracted';
 }
 
+// Test Environment — project-level QA/Staging/Preprod switching
+export interface TestEnvironment {
+  id: string;
+  project_id?: string;
+  name: string;
+  base_url: string;
+  variables: Array<{ key: string; value: string; type: 'default' | 'secret'; enabled: boolean }>;
+  is_default: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 // Precondition test case reference
 export interface PreconditionRef {
   testCaseId: string;

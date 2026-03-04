@@ -285,6 +285,14 @@ except Exception as e:
             # Windows: Run all operations in thread pool
             if 'navigate' in action:
                 url = data.get('url', 'https://example.com')
+                # Environment URL rewriting
+                if hasattr(self, 'environment_config') and self.environment_config:
+                    env_cfg = self.environment_config
+                    test_base = (env_cfg.get('test_base_url') or '').rstrip('/')
+                    env_base = (env_cfg.get('env_base_url') or '').rstrip('/')
+                    if test_base and env_base and test_base != env_base and url.startswith(test_base):
+                        url = env_base + url[len(test_base):]
+                        logger.info(f"Environment rewrite: {data.get('url')} → {url}")
                 await self._run_sync(lambda: self.page.goto(url))
             elif 'click' in action:
                 if 'login' in action.lower() and 'button' in action.lower():
@@ -337,6 +345,14 @@ except Exception as e:
             # Linux/Mac: Use async operations
             if 'navigate' in action:
                 url = data.get('url', 'https://example.com')
+                # Environment URL rewriting
+                if hasattr(self, 'environment_config') and self.environment_config:
+                    env_cfg = self.environment_config
+                    test_base = (env_cfg.get('test_base_url') or '').rstrip('/')
+                    env_base = (env_cfg.get('env_base_url') or '').rstrip('/')
+                    if test_base and env_base and test_base != env_base and url.startswith(test_base):
+                        url = env_base + url[len(test_base):]
+                        logger.info(f"Environment rewrite: {data.get('url')} → {url}")
                 await self.page.goto(url)
             elif 'click' in action:
                 if 'login' in action.lower() and 'button' in action.lower():
