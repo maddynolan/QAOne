@@ -97,6 +97,14 @@ try:
             # Execute action with auto-healing
             if 'navigate' in action or 'go' in action:
                 navigate_url = data.get('url', 'https://example.com')
+                # Environment URL rewriting
+                env_cfg = test_case.get('environment_config') or test_case.get('environmentConfig')
+                if env_cfg:
+                    test_base = (env_cfg.get('test_base_url') or '').rstrip('/')
+                    env_base = (env_cfg.get('env_base_url') or '').rstrip('/')
+                    if test_base and env_base and test_base != env_base and navigate_url.startswith(test_base):
+                        navigate_url = env_base + navigate_url[len(test_base):]
+                        logs.append(f"🌍 Environment rewrite → {{navigate_url}}")
                 # Ensure URL has protocol
                 if not navigate_url.startswith('http://') and not navigate_url.startswith('https://'):
                     navigate_url = 'https://' + navigate_url

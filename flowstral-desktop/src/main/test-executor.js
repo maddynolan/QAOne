@@ -717,7 +717,19 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         // Navigation
         case 'GoTo':
         case 'navigate':
-          const targetUrl = resolvedStep.args?.[0] || resolvedStep.url;
+          let targetUrl = resolvedStep.args?.[0] || resolvedStep.url;
+
+          // Environment URL rewriting — swap base URL if environmentConfig is set
+          if (this.environmentConfig?.env_base_url && this.environmentConfig?.test_base_url) {
+            const testBase = this.environmentConfig.test_base_url.replace(/\/+$/, '');
+            const envBase = this.environmentConfig.env_base_url.replace(/\/+$/, '');
+            if (testBase && envBase && testBase !== envBase && targetUrl && targetUrl.startsWith(testBase)) {
+              const rewritten = envBase + targetUrl.substring(testBase.length);
+              console.log(`[Executor] 🌍 Environment rewrite: ${targetUrl} → ${rewritten}`);
+              targetUrl = rewritten;
+            }
+          }
+
           let currentPageUrl = this.page.url();
           
           // Smart skip: detect redundant Salesforce post-login redirects
@@ -2839,6 +2851,12 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       duration: 0,
       startTime: new Date().toISOString()
     };
+
+    // Store environment config for URL rewriting in navigate steps
+    this.environmentConfig = testData.environmentConfig || null;
+    if (this.environmentConfig) {
+      console.log(`[Executor] 🌍 Environment: "${this.environmentConfig.env_name || 'custom'}" (${this.environmentConfig.env_base_url})`);
+    }
 
     try {
       await this.initialize();

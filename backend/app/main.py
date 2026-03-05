@@ -766,6 +766,13 @@ try:
 except Exception as e:
     logger.warning(f"Mobile flows API not loaded: {e}")
 
+# Test Environments - Project-level environment switching (QA/Staging/Preprod)
+try:
+    from app.routers.test_management.test_environments_api import router as test_environments_router
+    app.include_router(test_environments_router)
+except Exception as e:
+    logger.warning(f"Test environments API not loaded: {e}")
+
 # OWASP API Security Testing - Automated security scanning
 from app.routers.platform.owasp_security_api import router as owasp_security_router
 app.include_router(owasp_security_router)
