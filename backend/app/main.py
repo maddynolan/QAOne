@@ -88,11 +88,56 @@ ollama_service = get_ollama_service()  # Get service instance with environment l
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+def _validate_startup_security():
+    """
+    Validate that critical security configuration is set.
+    In production (APP_ENV=production), missing secrets cause startup failure.
+    In development, warnings are logged but startup continues.
+    """
+    env = os.getenv("APP_ENV", "development")
+    is_prod = env == "production"
+    missing = []
+
+    # JWT secret
+    from app.services.auth.jwt_service import validate_jwt_config
+    validate_jwt_config()
+
+    # Check critical env vars
+    critical_vars = {
+        "JWT_SECRET_KEY": "JWT signing key (or JWT_SECRET)",
+        "ENCRYPTION_KEY": "Data encryption key (or SECRETS_ENCRYPTION_KEY)",
+    }
+
+    for var, description in critical_vars.items():
+        if not os.getenv(var) and not os.getenv(var.replace("_KEY", "")):
+            missing.append(f"  - {var}: {description}")
+
+    if missing:
+        msg = "Security configuration check:\n" + "\n".join(missing)
+        if is_prod:
+            logger.error(f"CRITICAL — {msg}")
+            raise RuntimeError(
+                f"Missing required environment variables for production:\n"
+                + "\n".join(missing)
+                + "\n\nSet APP_ENV=development to bypass (NOT for production use)"
+            )
+        else:
+            logger.warning(f"DEV MODE — {msg}\n  Set these env vars before deploying to production.")
+
+    # Log security status
+    logger.info(f"[Security] Environment: {env}")
+    logger.info(f"[Security] JWT configured: {'yes' if os.getenv('JWT_SECRET_KEY') or os.getenv('JWT_SECRET') else 'NO (dev default)'}")
+    logger.info(f"[Security] Encryption configured: {'yes' if os.getenv('ENCRYPTION_KEY') or os.getenv('SECRETS_ENCRYPTION_KEY') else 'NO (dev default)'}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle application startup and shutdown gracefully"""
     # Startup
     try:
+        # ── Security: Validate critical configuration ──
+        _validate_startup_security()
+
         # Initialize SQLite database (local fallback)
         from app.services.storage.database_service import init_database
         await init_database()
@@ -164,7 +209,21 @@ app = FastAPI(
 # Middleware ordering: last added = outermost = processes request first.
 # CORS must be outermost so headers are added to ALL responses (including errors).
 
-# Trace logging (innermost — runs closest to the app)
+# Request size limiting (innermost — blocks oversized requests early)
+_max_upload_mb = int(os.getenv("UPLOAD_MAX_SIZE_MB", "50"))
+
+@app.middleware("http")
+async def limit_request_size(request: Request, call_next):
+    """Reject requests exceeding the configured max body size."""
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > _max_upload_mb * 1024 * 1024:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": f"Request body too large. Maximum: {_max_upload_mb}MB"},
+        )
+    return await call_next(request)
+
+# Trace logging
 from app.middleware.trace_logging_middleware import TraceLoggingMiddleware
 app.add_middleware(TraceLoggingMiddleware)
 
@@ -184,38 +243,62 @@ app.add_middleware(RateLimitMiddleware)
 # This ensures CORS headers are present on ALL responses, including error responses
 # from inner middleware/routes. Without this, BaseHTTPMiddleware exceptions can
 # bypass CORS header injection, causing browser CORS blocks on legitimate origins.
+# CORS origins — configurable via CORS_ALLOWED_ORIGINS env var (comma-separated)
+_cors_env = os.getenv("CORS_ALLOWED_ORIGINS", "")
+_cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else [
+    "http://localhost:8080",  # Frontend
+    "http://localhost:3000",  # Alternative frontend
+    "http://localhost:5173",  # Vite dev server
+    "http://localhost:5174",  # Vite dev server (alt port)
+    "http://localhost:8081",  # Tools server (Flowstral recorder)
+    "http://127.0.0.1:8081",  # Tools server (alternative)
+    "http://127.0.0.1:8080",  # Frontend (alternative)
+    "http://127.0.0.1:5173",  # Vite dev (alternative)
+    "https://flowstral.com",   # Production site
+    "https://www.flowstral.com",
+    "https://qaone-production.up.railway.app",  # Railway production
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8080",  # Frontend
-        "http://localhost:3000",  # Alternative frontend
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:5174",  # Vite dev server (alt port)
-        "http://localhost:8081",  # Tools server (Flowstral recorder)
-        "http://127.0.0.1:8081",  # Tools server (alternative)
-        "http://127.0.0.1:8080",  # Frontend (alternative)
-        "http://127.0.0.1:5173",  # Vite dev (alternative)
-        "https://flowstral.com",   # Production site
-        "https://www.flowstral.com",
-        "https://qaone-production.up.railway.app",  # Railway production
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "Accept",
+                    "X-Tenant-ID", "X-User-ID", "X-Trace-ID", "Cache-Control"],
 )
 
 # Global exception handler: ensures unhandled exceptions return JSON (not plain text)
 # so that CORSMiddleware can properly add headers to the response.
+# In production, error details are NEVER leaked to the client (only logged server-side).
 from starlette.responses import JSONResponse
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Catch-all for unhandled exceptions. Returns JSON so CORS middleware can add headers."""
-    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error"},
-    )
+    # Generate a request ID for correlation between client error and server log
+    request_id = getattr(request.state, "trace_id", str(uuid.uuid4())[:8])
+
+    # Always log full error server-side
+    logger.error(f"Unhandled exception on {request.method} {request.url.path} "
+                 f"[request_id={request_id}]: {exc}", exc_info=True)
+
+    # In production, return generic message; in dev, include error type
+    is_prod = os.getenv("APP_ENV", "development") == "production"
+    if is_prod:
+        content = {
+            "detail": "Internal server error",
+            "request_id": request_id,
+        }
+    else:
+        content = {
+            "detail": "Internal server error",
+            "request_id": request_id,
+            "error_type": type(exc).__name__,
+            "message": str(exc)[:500],  # Truncate long error messages in dev
+        }
+
+    return JSONResponse(status_code=500, content=content)
 
 # Pydantic models
 class GenerateTestsRequest(BaseModel):
@@ -796,6 +879,22 @@ except Exception as e:
 # Audit Trail API - Enterprise compliance logging
 from app.routers.platform.audit_api import router as audit_router
 app.include_router(audit_router)
+
+# MFA API - TOTP multi-factor authentication (enterprise compliance)
+try:
+    from app.routers.platform.mfa_api import router as mfa_router
+    app.include_router(mfa_router)
+    logger.info("MFA API registered")
+except Exception as e:
+    logger.warning(f"MFA API not loaded (non-critical): {e}")
+
+# Data Privacy API - GDPR erasure and data export (enterprise compliance)
+try:
+    from app.routers.platform.data_privacy_api import router as privacy_router
+    app.include_router(privacy_router)
+    logger.info("Data Privacy API registered")
+except Exception as e:
+    logger.warning(f"Data Privacy API not loaded (non-critical): {e}")
 
 # AI Settings API - BYOK key management, per-org/project AI configuration, usage tracking
 try:

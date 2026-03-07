@@ -24,21 +24,30 @@ class SecretsService:
     """
     
     def __init__(self):
-        # Get encryption key from environment
-        encryption_key = os.getenv("SECRETS_ENCRYPTION_KEY")
+        # Get encryption key from environment — REQUIRED for production
+        encryption_key = os.getenv("SECRETS_ENCRYPTION_KEY", os.getenv("ENCRYPTION_KEY", ""))
+
         if not encryption_key:
-            # Generate a key (for development only - should be set in production)
-            logger.warning("SECRETS_ENCRYPTION_KEY not set, generating temporary key")
-            encryption_key = Fernet.generate_key().decode()
-        
-        # Ensure key is 32 bytes (Fernet requirement)
+            if os.getenv("APP_ENV", "development") == "production":
+                raise RuntimeError(
+                    "CRITICAL: SECRETS_ENCRYPTION_KEY environment variable is not set. "
+                    "This is required for production. Generate with: "
+                    "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+                )
+            else:
+                logger.warning(
+                    "SECRETS_ENCRYPTION_KEY not set — using insecure dev default. "
+                    "Set this env var before deploying to production!"
+                )
+                encryption_key = "dev-only-insecure-key-do-not-use-in-prod"
+
+        # Ensure key is 32 bytes (Fernet requirement) via SHA-256 derivation
         if isinstance(encryption_key, str):
-            # If key is a string, hash it to get 32 bytes
             key_hash = hashlib.sha256(encryption_key.encode()).digest()
             self.encryption_key = base64.urlsafe_b64encode(key_hash)
         else:
             self.encryption_key = encryption_key
-        
+
         self.cipher = Fernet(self.encryption_key)
     
     def _encrypt_value(self, plaintext: str) -> bytes:

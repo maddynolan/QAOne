@@ -1,9 +1,10 @@
 """
 Secrets Management API Router
 Provides secure storage and retrieval of API keys, passwords, and sensitive test data.
+Secret reveal requires admin/owner role (RBAC enforced).
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -13,6 +14,9 @@ from app.services.core.secrets_service import get_secrets_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/secrets", tags=["secrets"])
+
+# Roles allowed to reveal secret values
+_REVEAL_ALLOWED_ROLES = {"admin", "owner"}
 
 
 class CreateSecretRequest(BaseModel):
@@ -121,20 +125,38 @@ async def create_secret(request: CreateSecretRequest) -> Dict[str, Any]:
 
 
 @router.get("/{secret_id}")
-async def get_secret(secret_id: str, reveal: bool = False) -> Dict[str, Any]:
+async def get_secret(request: Request, secret_id: str, reveal: bool = False) -> Dict[str, Any]:
     """
     Get a secret by ID.
-    
+
     Query params:
-    - reveal: If true, returns the actual decrypted value (use with caution)
+    - reveal: If true, returns the actual decrypted value (requires admin/owner role)
     """
     try:
+        # RBAC check: only admin/owner can reveal secret values
+        if reveal:
+            user_roles = set(getattr(request.state, "roles", []))
+            if not user_roles.intersection(_REVEAL_ALLOWED_ROLES):
+                logger.warning(
+                    f"[Security] User {getattr(request.state, 'user_id', 'unknown')} "
+                    f"attempted to reveal secret {secret_id} without admin/owner role"
+                )
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only admin and owner roles can reveal secret values"
+                )
+            # Audit log the reveal action
+            logger.info(
+                f"[Audit] Secret revealed: id={secret_id}, "
+                f"user={getattr(request.state, 'user_id', 'unknown')}"
+            )
+
         secrets_service = get_secrets_service()
         secret = await secrets_service.get_secret(secret_id)
-        
+
         if not secret:
             raise HTTPException(status_code=404, detail="Secret not found")
-        
+
         response = {
             "status": "success",
             "secret": {
@@ -142,17 +164,17 @@ async def get_secret(secret_id: str, reveal: bool = False) -> Dict[str, Any]:
                 "masked_value": _mask_value(secret.get("value", ""))
             }
         }
-        
-        # Only include actual value if explicitly requested
+
+        # Only include actual value if explicitly requested AND authorized
         if not reveal:
             response["secret"]["value"] = None
-        
+
         return response
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to get secret: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve secret")
 
 
 @router.put("/{secret_id}")
