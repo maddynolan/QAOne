@@ -3,6 +3,7 @@ OAuth 2.0 Authentication API
 Endpoints for managing OAuth2 configurations and tokens
 """
 
+import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -14,6 +15,8 @@ from app.services.api_testing.oauth2_authenticator import (
     OAuth2GrantType,
     TokenLocation
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/oauth2", tags=["oauth2-authentication"])
 
@@ -198,9 +201,11 @@ async def get_oauth2_token(config_id: str, force_refresh: bool = False):
         }
         
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"OAuth2 token config not found: {e}")
+        raise HTTPException(status_code=404, detail="OAuth2 configuration not found")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to obtain OAuth2 token: {e}")
+        raise HTTPException(status_code=500, detail="Failed to obtain OAuth2 token")
 
 
 @router.get("/authorization-url/{config_id}")
@@ -223,7 +228,8 @@ async def get_authorization_url(config_id: str, state: Optional[str] = None):
         }
         
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Invalid OAuth2 authorization URL request: {e}")
+        raise HTTPException(status_code=400, detail="Invalid authorization URL configuration")
 
 
 @router.post("/exchange/{config_id}")
@@ -257,7 +263,8 @@ async def exchange_authorization_code(config_id: str, request: ExchangeCodeReque
         }
         
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"OAuth2 code exchange failed: {e}")
+        raise HTTPException(status_code=404, detail="OAuth2 configuration not found for code exchange")
 
 
 @router.get("/headers/{config_id}")

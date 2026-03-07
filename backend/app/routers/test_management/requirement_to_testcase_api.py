@@ -180,7 +180,7 @@ async def jira_to_testcases(
         logger.error(f"Failed to generate test cases from Jira story: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate test cases: {str(e)}"
+            detail="Failed to generate test cases"
         )
 
 
@@ -214,7 +214,7 @@ async def generate_skeletons(
         logger.error(f"Failed to generate scenario skeletons: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate scenario skeletons: {str(e)}"
+            detail="Failed to generate scenario skeletons"
         )
 
 

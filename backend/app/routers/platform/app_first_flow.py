@@ -112,7 +112,7 @@ async def record_and_generate(
     
     except Exception as e:
         logger.error(f"App-First flow failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="App-First flow processing failed")
 
 
 @router.post("/execute-flow")
@@ -152,7 +152,7 @@ async def execute_flow(
     
     except Exception as e:
         logger.error(f"Flow execution failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Flow execution failed")
 
 
 @router.get("/flow/{flow_id}")
@@ -173,7 +173,7 @@ async def get_flow_status(
     
     except Exception as e:
         logger.error(f"Failed to get flow status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve flow status")
 
 
 @router.get("/findings/{flow_id}")
@@ -194,7 +194,7 @@ async def get_flow_findings(
     
     except Exception as e:
         logger.error(f"Failed to get flow findings: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve flow findings")
 
 
 

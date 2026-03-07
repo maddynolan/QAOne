@@ -77,19 +77,19 @@ def run_axe_scan(url: str, component_selector: str = None, wcag_level: str = "AA
             
             # Run axe-core scan
             if component_selector:
-                axe_result = page.evaluate(f"""
-                    async () => {{
-                        const element = document.querySelector('{component_selector}');
-                        if (!element) return {{ violations: [], error: 'Component not found' }};
-                        return await axe.run(element, {json.dumps(axe_options)});
-                    }}
-                """)
+                axe_result = page.evaluate("""
+                    async ([selector, options]) => {
+                        const element = document.querySelector(selector);
+                        if (!element) return { violations: [], error: 'Component not found' };
+                        return await axe.run(element, options);
+                    }
+                """, [component_selector, axe_options])
             else:
-                axe_result = page.evaluate(f"""
-                    async () => {{
-                        return await axe.run(document, {json.dumps(axe_options)});
-                    }}
-                """)
+                axe_result = page.evaluate("""
+                    async (options) => {
+                        return await axe.run(document, options);
+                    }
+                """, axe_options)
             
             violations = axe_result.get("violations", [])
             

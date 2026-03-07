@@ -17,6 +17,7 @@ Tests for:
 """
 
 import logging
+import os
 import re
 import json
 import asyncio
@@ -573,7 +574,9 @@ class OWASPAPISecurityScanner:
         scans_to_run = scan_types if scan_types else list(all_scans.keys())
         total_tests = len(scans_to_run)
 
-        async with httpx.AsyncClient(verify=False) as client:
+        # SEC-DATA-002: SSL verification enabled for security compliance
+        ssl_verify = os.getenv("OWASP_SCAN_VERIFY_SSL", "true").lower() != "false"
+        async with httpx.AsyncClient(verify=ssl_verify) as client:
             for scan_name in scans_to_run:
                 if scan_name in all_scans:
                     try:

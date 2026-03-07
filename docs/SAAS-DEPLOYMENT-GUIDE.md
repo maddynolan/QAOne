@@ -24,6 +24,7 @@
 15. [Chrome Web Store Publishing (v3.14.0)](#chrome-web-store-publishing-v3140)
 16. [Client Demo Quick Setup](#client-demo-quick-setup)
 17. [Troubleshooting](#troubleshooting)
+18. [Pre-Deployment Security Checklist](#pre-deployment-security-checklist)
 
 ---
 
@@ -286,13 +287,13 @@ PYTHONUNBUFFERED=1
 TRACK_LLM_USAGE=true
 
 # CORS - must match your frontend domain
-CORS_ORIGINS=https://app.flowstral.com,https://flowstral.com,http://localhost:8080
+CORS_ALLOWED_ORIGINS=https://app.flowstral.com,https://flowstral.com
 
 # Security
-SECRET_KEY=[generate-a-strong-random-key-64-chars]
-JWT_SECRET=[generate-a-separate-jwt-secret]
+JWT_SECRET_KEY=[generate-a-strong-random-key-64-chars]
 JWT_ALGORITHM=HS256
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=15
+JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
 
 # Air-gapped mode (keep false for SaaS)
 AIR_GAPPED_MODE=false
@@ -301,14 +302,17 @@ AIR_GAPPED_MODE=false
 **Generate strong secrets:**
 
 ```bash
-# Generate SECRET_KEY
-python -c "import secrets; print(secrets.token_hex(32))"
-
-# Generate JWT_SECRET
+# Generate JWT_SECRET_KEY
 python -c "import secrets; print(secrets.token_hex(32))"
 
 # Generate ENCRYPTION_KEY (Fernet key for BYOK API key encryption)
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Generate INTERNAL_SERVICE_KEY
+openssl rand -hex 32
+
+# Generate REDIS_PASSWORD
+openssl rand -base64 24
 ```
 
 ### 2.5 Add Custom Domain
@@ -392,7 +396,10 @@ The project already includes a `vercel.json` with SPA rewrites and security head
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "X-XSS-Protection", "value": "1; mode=block" }
+        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; font-src 'self' https:; frame-ancestors 'none'" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
       ]
     }
   ]
@@ -486,10 +493,10 @@ Both Vercel and Railway auto-provision and renew SSL certificates via Let's Encr
 
 ### 4.4 CORS Configuration
 
-The backend must allow requests from the frontend domain. Verify the `CORS_ORIGINS` environment variable on Railway includes all frontend domains:
+The backend must allow requests from the frontend domain. Verify the `CORS_ALLOWED_ORIGINS` environment variable on Railway includes all frontend domains:
 
 ```env
-CORS_ORIGINS=https://app.flowstral.com,https://flowstral.com,https://www.flowstral.com
+CORS_ALLOWED_ORIGINS=https://app.flowstral.com,https://flowstral.com,https://www.flowstral.com
 ```
 
 The FastAPI backend configures CORS middleware in `backend/app/main.py` using this variable.
@@ -515,11 +522,16 @@ The FastAPI backend configures CORS middleware in `backend/app/main.py` using th
 | `OPENAI_TEST_CASE_MODEL` | No | OpenAI model for test generation | `gpt-4o-mini` (default) |
 | `OPENAI_TEMPERATURE` | No | LLM temperature | `0.2` (default) |
 | `OPENAI_MAX_TOKENS` | No | Max token output | `2000` (default) |
-| `SECRET_KEY` | Yes | Application secret for session signing | 64-char hex string |
-| `JWT_SECRET` | Yes | JWT signing secret | 64-char hex string |
+| `JWT_SECRET_KEY` | Yes | JWT signing secret (min 32 bytes) | 64-char hex string |
 | `JWT_ALGORITHM` | No | JWT algorithm | `HS256` (default) |
-| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | No | Token expiry | `60` (default) |
-| `CORS_ORIGINS` | Yes | Allowed CORS origins (comma-separated) | `https://app.flowstral.com` |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | No | Access token expiry | `15` (default) |
+| `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | No | Refresh token expiry | `7` (default) |
+| `APP_ENV` | Yes | Application environment | `production` |
+| `INTERNAL_SERVICE_KEY` | Yes | Internal service-to-service auth key | 64-char hex string |
+| `REDIS_PASSWORD` | Recommended | Redis authentication password | Base64-encoded string |
+| `RATE_LIMIT_BACKEND` | Recommended | Rate limiting storage backend | `redis` (recommended for multi-instance) |
+| `UPLOAD_MAX_SIZE_MB` | No | Maximum file upload size in MB | `50` (default) |
+| `CORS_ALLOWED_ORIGINS` | Yes | Allowed CORS origins (comma-separated) | `https://app.flowstral.com` |
 | `AIR_GAPPED_MODE` | No | Block external LLM calls | `false` (default) |
 | `TRACK_LLM_USAGE` | No | Track LLM API usage metrics | `true` |
 | `PYTHONPATH` | Yes | Python module path | `/app` |
@@ -542,6 +554,38 @@ The FastAPI backend configures CORS middleware in `backend/app/main.py` using th
 1. `VITE_API_BASE_URL`
 2. `VITE_API_URL`
 3. Hardcoded fallback: `https://qaone-production.up.railway.app`
+
+### Required Security Environment Variables
+
+The following environment variables must be set on the backend (Railway) for a secure production deployment. These are in addition to the database and Supabase credentials listed above.
+
+```env
+# Application environment -- enables production-only security behaviors
+APP_ENV=production
+
+# JWT authentication -- single key for signing and verifying tokens
+JWT_SECRET_KEY=<generate with: python -c "import secrets; print(secrets.token_hex(32))">
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=15
+JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# Internal service-to-service authentication key
+INTERNAL_SERVICE_KEY=<generate with: openssl rand -hex 32>
+
+# Redis authentication (set this and update REDIS_URL to include the password)
+REDIS_PASSWORD=<generate with: openssl rand -base64 24>
+
+# Rate limiting backend -- use Redis for multi-instance deployments
+RATE_LIMIT_BACKEND=redis
+
+# BYOK API key encryption at rest (Fernet symmetric encryption)
+ENCRYPTION_KEY=<generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())">
+
+# File upload size limit
+UPLOAD_MAX_SIZE_MB=50
+
+# CORS -- restrict to your frontend domain(s) only, no wildcards
+CORS_ALLOWED_ORIGINS=https://your-frontend-domain.com
+```
 
 ---
 
@@ -912,15 +956,17 @@ pg_restore --dbname="[connection-string]" flowstral-backup-20260223.dump
 - [ ] All environment variables stored in Railway / Vercel platform secrets (not committed to `.env` in git)
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` only on backend (Railway), never on frontend (Vercel)
 - [ ] `OPENAI_API_KEY` only on backend (Railway), never on frontend (Vercel)
-- [ ] `SECRET_KEY` and `JWT_SECRET` are unique, cryptographically random, 64+ characters
+- [ ] `JWT_SECRET_KEY` is unique, cryptographically random, 64+ characters (min 32 bytes)
 - [ ] `ENCRYPTION_KEY` is set (Fernet key) for BYOK API key encryption at rest
+- [ ] `INTERNAL_SERVICE_KEY` is set for service-to-service authentication
+- [ ] `APP_ENV=production` is set
 - [ ] `.env` file is listed in `.gitignore` (do not commit production secrets)
 - [ ] API keys rotated quarterly (set calendar reminders)
 - [ ] BYOK keys are encrypted in `ai_encrypted_keys` table (Fernet), never in localStorage or frontend state
 
 ### Network and CORS
 
-- [ ] `CORS_ORIGINS` locked to production frontend domains only (no `*` wildcards)
+- [ ] `CORS_ALLOWED_ORIGINS` locked to production frontend domains only (no `*` wildcards)
 - [ ] HTTPS enforced on all endpoints (automatic with Vercel and Railway)
 - [ ] WebSocket connections use `wss://` (not `ws://`)
 - [ ] Backend health endpoint (`/health`) does not expose sensitive information
@@ -929,16 +975,18 @@ pg_restore --dbname="[connection-string]" flowstral-backup-20260223.dump
 ### Authentication
 
 - [ ] Supabase Row Level Security (RLS) policies active on all tables
-- [ ] JWT tokens have reasonable expiry (60 minutes recommended)
+- [ ] JWT access tokens have short expiry (15 minutes recommended)
+- [ ] JWT refresh tokens configured (7-day expiry recommended)
 - [ ] Password minimum length set to 12+ characters in Supabase Auth settings
 - [ ] Email confirmation enabled for new sign-ups
 - [ ] Rate limiting on auth endpoints (5 requests/second -- configured in nginx)
+- [ ] Rate limiting backend set to Redis for multi-instance deployments (`RATE_LIMIT_BACKEND=redis`)
 
 ### Application
 
 - [ ] Backend Dockerfile runs as non-root user (`appuser`, UID 1001)
-- [ ] Frontend serves security headers: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`
-- [ ] Content Security Policy (CSP) configured in nginx to restrict script sources
+- [ ] Frontend serves security headers: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`, `Content-Security-Policy`, `Permissions-Policy`, `Referrer-Policy`
+- [ ] Content Security Policy (CSP) configured in vercel.json / nginx to restrict script sources
 - [ ] File upload size limits enforced (52 MB for artifacts, 10 MB for screenshots)
 - [ ] Storage bucket access controlled by RLS policies
 - [ ] RBAC middleware active on sensitive API endpoints
@@ -1203,10 +1251,11 @@ S3_ENDPOINT_URL=http://<minio-internal>:9000
 S3_ACCESS_KEY=minioadmin
 S3_SECRET_KEY=<minio-password>
 S3_BUCKET_NAME=qa-artifacts
-JWT_SECRET=<generate-64-char-hex>
+JWT_SECRET_KEY=<generate-64-char-hex>
 ENCRYPTION_KEY=<generate-fernet-key>
+APP_ENV=production
 DEFAULT_LLM_PROVIDER=openai
-CORS_ORIGINS=https://demo.flowstral.com
+CORS_ALLOWED_ORIGINS=https://demo.flowstral.com
 PYTHONPATH=/app
 PYTHONUNBUFFERED=1
 SEED_DEMO_DATA=true
@@ -1293,9 +1342,9 @@ python -c "import psycopg2; conn = psycopg2.connect('DATABASE_URL_HERE'); print(
 
 **Symptom:** Browser console shows `Access-Control-Allow-Origin` errors.
 
-**Fix:** Ensure `CORS_ORIGINS` on Railway includes the exact frontend domain with protocol:
+**Fix:** Ensure `CORS_ALLOWED_ORIGINS` on Railway includes the exact frontend domain with protocol:
 ```
-CORS_ORIGINS=https://app.flowstral.com,https://flowstral.com
+CORS_ALLOWED_ORIGINS=https://app.flowstral.com,https://flowstral.com
 ```
 
 Do not include trailing slashes. Do not include ports unless non-standard.
@@ -1381,3 +1430,22 @@ curl -H "Origin: https://app.flowstral.com" \
   -X OPTIONS \
   https://api.flowstral.com/health -v
 ```
+
+---
+
+## Pre-Deployment Security Checklist
+
+Run through this checklist before every production deployment to ensure no security gaps exist.
+
+- [ ] All default credentials changed (no `minioadmin`, `qaai_password`, etc.)
+- [ ] JWT_SECRET_KEY set to unique random value (min 32 bytes)
+- [ ] ENCRYPTION_KEY set (Fernet key)
+- [ ] APP_ENV=production
+- [ ] CORS_ALLOWED_ORIGINS restricted to your domains only
+- [ ] All security headers configured (HSTS, CSP, Permissions-Policy, Referrer-Policy, X-Frame-Options, X-Content-Type-Options)
+- [ ] Redis authentication enabled
+- [ ] Database SSL/TLS enabled
+- [ ] Backup strategy configured (30-day minimum retention)
+- [ ] Monitoring/alerting configured
+- [ ] Log aggregation configured
+- [ ] Rate limiting backend set to Redis for multi-instance

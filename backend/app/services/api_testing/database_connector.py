@@ -4,11 +4,112 @@ Supports data-driven testing, database assertions, and data extraction
 """
 
 import logging
+import ipaddress
+import os
+import re
+import socket
 from typing import Dict, List, Any, Optional
 import json
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# SECURITY: Host validation to prevent SSRF via database connections
+# ============================================================================
+
+# Allowed hosts can be configured via environment variable (comma-separated)
+# If set, ONLY these hosts are allowed. If unset, all non-private hosts are allowed.
+_ALLOWED_DB_HOSTS_ENV = os.getenv("ALLOWED_DB_HOSTS", "")
+
+# SQL keywords that indicate write operations (blocked for user-supplied queries)
+_WRITE_SQL_KEYWORDS = re.compile(
+    r'\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|REPLACE|MERGE|GRANT|REVOKE|EXEC|EXECUTE|CALL)\b',
+    re.IGNORECASE
+)
+
+
+def _validate_db_host(host: str) -> None:
+    """
+    Validate that a database host is not a private/internal IP address.
+    Prevents SSRF attacks where a user could connect to internal services.
+
+    Raises ValueError if the host is blocked.
+    """
+    if not host:
+        raise ValueError("Database host is required")
+
+    # If allowed hosts are explicitly configured, enforce whitelist
+    if _ALLOWED_DB_HOSTS_ENV:
+        allowed = [h.strip().lower() for h in _ALLOWED_DB_HOSTS_ENV.split(",") if h.strip()]
+        if host.lower() not in allowed:
+            raise ValueError(
+                f"Database host '{host}' is not in the allowed hosts list. "
+                f"Configure ALLOWED_DB_HOSTS environment variable to allow it."
+            )
+        return  # Whitelisted host, skip further checks
+
+    # Block common localhost aliases
+    blocked_hostnames = {'localhost', 'ip6-localhost', 'ip6-loopback'}
+    if host.lower() in blocked_hostnames:
+        raise ValueError(f"Database connections to '{host}' are blocked for security reasons")
+
+    # Try to parse as IP address directly
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            raise ValueError(
+                f"Database connections to private/internal IP '{host}' are blocked. "
+                f"Set ALLOWED_DB_HOSTS environment variable to explicitly allow this host."
+            )
+        return
+    except ValueError:
+        pass  # Not an IP address, continue to DNS resolution
+
+    # Resolve hostname and check all resulting IPs
+    try:
+        addr_infos = socket.getaddrinfo(host, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        for family, _type, _proto, _canonname, sockaddr in addr_infos:
+            ip_str = sockaddr[0]
+            try:
+                ip = ipaddress.ip_address(ip_str)
+                if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                    raise ValueError(
+                        f"Database host '{host}' resolves to private/internal IP '{ip_str}'. "
+                        f"Set ALLOWED_DB_HOSTS environment variable to explicitly allow this host."
+                    )
+            except ValueError as ve:
+                if "private" in str(ve).lower() or "blocked" in str(ve).lower():
+                    raise
+    except socket.gaierror:
+        # DNS resolution failed — let the DB driver handle the error
+        pass
+
+
+def _validate_readonly_query(query: str) -> None:
+    """
+    Validate that a SQL query is read-only (SELECT / WITH / EXPLAIN / SHOW / PRAGMA / DESCRIBE).
+    Blocks INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, TRUNCATE, and other write operations.
+
+    Raises ValueError if a write operation is detected.
+    """
+    if not query or not query.strip():
+        raise ValueError("Query cannot be empty")
+
+    # Strip comments (-- and /* */)
+    cleaned = re.sub(r'--[^\n]*', '', query)
+    cleaned = re.sub(r'/\*[\s\S]*?\*/', '', cleaned)
+    cleaned = cleaned.strip()
+
+    if not cleaned:
+        raise ValueError("Query cannot be empty after removing comments")
+
+    # Check for write keywords
+    if _WRITE_SQL_KEYWORDS.search(cleaned):
+        raise ValueError(
+            "Only read-only queries (SELECT, WITH, EXPLAIN, SHOW, DESCRIBE, PRAGMA) are allowed. "
+            "Write operations (INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, TRUNCATE) are blocked."
+        )
 
 
 class DatabaseConnector:
@@ -32,16 +133,32 @@ class DatabaseConnector:
     ) -> bool:
         """
         Connect to a database
-        
+
         Args:
             connection_id: Unique identifier for this connection
             db_type: Database type (postgresql, mysql, etc.)
             connection_config: Connection configuration
-            
+
         Returns:
             True if connection successful
         """
         try:
+            # SECURITY: Validate database host to prevent SSRF attacks
+            host = connection_config.get("host", "")
+            if db_type in ("postgresql", "mysql", "mssql") and host:
+                _validate_db_host(host)
+            elif db_type == "mongodb":
+                # For MongoDB, validate host from connection string or config
+                conn_str = connection_config.get("connection_string", "")
+                if conn_str:
+                    # Extract host from mongodb://host:port/...
+                    import re as _re
+                    m = _re.search(r'mongodb://(?:[^@]+@)?([^/:]+)', conn_str)
+                    if m:
+                        _validate_db_host(m.group(1))
+                elif host:
+                    _validate_db_host(host)
+
             if db_type == "postgresql":
                 connection = await self._connect_postgresql(connection_config)
             elif db_type == "mysql":
@@ -144,16 +261,18 @@ class DatabaseConnector:
         self,
         connection_id: str,
         query: str,
-        parameters: Optional[Dict[str, Any]] = None
+        parameters: Optional[Dict[str, Any]] = None,
+        allow_writes: bool = False
     ) -> List[Dict[str, Any]]:
         """
         Execute a query and return results
-        
+
         Args:
             connection_id: Connection identifier
             query: SQL query or database query
             parameters: Query parameters
-            
+            allow_writes: If False (default), only SELECT/read-only queries are allowed
+
         Returns:
             List of result rows as dictionaries
         """
@@ -163,6 +282,10 @@ class DatabaseConnector:
         connection_info = self.connections[connection_id]
         db_type = connection_info["type"]
         connection = connection_info["connection"]
+
+        # SECURITY: Validate that the query is read-only (unless explicitly allowed)
+        if not allow_writes and db_type != "mongodb":
+            _validate_readonly_query(query)
 
         # Auto-reconnect for PostgreSQL if connection was closed
         if db_type == "postgresql" and hasattr(connection, 'closed') and connection.closed:

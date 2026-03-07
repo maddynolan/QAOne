@@ -212,6 +212,6 @@ async def get_metrics(organization_id: str, days: int = 7):
         return metrics
     except Exception as e:
         logger.error(f"Error getting metrics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve metrics")
 
 

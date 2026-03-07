@@ -1,3 +1,4 @@
+# RBAC: Permission checks added for enterprise security compliance
 """
 Audit Trail API — Enterprise compliance logging
 
@@ -13,6 +14,7 @@ from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel
 
 from app.services.core.audit_service import audit_service
+from app.middleware.rbac_middleware import require_permission
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,7 @@ class AuditLogRequest(BaseModel):
 
 
 @router.get("/logs")
+@require_permission("admin:read")
 async def get_audit_logs(
     request: Request,
     user_id: Optional[str] = Query(None, description="Filter by user ID"),
@@ -67,7 +70,9 @@ async def get_audit_logs(
 
 
 @router.get("/summary")
+@require_permission("admin:read")
 async def get_audit_summary(
+    request: Request,
     hours: int = Query(24, ge=1, le=720, description="Summary period in hours"),
 ):
     """Get audit activity summary for the last N hours.
@@ -79,6 +84,7 @@ async def get_audit_summary(
 
 
 @router.post("/logs")
+@require_permission("admin:manage")
 async def create_audit_log(
     body: AuditLogRequest,
     request: Request,
@@ -113,7 +119,8 @@ async def create_audit_log(
 
 
 @router.get("/actions")
-async def get_audit_actions():
+@require_permission("admin:read")
+async def get_audit_actions(request: Request):
     """Get list of available audit action types for filtering."""
     return {
         "actions": [

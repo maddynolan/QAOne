@@ -38,7 +38,7 @@ async def execute_agent_task(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Agent task execution failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Agent task execution failed")
 
 
 @router.get("")
@@ -54,7 +54,7 @@ async def list_agents():
         }
     except Exception as e:
         logger.error(f"Failed to list agents: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to list agents")
 
 
 @router.get("/{agent_type}/health")
@@ -74,7 +74,7 @@ async def get_agent_health(agent_type: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get agent health: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get agent health")
 
 
 @router.get("/health")
@@ -89,6 +89,6 @@ async def get_all_agents_health():
         }
     except Exception as e:
         logger.error(f"Failed to get agents health: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get agents health status")
 
 

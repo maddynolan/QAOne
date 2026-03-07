@@ -70,7 +70,7 @@ async def get_project_config(
         return config.to_dict()
     except Exception as e:
         logger.error(f"Failed to get project config: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get configuration: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get configuration")
 
 
 @router.put("/{project_id}/config", response_model=ProjectConfigResponse)
@@ -91,10 +91,10 @@ async def update_project_config(
         return config.to_dict()
     except ValueError as e:
         logger.warning(f"Invalid configuration update: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Invalid configuration values")
     except Exception as e:
         logger.error(f"Failed to update project config: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to update configuration: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update configuration")
 
 
 @router.post("/{project_id}/config/reset")
@@ -117,7 +117,7 @@ async def reset_project_config(
         return config.to_dict()
     except Exception as e:
         logger.error(f"Failed to reset project config: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to reset configuration: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to reset configuration")
 
 
 @router.get("/{project_id}/config/validate")
@@ -160,7 +160,7 @@ async def validate_project_config(
         }
     except Exception as e:
         logger.error(f"Failed to validate project config: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to validate configuration: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to validate configuration")
 
 
 

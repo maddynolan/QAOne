@@ -22,7 +22,7 @@ async def list_models():
         }
     except Exception as e:
         logger.error(f"Error listing models: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to list models")
 
 
 @router.get("/{model_id}")
@@ -40,7 +40,7 @@ async def get_model_info(model_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting model info: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get model information")
 
 
 @router.post("/register")
@@ -79,7 +79,7 @@ async def register_model(request: Request):
         raise
     except Exception as e:
         logger.error(f"Error registering model: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to register model")
 
 
 @router.post("/{model_id}/deploy")
@@ -113,7 +113,7 @@ async def deploy_model(model_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error deploying model: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to deploy model")
 
 
 @router.post("/{model_id}/ab-test")
@@ -157,7 +157,7 @@ async def start_ab_test(model_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error starting A/B test: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to start A/B test")
 
 
 @router.post("/{model_id}/rollback")
@@ -182,6 +182,6 @@ async def rollback_model(model_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error rolling back model: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to rollback model")
 
 

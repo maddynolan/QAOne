@@ -110,7 +110,7 @@ async def get_test_cases(
         
     except Exception as e:
         logger.error(f"Error getting test cases: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error getting test cases: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving test cases")
 
 
 @router.post("/bulk-import")
@@ -244,7 +244,7 @@ async def bulk_import_test_cases(request: Request):
         }
     except Exception as e:
         logger.error(f"Bulk import error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Bulk import failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Bulk import failed")
 
 
 @router.get("/scale-data/summary")
@@ -332,6 +332,13 @@ async def get_paginated_test_cases(
         
         # Get paginated results
         offset = (page - 1) * limit
+        # Whitelist allowed sort columns to prevent SQL injection
+        ALLOWED_SORT_COLUMNS = {
+            "updated_at", "created_at", "name", "priority", "status",
+            "automation_status", "folder_name", "updated", "id", "description"
+        }
+        if sort_by not in ALLOWED_SORT_COLUMNS:
+            sort_by = "updated_at"
         order_col = "updated_at" if sort_by == "updated" else sort_by
         order_dir = "DESC" if sort_order == "desc" else "ASC"
         
@@ -366,7 +373,7 @@ async def get_paginated_test_cases(
         }
     except Exception as e:
         logger.error(f"Error in paginated query: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error during paginated query")
 
 
 @router.get("/scale-data/test-case/{test_case_id}")
@@ -404,7 +411,7 @@ async def get_single_test_case(test_case_id: str):
         raise
     except Exception as e:
         logger.error(f"Error loading test case: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while loading test case")
 
 
 @router.get("/scale-data/suites")
@@ -638,7 +645,7 @@ async def get_scale_test_data():
         }
     except Exception as e:
         logger.error(f"Error loading scale data: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to load scale data: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to load scale data")
 
 
 @router.get("/{case_id}")
@@ -692,7 +699,7 @@ async def get_test_case(case_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting test case: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving test case")
 
 
 @router.post("")
@@ -841,7 +848,7 @@ async def create_test_case(request: Request):
         
     except Exception as e:
         logger.error(f"Error in create_test_case: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while creating test case")
 
 
 @router.put("/{case_id}")
@@ -937,7 +944,7 @@ async def update_test_case(case_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error updating test case: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while updating test case")
 
 
 @router.delete("/{case_id}")
@@ -979,7 +986,7 @@ async def delete_test_case(case_id: str):
         raise
     except Exception as e:
         logger.error(f"Error archiving test case: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while deleting test case")
 
 
 @router.post("/{case_id}/link-requirement")
@@ -1028,7 +1035,7 @@ async def link_test_case_to_requirement(case_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error linking test case to requirement: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while linking test case to requirement")
 
 
 # ─── Version Control Endpoints ───────────────────────────────────────────────
@@ -1053,7 +1060,7 @@ async def get_test_case_versions(
         }
     except Exception as e:
         logger.error(f"Error getting versions for {case_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving version history")
 
 
 @router.get("/{case_id}/versions/{version_id}")
@@ -1069,7 +1076,7 @@ async def get_test_case_version_snapshot(case_id: str, version_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting version snapshot: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving version snapshot")
 
 
 @router.post("/{case_id}/versions/compare")
@@ -1092,7 +1099,7 @@ async def compare_test_case_versions(case_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error comparing versions: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while comparing versions")
 
 
 @router.post("/{case_id}/versions/{version_id}/revert")
@@ -1155,4 +1162,4 @@ async def revert_test_case_to_version(case_id: str, version_id: str, request: Re
         raise
     except Exception as e:
         logger.error(f"Error reverting test case: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while reverting test case")

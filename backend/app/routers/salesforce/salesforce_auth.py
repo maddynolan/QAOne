@@ -180,10 +180,11 @@ async def get_access_token(org_name: Optional[str] = None):
             issued_at=token.issued_at,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Token acquisition validation error: {e}")
+        raise HTTPException(status_code=400, detail="Invalid token request parameters")
     except Exception as e:
         logger.error(f"Token acquisition failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Token acquisition failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Token acquisition failed")
 
 
 @router.post("/token/validate")
@@ -244,9 +245,10 @@ async def initialize_token_pool(pool_size: int = 5, org_name: Optional[str] = No
         }
     except Exception as e:
         _token_pool = None
+        logger.error(f"Failed to initialize token pool: {e}")
         raise HTTPException(
-            status_code=500, 
-            detail=f"Failed to initialize token pool: {str(e)}"
+            status_code=500,
+            detail="Failed to initialize token pool"
         )
 
 
@@ -294,7 +296,8 @@ async def acquire_token_from_pool():
             issued_at=token.issued_at,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to acquire token from pool: {e}")
+        raise HTTPException(status_code=500, detail="Failed to acquire token from pool")
 
 
 @router.post("/pool/shutdown")
@@ -339,7 +342,8 @@ async def set_default_org(org_name: str):
         auth_service.set_default_org(org_name)
         return {"success": True, "default_org": org_name}
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"Failed to set default org: {e}")
+        raise HTTPException(status_code=404, detail="Salesforce org not found")
 
 
 @router.delete("/orgs/{org_name}")

@@ -227,7 +227,9 @@ async def _generate_and_store_embedding(
             port = os.getenv("POSTGRES_PORT", "5432")
             database = os.getenv("POSTGRES_DB", "qaai")
             user = os.getenv("POSTGRES_USER", "qaai")
-            password = os.getenv("POSTGRES_PASSWORD", "qaai123")
+            password = os.getenv("POSTGRES_PASSWORD", "")
+            if not password:
+                logger.warning("POSTGRES_PASSWORD not set — database operations may fail")
             database_url = f"postgresql://{user}:{password}@{host}:{port}/{database}"
         
         conn = await asyncpg.connect(database_url)

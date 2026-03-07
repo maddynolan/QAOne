@@ -100,7 +100,7 @@ class EnhancedPlaywrightGenerator:
         initial_url = self._get_initial_url(action_graph)
         if initial_url:
             script_lines.append(f"  // Navigate to initial page")
-            script_lines.append(f"  await page.goto('{initial_url}');")
+            script_lines.append(f"  await page.goto('{self._escape_string(initial_url)}');")
             script_lines.append(f"  await page.waitForLoadState('networkidle');")
             strategies_used.add("network_synchronization")
         else:
@@ -786,7 +786,7 @@ class EnhancedPlaywrightGenerator:
             url = self._get_node_property(node, 'url')
             if url:
                 code_lines.append(f"  // Navigate to: {url}")
-                code_lines.append(f"  await page.goto('{url}');")
+                code_lines.append(f"  await page.goto('{self._escape_string(url)}');")
                 code_lines.append(f"  await page.waitForLoadState('networkidle');")
                 strategy = "network_synchronization"
         

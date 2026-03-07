@@ -96,7 +96,7 @@ async def analyze_repository(request: AnalyzeRequest):
         raise
     except Exception as e:
         logger.error(f"Analysis failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to analyze repository")
 
 
 @router.post("/branches")
@@ -141,7 +141,7 @@ async def get_analysis(analysis_id: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get analysis: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve analysis result")
 
 
 @router.get("/analysis/{analysis_id}/preview")
@@ -180,7 +180,7 @@ async def get_test_cases_preview(
         
     except Exception as e:
         logger.error(f"Failed to get preview: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get test cases preview")
 
 
 @router.get("/analysis/{analysis_id}/tags")
@@ -198,7 +198,7 @@ async def get_available_tags(analysis_id: str):
         
     except Exception as e:
         logger.error(f"Failed to get tags: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve tags")
 
 
 @router.post("/import")
@@ -227,7 +227,7 @@ async def import_test_cases(request: ImportRequest):
         
     except Exception as e:
         logger.error(f"Import failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to import test cases")
 
 
 @router.get("/import/{job_id}")
@@ -254,7 +254,7 @@ async def get_import_status(job_id: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get import status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get import job status")
 
 
 @router.get("/health")

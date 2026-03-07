@@ -67,13 +67,24 @@ async def start_blaze(request: StartBlazeRequest, background_tasks: BackgroundTa
     - Identify security vulnerabilities
     - Measure performance
     """
-    # Validate URL
-    if not request.url.startswith(("http://", "https://")):
-        raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
-    
-    session_id = str(uuid.uuid4())[:8]
-    
-    logger.info(f"Starting Blaze session {session_id} for {request.url}")
+    # SEC-INPUT-004: SSRF prevention — validate URL before crawling
+    from app.utils.url_validator import validate_url, sanitize_url_for_logging
+    try:
+        validate_url(request.url)
+    except ValueError as e:
+        logger.error(f"Invalid URL for Blaze exploration: {e}")
+        raise HTTPException(status_code=400, detail="Invalid URL")
+
+    # Resource limits
+    if request.max_pages > 100:
+        raise HTTPException(status_code=400, detail="max_pages cannot exceed 100")
+    if request.max_duration_minutes > 30:
+        raise HTTPException(status_code=400, detail="max_duration_minutes cannot exceed 30")
+
+    import secrets
+    session_id = secrets.token_urlsafe(12)
+
+    logger.info(f"Starting Blaze session {session_id} for {sanitize_url_for_logging(request.url)}")
     
     # Start exploration in background
     async def run_exploration():
@@ -105,12 +116,21 @@ async def start_blaze_sync(request: StartBlazeRequest):
     Start Blaze and wait for completion (synchronous).
     Good for quick tests.
     """
-    if not request.url.startswith(("http://", "https://")):
-        raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
-    
-    session_id = str(uuid.uuid4())[:8]
-    
-    logger.info(f"Starting synchronous Blaze session {session_id} for {request.url}")
+    # SEC-INPUT-004: SSRF prevention
+    from app.utils.url_validator import validate_url, sanitize_url_for_logging
+    try:
+        validate_url(request.url)
+    except ValueError as e:
+        logger.error(f"Invalid URL for Blaze sync exploration: {e}")
+        raise HTTPException(status_code=400, detail="Invalid URL")
+
+    if request.max_pages > 100:
+        raise HTTPException(status_code=400, detail="max_pages cannot exceed 100")
+
+    import secrets
+    session_id = secrets.token_urlsafe(12)
+
+    logger.info(f"Starting synchronous Blaze session {session_id} for {sanitize_url_for_logging(request.url)}")
     
     try:
         result = await start_blaze_session(
@@ -127,8 +147,8 @@ async def start_blaze_sync(request: StartBlazeRequest):
             **result
         }
     except Exception as e:
-        logger.error(f"Blaze session failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Blaze session failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Exploration session failed. Check server logs.")
 
 
 @router.get("/status/{session_id}")

@@ -52,7 +52,7 @@ async def get_test_plans(project_id: Optional[str] = None):
         return {"testPlans": test_plans}
     except Exception as e:
         logger.error(f"Error getting test plans: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving test plans")
 
 
 @router.post("")
@@ -79,7 +79,7 @@ async def create_test_plan(request: Request):
         return {"id": plan_id or f"plan_{int(time.time())}"}
     except Exception as e:
         logger.error(f"Error creating test plan: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while creating test plan")
 
 
 @router.put("/{plan_id}")
@@ -120,7 +120,7 @@ async def update_test_plan(plan_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error updating test plan: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while updating test plan")
 
 
 @router.delete("/{plan_id}")
@@ -148,6 +148,6 @@ async def delete_test_plan(plan_id: str):
         raise
     except Exception as e:
         logger.error(f"Error deleting test plan: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while deleting test plan")
 
 

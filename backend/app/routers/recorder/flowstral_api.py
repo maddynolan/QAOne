@@ -114,12 +114,12 @@ async def start_flowstral(
     
     except ValueError as e:
         logger.error(f"Flowstral session validation error: {e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Session validation failed")
     except Exception as e:
         logger.error(f"Failed to start Flowstral session: {e}", exc_info=True)
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}. Check server logs for details.")
+        raise HTTPException(status_code=500, detail="Session operation failed")
 
 
 @router.post("/capture-event")
@@ -164,13 +164,13 @@ async def capture_event(
     except ValueError as e:
         logger.error(f"[ERROR] Flowstral event validation error: {e}", exc_info=True)
         logger.error(f"Session ID: {request.session_id}, Event Type: {request.event_type}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Event validation failed")
     except Exception as e:
         logger.error(f"[ERROR] Failed to capture event: {e}", exc_info=True)
         logger.error(f"Session ID: {request.session_id}, Event Type: {request.event_type}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}. Check server logs for details.")
+        raise HTTPException(status_code=500, detail="Failed to capture event")
 
 
 @router.post("/capture-events-batch")
@@ -263,7 +263,7 @@ async def capture_events_batch(
         logger.error(f"Failed to process event batch: {e}", exc_info=True)
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}. Check server logs for details.")
+        raise HTTPException(status_code=500, detail="Failed to process event batch")
 
 
 @router.post("/stop")
@@ -356,7 +356,7 @@ async def stop_flowstral(
             status_code=400,
             detail={
                 "error": "Validation error",
-                "message": str(e)
+                "message": "Session stop validation failed"
             }
         )
     except HTTPException:
@@ -369,8 +369,7 @@ async def stop_flowstral(
             status_code=500,
             detail={
                 "error": "Internal server error",
-                "message": f"An unexpected error occurred: {str(e)}",
-                "type": type(e).__name__,
+                "message": "Session stop operation failed",
                 "suggestion": "Check server logs for details. If this persists, restart the backend server."
             }
         )
@@ -391,7 +390,7 @@ async def get_session_status(
     
     except Exception as e:
         logger.error(f"Failed to get session status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get session status")
 
 
 @router.websocket("/ws/{session_id}")
@@ -620,8 +619,7 @@ async def get_artifacts(
         logger.error(f"Failed to get artifacts: {e}", exc_info=True)
         import traceback
         error_detail = {
-            "error": str(e),
-            "type": type(e).__name__,
+            "error": "Artifact retrieval failed",
             "message": "An unexpected error occurred while retrieving artifacts. Check server logs for details."
         }
         raise HTTPException(status_code=500, detail=error_detail)
@@ -652,7 +650,7 @@ async def list_sessions(
     
     except Exception as e:
         logger.error(f"Failed to list sessions: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to list sessions")
 
 
 @router.get("/session/{session_id}/summary")
@@ -678,7 +676,7 @@ async def get_session_summary(
         raise
     except Exception as e:
         logger.error(f"Failed to get session summary: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get session summary")
 
 
 @router.post("/session/{session_id}/execute-test")
@@ -835,5 +833,5 @@ async def execute_flowstral_test(
         raise
     except Exception as e:
         logger.error(f"Error executing Flowstral test: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Test execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Test execution failed")
 

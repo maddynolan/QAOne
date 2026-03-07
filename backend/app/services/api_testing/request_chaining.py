@@ -24,6 +24,8 @@ import httpx
 import jsonpath_ng
 from jsonpath_ng.ext import parse as jsonpath_parse
 
+from app.services.utils.safe_regex import safe_regex_search, validate_regex_pattern
+
 logger = logging.getLogger(__name__)
 
 
@@ -209,10 +211,14 @@ class RequestChainEngine:
 
             elif extraction.method == ExtractionMethod.REGEX:
                 text = response.text
-                match = re.search(extraction.expression, text)
-                value = match.group(1) if match and match.groups() else (
-                    match.group(0) if match else extraction.default_value
-                )
+                try:
+                    match = safe_regex_search(extraction.expression, text)
+                    value = match.group(1) if match and match.groups() else (
+                        match.group(0) if match else extraction.default_value
+                    )
+                except (ValueError, TimeoutError) as regex_err:
+                    logger.warning(f"Unsafe or timed-out regex in extraction '{extraction.name}': {regex_err}")
+                    value = extraction.default_value
 
             elif extraction.method == ExtractionMethod.HEADER:
                 value = response.headers.get(extraction.expression, extraction.default_value)
@@ -288,7 +294,11 @@ class RequestChainEngine:
             elif op == AssertionOperator.ENDS_WITH:
                 result["passed"] = str(source_value).endswith(str(expected))
             elif op == AssertionOperator.MATCHES_REGEX:
-                result["passed"] = bool(re.search(expected, str(source_value)))
+                try:
+                    result["passed"] = bool(safe_regex_search(expected, str(source_value)))
+                except (ValueError, TimeoutError) as regex_err:
+                    result["passed"] = False
+                    result["error"] = f"Regex error: {regex_err}"
             elif op == AssertionOperator.GREATER_THAN:
                 result["passed"] = float(source_value) > float(expected)
             elif op == AssertionOperator.LESS_THAN:

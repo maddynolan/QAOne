@@ -1,3 +1,4 @@
+# RBAC: Permission checks added for enterprise security compliance
 """
 Database API Router
 
@@ -6,7 +7,7 @@ Provides REST endpoints for all database operations with fast caching.
 
 import logging
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from datetime import datetime
 import uuid
@@ -17,6 +18,7 @@ from app.services.storage.database_service import (
     Environment, TestCaseVersion, GlobalVariable, ApiCollection,
     ApiWorkspace, ApiCollectionV2, ApiChain, ApiTestRunRecord
 )
+from app.middleware.rbac_middleware import require_permission
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/db", tags=["Database"])
@@ -154,7 +156,9 @@ async def startup():
 # ==================== TEST CASES ====================
 
 @router.get("/test-cases", response_model=List[Dict[str, Any]])
+@require_permission("test_cases:read")
 async def get_test_cases(
+    request: Request,
     limit: int = Query(100, le=1000),
     offset: int = Query(0, ge=0),
     status: Optional[str] = None,
@@ -177,7 +181,8 @@ async def get_test_cases(
     return [item.model_dump() for item in items]
 
 @router.get("/test-cases/{id}", response_model=Dict[str, Any])
-async def get_test_case(id: str):
+@require_permission("test_cases:read")
+async def get_test_case(request: Request, id: str):
     """Get a single test case."""
     item = await db.test_cases.get(id)
     if not item:
@@ -185,19 +190,21 @@ async def get_test_case(id: str):
     return item.model_dump()
 
 @router.post("/test-cases", response_model=Dict[str, Any])
-async def create_test_case(request: CreateTestCaseRequest):
+@require_permission("test_cases:create")
+async def create_test_case(request: Request, body: CreateTestCaseRequest):
     """Create a new test case."""
     test_case = TestCase(
         id=str(uuid.uuid4())[:8],
-        **request.model_dump()
+        **body.model_dump()
     )
     created = await db.test_cases.create(test_case)
     return created.model_dump()
 
 @router.put("/test-cases/{id}", response_model=Dict[str, Any])
-async def update_test_case(id: str, request: UpdateTestCaseRequest):
+@require_permission("test_cases:update")
+async def update_test_case(request: Request, id: str, body: UpdateTestCaseRequest):
     """Update a test case. Automatically creates a version snapshot before updating."""
-    updates = {k: v for k, v in request.model_dump().items() if v is not None}
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
     
@@ -233,7 +240,8 @@ async def update_test_case(id: str, request: UpdateTestCaseRequest):
     return updated.model_dump()
 
 @router.delete("/test-cases/{id}")
-async def delete_test_case(id: str):
+@require_permission("test_cases:delete")
+async def delete_test_case(request: Request, id: str):
     """Delete a test case."""
     deleted = await db.test_cases.delete(id)
     if not deleted:
@@ -241,7 +249,8 @@ async def delete_test_case(id: str):
     return {"status": "deleted", "id": id}
 
 @router.get("/test-cases/search/{query}")
-async def search_test_cases(query: str):
+@require_permission("test_cases:read")
+async def search_test_cases(request: Request, query: str):
     """Search test cases by name or description."""
     items = await db.test_cases.search(query, ['name', 'description'])
     return [item.model_dump() for item in items]
@@ -250,7 +259,9 @@ async def search_test_cases(query: str):
 # ==================== TEST SUITES ====================
 
 @router.get("/test-suites", response_model=List[Dict[str, Any]])
+@require_permission("test_cases:read")
 async def get_test_suites(
+    request: Request,
     limit: int = Query(100, le=1000),
     offset: int = Query(0, ge=0),
     status: Optional[str] = None,
@@ -261,7 +272,8 @@ async def get_test_suites(
     return [item.model_dump() for item in items]
 
 @router.get("/test-suites/{id}", response_model=Dict[str, Any])
-async def get_test_suite(id: str):
+@require_permission("test_cases:read")
+async def get_test_suite(request: Request, id: str):
     """Get a single test suite with its test cases."""
     suite = await db.test_suites.get(id)
     if not suite:
@@ -279,17 +291,19 @@ async def get_test_suite(id: str):
     return result
 
 @router.post("/test-suites", response_model=Dict[str, Any])
-async def create_test_suite(request: CreateTestSuiteRequest):
+@require_permission("test_cases:create")
+async def create_test_suite(request: Request, body: CreateTestSuiteRequest):
     """Create a new test suite."""
     suite = TestSuite(
         id=str(uuid.uuid4())[:8],
-        **request.model_dump()
+        **body.model_dump()
     )
     created = await db.test_suites.create(suite)
     return created.model_dump()
 
 @router.put("/test-suites/{id}", response_model=Dict[str, Any])
-async def update_test_suite(id: str, updates: Dict[str, Any]):
+@require_permission("test_cases:update")
+async def update_test_suite(request: Request, id: str, updates: Dict[str, Any]):
     """Update a test suite."""
     updated = await db.test_suites.update(id, updates)
     if not updated:
@@ -297,7 +311,8 @@ async def update_test_suite(id: str, updates: Dict[str, Any]):
     return updated.model_dump()
 
 @router.delete("/test-suites/{id}")
-async def delete_test_suite(id: str):
+@require_permission("test_cases:delete")
+async def delete_test_suite(request: Request, id: str):
     """Delete a test suite."""
     deleted = await db.test_suites.delete(id)
     if not deleted:
@@ -305,7 +320,8 @@ async def delete_test_suite(id: str):
     return {"status": "deleted", "id": id}
 
 @router.post("/test-suites/{id}/add-test-case/{test_case_id}")
-async def add_test_case_to_suite(id: str, test_case_id: str):
+@require_permission("test_cases:update")
+async def add_test_case_to_suite(request: Request, id: str, test_case_id: str):
     """Add a test case to a suite."""
     suite = await db.test_suites.get(id)
     if not suite:
@@ -326,7 +342,9 @@ async def add_test_case_to_suite(id: str, test_case_id: str):
 DEFAULT_API_COLLECTION_ID = "default"
 
 @router.get("/api-collections", response_model=List[Dict[str, Any]])
+@require_permission("api_testing:read")
 async def get_api_collections(
+    request: Request,
     limit: int = Query(100, le=1000),
     offset: int = Query(0, ge=0),
 ):
@@ -335,7 +353,8 @@ async def get_api_collections(
     return [item.model_dump() for item in items]
 
 @router.get("/api-collections/default", response_model=Dict[str, Any])
-async def get_default_api_collection():
+@require_permission("api_testing:read")
+async def get_default_api_collection(request: Request):
     """Get the default API collection payload. Returns empty suite if none saved yet."""
     item = await db.api_collections.get(DEFAULT_API_COLLECTION_ID)
     if not item:
@@ -343,18 +362,19 @@ async def get_default_api_collection():
     return item.model_dump()
 
 @router.put("/api-collections/default", response_model=Dict[str, Any])
-async def save_default_api_collection(request: SaveApiCollectionRequest):
+@require_permission("api_testing:create")
+async def save_default_api_collection(request: Request, body: SaveApiCollectionRequest):
     """Create or update the default API collection (full test suite from API tab)."""
     now = datetime.utcnow().isoformat() + "Z"
     existing = await db.api_collections.get(DEFAULT_API_COLLECTION_ID)
     if existing:
-        await db.api_collections.update(DEFAULT_API_COLLECTION_ID, {"payload": request.payload, "updated_at": now})
+        await db.api_collections.update(DEFAULT_API_COLLECTION_ID, {"payload": body.payload, "updated_at": now})
         updated = await db.api_collections.get(DEFAULT_API_COLLECTION_ID)
         return updated.model_dump()
     coll = ApiCollection(
         id=DEFAULT_API_COLLECTION_ID,
         name="default",
-        payload=request.payload,
+        payload=body.payload,
         created_at=now,
         updated_at=now,
     )
@@ -365,13 +385,15 @@ async def save_default_api_collection(request: SaveApiCollectionRequest):
 # ==================== API WORKSPACES (multi-collection support) ====================
 
 @router.get("/api-workspaces", response_model=List[Dict[str, Any]])
-async def get_api_workspaces():
+@require_permission("api_testing:read")
+async def get_api_workspaces(request: Request):
     """List all API testing workspaces."""
     items = await db.api_workspaces.get_all(limit=100, offset=0)
     return [item.model_dump() for item in items]
 
 @router.post("/api-workspaces", response_model=Dict[str, Any])
-async def create_api_workspace(request: Dict[str, Any]):
+@require_permission("api_testing:create")
+async def create_api_workspace(request: Request, body: Dict[str, Any]):
     """Create a new API testing workspace."""
     now = datetime.utcnow().isoformat() + "Z"
     ws = ApiWorkspace(
@@ -471,7 +493,7 @@ async def update_api_collection_v2(collection_id: str, request: Dict[str, Any]):
         return created.model_dump()
     except Exception as e:
         logger.error(f"Error creating collection {collection_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to save collection: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to save collection")
 
 @router.delete("/api-collections-v2/{collection_id}")
 async def delete_api_collection_v2(collection_id: str):

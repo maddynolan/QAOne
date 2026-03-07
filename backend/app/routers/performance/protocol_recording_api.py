@@ -52,7 +52,7 @@ async def start_recording(request: Request, body: dict):
     
     except Exception as e:
         logger.error(f"Error starting recording: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to start protocol recording")
 
 
 @router.post("/stop/{recording_id}")
@@ -74,10 +74,11 @@ async def stop_recording(request: Request, recording_id: str):
         }
     
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"Recording not found for stop: {e}")
+        raise HTTPException(status_code=404, detail="Recording not found")
     except Exception as e:
         logger.error(f"Error stopping recording: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to stop protocol recording")
 
 
 @router.post("/request/{recording_id}")
@@ -95,10 +96,11 @@ async def record_request(request: Request, recording_id: str, body: dict):
         }
     
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"Recording not found for request capture: {e}")
+        raise HTTPException(status_code=404, detail="Recording not found")
     except Exception as e:
         logger.error(f"Error recording request: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to record request")
 
 
 @router.post("/websocket/{recording_id}")
@@ -116,7 +118,7 @@ async def record_websocket(request: Request, recording_id: str, body: dict):
     
     except Exception as e:
         logger.error(f"Error recording WebSocket: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to record WebSocket message")
 
 
 @router.post("/action/{recording_id}")
@@ -128,7 +130,7 @@ async def link_action(request: Request, recording_id: str, body: dict):
     
     except Exception as e:
         logger.error(f"Error linking action: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to link user action")
 
 
 @router.get("/recording/{recording_id}")
@@ -173,7 +175,7 @@ async def get_recording(request: Request, recording_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting recording: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get recording details")
 
 
 @router.get("/recordings")
@@ -198,7 +200,7 @@ async def list_recordings(request: Request):
     
     except Exception as e:
         logger.error(f"Error listing recordings: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to list recordings")
 
 
 # ============================================================================
@@ -227,10 +229,11 @@ async def generate_script(request: Request, recording_id: str, body: dict):
         }
     
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"Recording not found for script generation: {e}")
+        raise HTTPException(status_code=404, detail="Recording not found")
     except Exception as e:
         logger.error(f"Error generating script: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate load test script")
 
 
 # ============================================================================
@@ -249,10 +252,11 @@ async def export_har(request: Request, recording_id: str):
         }
     
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"Recording not found for HAR export: {e}")
+        raise HTTPException(status_code=404, detail="Recording not found")
     except Exception as e:
         logger.error(f"Error exporting HAR: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to export HAR")
 
 
 @router.post("/import-har")
@@ -282,7 +286,7 @@ async def import_har(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error importing HAR: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to import HAR data")
 
 
 # ============================================================================
@@ -336,7 +340,7 @@ async def execute_headless(request: Request, body: dict):
     
     except Exception as e:
         logger.error(f"Error executing headless test: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to execute headless test")
 
 
 @router.post("/execute-headless/stop")
@@ -352,7 +356,7 @@ async def stop_headless_execution(request: Request):
     
     except Exception as e:
         logger.error(f"Error stopping execution: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to stop headless execution")
 
 
 # ============================================================================
@@ -480,7 +484,7 @@ async def import_test_case_for_load(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error importing test case: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to import test case for load testing")
 
 
 def _detect_correlation_opportunities(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

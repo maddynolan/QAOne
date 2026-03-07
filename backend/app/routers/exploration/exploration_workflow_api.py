@@ -285,6 +285,6 @@ async def run_complete_workflow(request: CompleteWorkflowRequest):
         logger.error(f"Complete workflow failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Workflow failed: {str(e)}"
+            detail="Workflow failed"
         )
 

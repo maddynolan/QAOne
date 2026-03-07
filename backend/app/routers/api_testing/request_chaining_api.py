@@ -5,6 +5,8 @@ API endpoints for managing and executing request chains.
 Like ReadyAPI TestSuites with request chaining capabilities.
 """
 
+import logging
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
@@ -20,6 +22,9 @@ from app.services.api_testing.request_chaining import (
     AssertionOperator,
     ConditionOperator
 )
+from app.services.utils.safe_regex import validate_regex_pattern
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/request-chain", tags=["Request Chaining"])
 
@@ -31,6 +36,15 @@ class ExtractionModel(BaseModel):
     default_value: Optional[Any] = None
     transform: Optional[str] = None
 
+    def model_post_init(self, __context):
+        """Validate regex extraction expressions after all fields are set."""
+        if self.method == "regex":
+            result = validate_regex_pattern(self.expression)
+            if not result["safe"]:
+                raise ValueError(
+                    f"Unsafe regex in extraction '{self.name}': {result['error']}"
+                )
+
 
 class AssertionModel(BaseModel):
     source: str
@@ -38,6 +52,15 @@ class AssertionModel(BaseModel):
     expected: Optional[Any] = None
     message: str = ""
     stop_on_failure: bool = False
+
+    def model_post_init(self, __context):
+        """Validate regex assertion patterns after all fields are set."""
+        if self.operator == "matches_regex" and self.expected is not None:
+            result = validate_regex_pattern(str(self.expected))
+            if not result["safe"]:
+                raise ValueError(
+                    f"Unsafe regex in assertion for '{self.source}': {result['error']}"
+                )
 
 
 class ConditionModel(BaseModel):
@@ -227,9 +250,10 @@ async def execute_chain(request: ExecuteChainRequest):
             }
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail="Chain or step not found")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Execution failed: {str(e)}")
+        logger.error(f"Execution failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/chains/{chain_id}")
@@ -244,7 +268,7 @@ async def get_chain(chain_id: str):
             "chain": export
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail="Chain not found")
 
 
 @router.get("/chains/{chain_id}/result")
@@ -254,7 +278,7 @@ async def get_chain_result(chain_id: str):
     result = engine.get_chain_result(chain_id)
     
     if not result:
-        raise HTTPException(status_code=404, detail=f"No execution result found for chain {chain_id}")
+        raise HTTPException(status_code=404, detail="No execution result found for this chain")
     
     return {
         "status": "success",
@@ -380,7 +404,8 @@ async def quick_chain(steps: List[Dict[str, Any]]):
         
         body = step.get("body")
         if isinstance(body, dict):
-            body = __import__("json").dumps(body)
+            import json  # SECURITY: avoid __import__() which can be a code injection vector
+            body = json.dumps(body)
         
         chain_steps.append(ChainStep(
             id=f"step_{i}",

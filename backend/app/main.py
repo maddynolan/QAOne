@@ -36,10 +36,12 @@ logging.basicConfig(
     ]
 )
 # Add trace_id to all log records (set by TraceLoggingMiddleware per request)
-from app.middleware.trace_logging_middleware import TraceIdFilter
+# Add PII sanitization filter to prevent accidental PII leakage in logs
+from app.middleware.trace_logging_middleware import TraceIdFilter, PIISanitizationFilter
 _root_logger = logging.getLogger()
 for h in _root_logger.handlers:
     h.addFilter(TraceIdFilter())
+    h.addFilter(PIISanitizationFilter())
 
 # Load environment variables from .env file FIRST, before importing services
 try:
@@ -89,45 +91,30 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _validate_startup_security():
-    """
-    Validate that critical security configuration is set.
+    """Validate critical security configuration at startup.
     In production (APP_ENV=production), missing secrets cause startup failure.
-    In development, warnings are logged but startup continues.
+    In development, warnings are logged but app continues.
     """
-    env = os.getenv("APP_ENV", "development")
-    is_prod = env == "production"
+    is_production = os.getenv("APP_ENV", "development") == "production"
     missing = []
 
-    # JWT secret
-    from app.services.auth.jwt_service import validate_jwt_config
-    validate_jwt_config()
+    # JWT secret — required for token signing
+    jwt_secret = os.getenv("JWT_SECRET_KEY", os.getenv("JWT_SECRET", ""))
+    if not jwt_secret or jwt_secret in ("", "your-secret-key-change-in-production", "dev-only-insecure-secret-change-me"):
+        missing.append("JWT_SECRET_KEY")
 
-    # Check critical env vars
-    critical_vars = {
-        "JWT_SECRET_KEY": "JWT signing key (or JWT_SECRET)",
-        "ENCRYPTION_KEY": "Data encryption key (or SECRETS_ENCRYPTION_KEY)",
-    }
-
-    for var, description in critical_vars.items():
-        if not os.getenv(var) and not os.getenv(var.replace("_KEY", "")):
-            missing.append(f"  - {var}: {description}")
+    # Encryption key — required for secrets vault
+    enc_key = os.getenv("SECRETS_ENCRYPTION_KEY", os.getenv("ENCRYPTION_KEY", ""))
+    if not enc_key or enc_key in ("", "dev-only-insecure-key-do-not-use-in-prod"):
+        missing.append("ENCRYPTION_KEY or SECRETS_ENCRYPTION_KEY")
 
     if missing:
-        msg = "Security configuration check:\n" + "\n".join(missing)
-        if is_prod:
-            logger.error(f"CRITICAL — {msg}")
-            raise RuntimeError(
-                f"Missing required environment variables for production:\n"
-                + "\n".join(missing)
-                + "\n\nSet APP_ENV=development to bypass (NOT for production use)"
-            )
+        msg = f"[SECURITY] Missing critical secrets: {', '.join(missing)}"
+        if is_production:
+            logger.critical(msg + " — REFUSING TO START in production mode.")
+            raise RuntimeError(msg)
         else:
-            logger.warning(f"DEV MODE — {msg}\n  Set these env vars before deploying to production.")
-
-    # Log security status
-    logger.info(f"[Security] Environment: {env}")
-    logger.info(f"[Security] JWT configured: {'yes' if os.getenv('JWT_SECRET_KEY') or os.getenv('JWT_SECRET') else 'NO (dev default)'}")
-    logger.info(f"[Security] Encryption configured: {'yes' if os.getenv('ENCRYPTION_KEY') or os.getenv('SECRETS_ENCRYPTION_KEY') else 'NO (dev default)'}")
+            logger.warning(msg + " — using insecure dev defaults. Set APP_ENV=production to enforce.")
 
 
 @asynccontextmanager
@@ -135,7 +122,7 @@ async def lifespan(app: FastAPI):
     """Handle application startup and shutdown gracefully"""
     # Startup
     try:
-        # ── Security: Validate critical configuration ──
+        # Validate security configuration before anything else
         _validate_startup_security()
 
         # Initialize SQLite database (local fallback)
@@ -209,21 +196,7 @@ app = FastAPI(
 # Middleware ordering: last added = outermost = processes request first.
 # CORS must be outermost so headers are added to ALL responses (including errors).
 
-# Request size limiting (innermost — blocks oversized requests early)
-_max_upload_mb = int(os.getenv("UPLOAD_MAX_SIZE_MB", "50"))
-
-@app.middleware("http")
-async def limit_request_size(request: Request, call_next):
-    """Reject requests exceeding the configured max body size."""
-    content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > _max_upload_mb * 1024 * 1024:
-        return JSONResponse(
-            status_code=413,
-            content={"detail": f"Request body too large. Maximum: {_max_upload_mb}MB"},
-        )
-    return await call_next(request)
-
-# Trace logging
+# Trace logging (innermost — runs closest to the app)
 from app.middleware.trace_logging_middleware import TraceLoggingMiddleware
 app.add_middleware(TraceLoggingMiddleware)
 
@@ -243,9 +216,7 @@ app.add_middleware(RateLimitMiddleware)
 # This ensures CORS headers are present on ALL responses, including error responses
 # from inner middleware/routes. Without this, BaseHTTPMiddleware exceptions can
 # bypass CORS header injection, causing browser CORS blocks on legitimate origins.
-# CORS origins — configurable via CORS_ALLOWED_ORIGINS env var (comma-separated)
-_cors_env = os.getenv("CORS_ALLOWED_ORIGINS", "")
-_cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else [
+_default_origins = [
     "http://localhost:8080",  # Frontend
     "http://localhost:3000",  # Alternative frontend
     "http://localhost:5173",  # Vite dev server
@@ -258,47 +229,69 @@ _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_
     "https://www.flowstral.com",
     "https://qaone-production.up.railway.app",  # Railway production
 ]
+_cors_env = os.getenv("CORS_ALLOWED_ORIGINS", "")
+_cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else _default_origins
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "Accept",
-                    "X-Tenant-ID", "X-User-ID", "X-Trace-ID", "Cache-Control"],
+    allow_headers=[
+        "Authorization", "Content-Type", "X-Request-ID", "Accept",
+        "X-Tenant-ID", "X-User-ID", "X-Trace-ID", "Cache-Control",
+        "X-Internal-Service-Key",
+    ],
 )
 
 # Global exception handler: ensures unhandled exceptions return JSON (not plain text)
 # so that CORSMiddleware can properly add headers to the response.
-# In production, error details are NEVER leaked to the client (only logged server-side).
 from starlette.responses import JSONResponse
+
+# Request size limiting middleware (Phase 1.6: File upload validation)
+_max_upload_mb = int(os.getenv("UPLOAD_MAX_SIZE_MB", "50"))
+
+@app.middleware("http")
+async def limit_request_size(request: Request, call_next):
+    """Reject requests exceeding UPLOAD_MAX_SIZE_MB (default 50MB)."""
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > _max_upload_mb * 1024 * 1024:
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": f"Request body too large. Maximum: {_max_upload_mb}MB"},
+                )
+        except (ValueError, TypeError):
+            pass
+    return await call_next(request)
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Catch-all for unhandled exceptions. Returns JSON so CORS middleware can add headers."""
-    # Generate a request ID for correlation between client error and server log
-    request_id = getattr(request.state, "trace_id", str(uuid.uuid4())[:8])
-
-    # Always log full error server-side
+    """Catch-all for unhandled exceptions.
+    - Production: generic message + request_id for correlation
+    - Development: includes exception details for debugging
+    """
+    request_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())[:8]
     logger.error(f"Unhandled exception on {request.method} {request.url.path} "
                  f"[request_id={request_id}]: {exc}", exc_info=True)
 
-    # In production, return generic message; in dev, include error type
-    is_prod = os.getenv("APP_ENV", "development") == "production"
-    if is_prod:
-        content = {
-            "detail": "Internal server error",
-            "request_id": request_id,
-        }
+    is_production = os.getenv("APP_ENV", "development") == "production"
+    if is_production:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error", "request_id": request_id},
+        )
     else:
-        content = {
-            "detail": "Internal server error",
-            "request_id": request_id,
-            "error_type": type(exc).__name__,
-            "message": str(exc)[:500],  # Truncate long error messages in dev
-        }
-
-    return JSONResponse(status_code=500, content=content)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": str(exc),
+                "type": type(exc).__name__,
+                "request_id": request_id,
+            },
+        )
 
 # Pydantic models
 class GenerateTestsRequest(BaseModel):
@@ -880,22 +873,6 @@ except Exception as e:
 from app.routers.platform.audit_api import router as audit_router
 app.include_router(audit_router)
 
-# MFA API - TOTP multi-factor authentication (enterprise compliance)
-try:
-    from app.routers.platform.mfa_api import router as mfa_router
-    app.include_router(mfa_router)
-    logger.info("MFA API registered")
-except Exception as e:
-    logger.warning(f"MFA API not loaded (non-critical): {e}")
-
-# Data Privacy API - GDPR erasure and data export (enterprise compliance)
-try:
-    from app.routers.platform.data_privacy_api import router as privacy_router
-    app.include_router(privacy_router)
-    logger.info("Data Privacy API registered")
-except Exception as e:
-    logger.warning(f"Data Privacy API not loaded (non-critical): {e}")
-
 # AI Settings API - BYOK key management, per-org/project AI configuration, usage tracking
 try:
     from app.routers.platform.ai_settings_api import router as ai_settings_router
@@ -913,6 +890,23 @@ try:
 except Exception as e:
     logger.warning(f"AI Enhancements API not loaded (non-critical): {e}")
 
+# MFA API — TOTP enrollment, verification, recovery codes
+try:
+    from app.routers.platform.mfa_api import router as mfa_router
+    app.include_router(mfa_router)
+    logger.info("MFA API registered")
+except Exception as e:
+    logger.warning(f"MFA API not loaded (non-critical): {e}")
+
+# Data Privacy API — GDPR erasure requests, data export (Article 17 & 20)
+try:
+    from app.routers.platform.data_privacy_api import router as data_privacy_router
+    app.include_router(data_privacy_router)
+    logger.info("Data Privacy API registered")
+except Exception as e:
+    logger.warning(f"Data Privacy API not loaded (non-critical): {e}")
+
+
 if __name__ == "__main__":
     # On Windows, set event loop policy for Playwright compatibility
     import sys
@@ -922,5 +916,5 @@ if __name__ == "__main__":
         if not isinstance(asyncio.get_event_loop_policy(), asyncio.WindowsProactorEventLoopPolicy):
             asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
             logger.info("Set WindowsProactorEventLoopPolicy for Playwright compatibility")
-    
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

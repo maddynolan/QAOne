@@ -72,7 +72,7 @@ async def generate_script(request: GenerateScriptRequest) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error generating script: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error generating script: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error generating script")
 
 
 
@@ -171,7 +171,7 @@ async def generate_test_cases(request: Dict[str, Any]) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error generating test cases: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error generating test cases: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error generating test cases")
 
 
 # ==================== Session Storage ====================
@@ -300,7 +300,8 @@ async def save_session(request: Dict[str, Any]) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error saving session: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.post("/start")
@@ -335,7 +336,8 @@ async def start_session(request: Dict[str, Any]) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error starting session: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.post("/stop")
@@ -368,7 +370,8 @@ async def stop_session(request: Dict[str, Any]) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error stopping session: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.get("/session/{session_id}/status")
@@ -386,7 +389,8 @@ async def get_session_status(session_id: str) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error getting session status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.patch("/session/{session_id}/status")
@@ -431,7 +435,8 @@ async def update_session_status(session_id: str, request: Dict[str, Any]) -> Dic
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error updating session status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.delete("/session/{session_id}")
@@ -452,7 +457,8 @@ async def delete_session(session_id: str) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error deleting session: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.get("/session/{session_id}/artifacts")
@@ -482,7 +488,8 @@ async def get_session_artifacts(session_id: str) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error getting session artifacts: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.get("/health")
@@ -531,7 +538,8 @@ async def save_test_case(request: Dict[str, Any]) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error saving test case: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.get("/test-cases")
@@ -562,7 +570,8 @@ async def list_test_cases(
         }
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error listing test cases: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.get("/test-cases/stats")
@@ -580,7 +589,8 @@ async def get_test_case_stats() -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error getting stats: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.get("/test-cases/{test_id}")
@@ -603,7 +613,8 @@ async def get_test_case(test_id: str) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error getting test case: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.put("/test-cases/{test_id}")
@@ -626,7 +637,8 @@ async def update_test_case(test_id: str, request: Dict[str, Any]) -> Dict[str, A
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error updating test case: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.post("/test-cases/{test_id}/approve")
@@ -653,7 +665,8 @@ async def approve_test_case(test_id: str, request: Dict[str, Any] = {}) -> Dict[
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error approving test case: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.post("/test-cases/{test_id}/reject")
@@ -680,7 +693,8 @@ async def reject_test_case(test_id: str, request: Dict[str, Any]) -> Dict[str, A
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error rejecting test case: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.delete("/test-cases/{test_id}")
@@ -698,7 +712,8 @@ async def delete_test_case(test_id: str) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error deleting test case: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.post("/test-cases/{test_id}/run")
@@ -745,7 +760,8 @@ async def run_test_case(test_id: str, request: Dict[str, Any] = {}) -> Dict[str,
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error running test case: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.get("/test-cases/{test_id}/workflow")
@@ -811,7 +827,8 @@ async def get_test_case_for_workflow(test_id: str) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error converting to workflow: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 # ==================== Enhanced Script Generation (Phase 1-3) ====================
@@ -870,7 +887,8 @@ async def generate_enhanced_script(request: Dict[str, Any]) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error generating enhanced script: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.post("/generate-enhanced-script")
@@ -921,7 +939,8 @@ async def execute_soql_query(request: Dict[str, Any]) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] SOQL query error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.get("/frameworks")
@@ -978,7 +997,8 @@ async def convert_to_framework(request: Dict[str, Any]) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Framework conversion error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.get("/soql/status")
@@ -1042,7 +1062,8 @@ async def enhance_recording(request: Dict[str, Any]) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error enhancing recording: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 # ==================== Workflow Editor Integration ====================
@@ -1131,7 +1152,8 @@ async def import_recording_to_workflow(request: Dict[str, Any]) -> Dict[str, Any
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error importing recording to workflow: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.post("/workflow/generate")
@@ -1203,7 +1225,8 @@ async def generate_workflow_script(request: Dict[str, Any]) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error generating workflow script: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 # ==================== Visual Regression Testing ====================
@@ -1253,7 +1276,8 @@ async def generate_visual_regression_test(request: Dict[str, Any]) -> Dict[str, 
         raise
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error generating visual regression test: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.get("/visual-regression/baselines")
@@ -1272,7 +1296,8 @@ async def list_visual_baselines() -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error listing baselines: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 @router.delete("/visual-regression/baselines/{test_name}")
@@ -1291,7 +1316,8 @@ async def delete_visual_baseline(test_name: str) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error deleting baseline: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error(f"Recorder operation failed: {e}")
+        raise HTTPException(status_code=500, detail="Recording operation failed")
 
 
 # =============================================================================

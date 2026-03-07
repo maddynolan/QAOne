@@ -121,7 +121,7 @@ async def analyze_code(request: AnalyzeCodeRequest):
         
     except Exception as e:
         logger.error(f"Code analysis failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to analyze code snippet")
 
 
 @router.post("/analyze/directory")
@@ -154,7 +154,7 @@ async def analyze_directory(request: AnalyzeDirectoryRequest):
         
     except Exception as e:
         logger.error(f"Directory analysis failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to analyze directory")
 
 
 @router.post("/analyze/upload")
@@ -197,7 +197,7 @@ async def analyze_uploaded_zip(
         raise
     except Exception as e:
         logger.error(f"Upload analysis failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to analyze uploaded file")
 
 
 @router.post("/analyze/vcs")
@@ -270,10 +270,11 @@ async def analyze_vcs_repo(request: AnalyzeVCSRequest):
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"VCS analysis validation error: {e}")
+        raise HTTPException(status_code=400, detail="Invalid repository configuration")
     except Exception as e:
         logger.error(f"VCS analysis failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to analyze VCS repository")
     finally:
         # Clean up temp directory
         if temp_dir:
@@ -331,7 +332,7 @@ async def list_vcs_branches(request: ListBranchesRequest):
         raise
     except Exception as e:
         logger.error(f"Failed to list branches: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to list repository branches")
 
 
 @router.post("/vcs/validate")
@@ -359,9 +360,10 @@ async def validate_repo_url(repo_url: str):
             }
             
     except Exception as e:
+        logger.error(f"Repo URL validation failed: {e}")
         return {
             "valid": False,
-            "message": str(e),
+            "message": "Failed to validate repository URL",
         }
 
 
@@ -397,7 +399,7 @@ async def generate_requirements(format: str = "markdown"):
         raise
     except Exception as e:
         logger.error(f"Requirements generation failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate requirements")
 
 
 @router.post("/generate/test-cases")
@@ -441,7 +443,7 @@ async def generate_test_cases(format: str = "istqb"):
         raise
     except Exception as e:
         logger.error(f"Test case generation failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate test cases")
 
 
 @router.post("/generate/domain-docs")
@@ -467,7 +469,7 @@ async def generate_domain_documentation():
         raise
     except Exception as e:
         logger.error(f"Domain docs generation failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate domain documentation")
 
 
 @router.post("/generate/elements")
@@ -508,7 +510,7 @@ async def generate_element_repository(format: str = "json"):
         raise
     except Exception as e:
         logger.error(f"Element repository generation failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate element repository")
 
 
 @router.post("/generate/coverage")
@@ -534,7 +536,7 @@ async def generate_coverage_report():
         raise
     except Exception as e:
         logger.error(f"Coverage report generation failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate coverage report")
 
 
 @router.post("/convert")
@@ -574,7 +576,7 @@ async def convert_framework(request: ConvertFrameworkRequest):
         raise
     except Exception as e:
         logger.error(f"Framework conversion failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to convert framework")
 
 
 @router.post("/convert/download")
@@ -619,7 +621,7 @@ async def download_converted_framework(request: ConvertFrameworkRequest):
         raise
     except Exception as e:
         logger.error(f"Download failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to download converted framework")
 
 
 @router.get("/frameworks")

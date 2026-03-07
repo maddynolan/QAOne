@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from app.services.flowstral.flowstral_wcag_pipeline import WCAGPipeline
 from app.services.agents.accessibility_agent import AccessibilityAgent
 from app.services.core.plugin_service import PluginService
+from app.middleware.rbac_middleware import require_permission
 
 logger = logging.getLogger(__name__)
 
@@ -170,8 +171,10 @@ async def verify_api_key_and_tenant(authorization: Optional[str] = Header(None))
 
 
 @router.post("/scan")
+@require_permission("accessibility:execute")
 async def scan_page(
-    request: ScanRequest,
+    request: Request,
+    body: ScanRequest,
     auth_data: Dict[str, Any] = Depends(verify_api_key_and_tenant)
 ):
     """
@@ -185,20 +188,27 @@ async def scan_page(
     try:
         tenant_id = auth_data["tenant_id"]
         
-        if request.scan_type == "component" and not request.component_selector:
+        if body.scan_type == "component" and not body.component_selector:
             raise HTTPException(
                 status_code=400,
                 detail="component_selector is required for component scans"
             )
-        
-        logger.info(f"Starting accessibility scan for URL: {request.url}")
-        
+
+        # SEC-INPUT-004: SSRF prevention — validate URL before scanning
+        from app.utils.url_validator import validate_url, sanitize_url_for_logging
+        try:
+            validate_url(body.url)
+        except ValueError as url_err:
+            raise HTTPException(status_code=400, detail=f"Invalid URL: {str(url_err)}")
+
+        logger.info(f"Starting accessibility scan for URL: {sanitize_url_for_logging(body.url)}")
+
         # Run actual axe-core scan using Playwright
         axe_result = await run_axe_core_scan(
-            url=request.url,
-            component_selector=request.component_selector if request.scan_type == "component" else None,
-            wcag_level=request.wcag_level,
-            wcag_version=request.wcag_version,
+            url=body.url,
+            component_selector=body.component_selector if body.scan_type == "component" else None,
+            wcag_level=body.wcag_level,
+            wcag_version=body.wcag_version,
         )
         
         axe_violations = axe_result.get("violations", [])
@@ -214,8 +224,9 @@ async def scan_page(
             logger.info("[A11Y] Axe subprocess failed, attempting direct HTML fetch for basic checks")
             try:
                 import httpx
-                async with httpx.AsyncClient(timeout=30, follow_redirects=True, verify=False) as client:
-                    resp = await client.get(request.url)
+                # SEC-DATA-002: SSL verification enabled (removed verify=False)
+                async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+                    resp = await client.get(body.url)
                     html_content = resp.text
                     logger.info(f"[A11Y] Fetched HTML directly: {len(html_content)} chars")
             except Exception as fetch_err:
@@ -224,8 +235,8 @@ async def scan_page(
         # Run WCAG scan using the pipeline with real axe-core results
         wcag_result = await wcag_pipeline.scan_page(
             html=html_content,
-            url=request.url,
-            component_selector=request.component_selector if request.scan_type == "component" else None,
+            url=body.url,
+            component_selector=body.component_selector if body.scan_type == "component" else None,
             wcag_scan_data={"violations": axe_violations} if axe_violations else None
         )
 
@@ -273,9 +284,9 @@ async def scan_page(
         result = {
             "status": "success",
             "scan_id": scan_id,
-            "url": request.url,
-            "scan_type": request.scan_type,
-            "wcag_level": request.wcag_level,
+            "url": body.url,
+            "scan_type": body.scan_type,
+            "wcag_level": body.wcag_level,
             "summary": summary,
             "issues": issues,
             "report": report,
@@ -295,40 +306,44 @@ async def scan_page(
         raise
     except Exception as e:
         logger.error(f"Error scanning page: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to scan page: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to scan page")
 
 
 @router.post("/scan/site-wide")
+@require_permission("accessibility:execute")
 async def scan_site_wide(
-    request: SiteWideScanRequest,
+    request: Request,
+    body: SiteWideScanRequest,
     auth_data: Dict[str, Any] = Depends(verify_api_key_and_tenant)
 ):
     """
     Perform site-wide accessibility audit.
-    
+
     Scans multiple pages and provides aggregated report.
     """
     try:
         tenant_id = auth_data["tenant_id"]
-        
+
         # TODO: Implement site-wide scanning
         # For now, return structure
         return {
             "status": "success",
             "scan_id": f"site-scan-{datetime.utcnow().timestamp()}",
-            "base_url": request.base_url,
-            "max_pages": request.max_pages,
+            "base_url": body.base_url,
+            "max_pages": body.max_pages,
             "message": "Site-wide scanning is being processed",
             "timestamp": datetime.utcnow().isoformat()
         }
     
     except Exception as e:
         logger.error(f"Error in site-wide scan: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to perform site-wide scan: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to perform site-wide scan")
 
 
 @router.get("/scans")
+@require_permission("accessibility:read")
 async def list_scans(
+    request: Request,
     project_id: Optional[str] = None,
     limit: int = 20,
     auth_data: Dict[str, Any] = Depends(verify_api_key_and_tenant)
@@ -350,11 +365,13 @@ async def list_scans(
     
     except Exception as e:
         logger.error(f"Error listing scans: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list scans: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to list scans")
 
 
 @router.get("/scans/{scan_id}")
+@require_permission("accessibility:read")
 async def get_scan(
+    request: Request,
     scan_id: str,
     auth_data: Dict[str, Any] = Depends(verify_api_key_and_tenant)
 ):
@@ -374,11 +391,13 @@ async def get_scan(
     
     except Exception as e:
         logger.error(f"Error getting scan: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get scan: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get scan")
 
 
 @router.get("/issues")
+@require_permission("accessibility:read")
 async def list_issues(
+    request: Request,
     project_id: Optional[str] = None,
     severity: Optional[str] = None,  # critical, serious, moderate, minor
     limit: int = 50,
@@ -401,11 +420,13 @@ async def list_issues(
     
     except Exception as e:
         logger.error(f"Error listing issues: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list issues: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to list issues")
 
 
 @router.get("/issues/{issue_id}")
+@require_permission("accessibility:read")
 async def get_issue(
+    request: Request,
     issue_id: str,
     auth_data: Dict[str, Any] = Depends(verify_api_key_and_tenant)
 ):
@@ -425,11 +446,13 @@ async def get_issue(
     
     except Exception as e:
         logger.error(f"Error getting issue: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get issue: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get issue")
 
 
 @router.post("/issues/{issue_id}/fix")
+@require_permission("accessibility:execute")
 async def generate_fix(
+    request: Request,
     issue_id: str,
     auth_data: Dict[str, Any] = Depends(verify_api_key_and_tenant)
 ):
@@ -452,12 +475,14 @@ async def generate_fix(
     
     except Exception as e:
         logger.error(f"Error generating fix: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to generate fix: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to generate fix")
 
 
 @router.post("/vpat/generate")
+@require_permission("accessibility:execute")
 async def generate_vpat(
-    request: VPATRequest,
+    request: Request,
+    body: VPATRequest,
     auth_data: Dict[str, Any] = Depends(verify_api_key_and_tenant)
 ):
     """
@@ -465,25 +490,27 @@ async def generate_vpat(
     """
     try:
         tenant_id = auth_data["tenant_id"]
-        
+
         # TODO: Implement VPAT generation
         return {
             "status": "success",
             "vpat_id": f"vpat-{datetime.utcnow().timestamp()}",
-            "project_id": request.project_id,
-            "wcag_level": request.wcag_level,
-            "urls": request.urls,
+            "project_id": body.project_id,
+            "wcag_level": body.wcag_level,
+            "urls": body.urls,
             "message": "VPAT generation is being processed",
             "timestamp": datetime.utcnow().isoformat()
         }
     
     except Exception as e:
         logger.error(f"Error generating VPAT: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to generate VPAT: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to generate VPAT")
 
 
 @router.get("/compliance/{project_id}")
+@require_permission("accessibility:read")
 async def get_compliance_status(
+    request: Request,
     project_id: str,
     wcag_level: str = "AA",
     auth_data: Dict[str, Any] = Depends(verify_api_key_and_tenant)
@@ -508,11 +535,13 @@ async def get_compliance_status(
     
     except Exception as e:
         logger.error(f"Error getting compliance status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get compliance status: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get compliance status")
 
 
 @router.get("/debt/{project_id}")
+@require_permission("accessibility:read")
 async def get_accessibility_debt(
+    request: Request,
     project_id: str,
     auth_data: Dict[str, Any] = Depends(verify_api_key_and_tenant)
 ):
@@ -538,5 +567,5 @@ async def get_accessibility_debt(
     
     except Exception as e:
         logger.error(f"Error getting accessibility debt: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get accessibility debt: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get accessibility debt")
 

@@ -245,7 +245,7 @@ async def load_sample_data():
         
     except Exception as e:
         logger.error(f"Error loading sample data: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to load sample data")
 
 
 @router.get("/defects")

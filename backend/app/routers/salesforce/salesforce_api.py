@@ -853,7 +853,7 @@ async def proxy_salesforce_request(request: SalesforceProxyRequest):
         raise HTTPException(status_code=504, detail="Request to Salesforce timed out")
     except Exception as e:
         logger.error(f"Proxy error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Salesforce proxy request failed")
 
 
 class AutoProxyRequest(BaseModel):
@@ -883,7 +883,7 @@ async def auto_proxy_salesforce_request(request: AutoProxyRequest):
         access_token = token.access_token
     except Exception as e:
         logger.error(f"Auto-auth failed: {e}")
-        raise HTTPException(status_code=401, detail=f"Salesforce authentication failed: {str(e)}")
+        raise HTTPException(status_code=401, detail="Salesforce authentication failed")
     
     # Build the full URL
     endpoint = request.endpoint
@@ -932,7 +932,7 @@ async def auto_proxy_salesforce_request(request: AutoProxyRequest):
         raise HTTPException(status_code=504, detail="Request to Salesforce timed out")
     except Exception as e:
         logger.error(f"Auto-proxy error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Salesforce auto-proxy request failed")
 
 
 @router.post("/query")
@@ -973,7 +973,7 @@ async def execute_soql_query_proxy(
         raise
     except Exception as e:
         logger.error(f"Query error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Salesforce SOQL query failed")
 
 
 # ============================================================================
@@ -1425,7 +1425,7 @@ async def orchestrator_generate_tests(request: TestGenerationRequest):
         
     except Exception as e:
         logger.error(f"Error describing object: {e}")
-        raise HTTPException(status_code=400, detail=f"Could not describe object {request.object_name}: {str(e)}")
+        raise HTTPException(status_code=400, detail="Failed to describe Salesforce object")
     
     # Generate CRUD Tests
     if "crud" in request.test_types:

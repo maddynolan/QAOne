@@ -1,29 +1,66 @@
 # Helm Values for QA-AI Platform
-# Phase 4.2: On-Prem Packaging
+# Phase 4.2: On-Prem Packaging — Security-Hardened
 
 global:
   imageRegistry: ""
   imagePullSecrets: []
 
+# ============================================================
+# Security Context (applied to ALL containers)
+# CIS Kubernetes Benchmark 5.2.x compliance
+# ============================================================
+securityDefaults:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
 # PostgreSQL
+# IMPORTANT: Override auth.password via --set or external secret in production!
 postgresql:
   enabled: true
   auth:
     username: qaai
-    password: qaai_password
+    # DO NOT use default password in production. Override with:
+    #   --set postgresql.auth.password=<secure-password>
+    #   or use existingSecret
+    password: ""  # REQUIRED: set via --set or existingSecret
     database: qaai
+    # existingSecret: qaai-postgresql-secret  # Recommended for production
   persistence:
     enabled: true
     size: 20Gi
   postgresqlExtendedConf:
     shared_preload_libraries: "vector"
+  primary:
+    podSecurityContext:
+      enabled: true
+      runAsUser: 1001
+      fsGroup: 1001
+    containerSecurityContext:
+      enabled: true
+      allowPrivilegeEscalation: false
 
 # MinIO
+# IMPORTANT: Override credentials via --set or external secret in production!
 minio:
   enabled: true
   auth:
-    rootUser: minioadmin
-    rootPassword: minioadmin
+    # DO NOT use default credentials in production. Override with:
+    #   --set minio.auth.rootUser=<user> --set minio.auth.rootPassword=<password>
+    #   or use existingSecret
+    rootUser: ""     # REQUIRED: set via --set or existingSecret
+    rootPassword: "" # REQUIRED: set via --set or existingSecret
+    # existingSecret: qaai-minio-secret  # Recommended for production
   persistence:
     enabled: true
     size: 50Gi
@@ -32,7 +69,10 @@ minio:
 redis:
   enabled: true
   auth:
-    enabled: false
+    enabled: true
+    # Set password via --set redis.auth.password=<password> or existingSecret
+    password: ""
+    # existingSecret: qaai-redis-secret  # Recommended for production
   master:
     persistence:
       enabled: true
@@ -45,15 +85,43 @@ backend:
     tag: latest
     pullPolicy: IfNotPresent
   replicaCount: 2
+  # Service account with minimal permissions
+  serviceAccount:
+    create: true
+    name: qaai-backend
+    annotations: {}
+  # Pod security context
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+  # Container security context
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
   service:
     type: ClusterIP
     port: 8000
   env:
-    DATABASE_URL: postgresql://qaai:qaai_password@postgresql:5432/qaai
+    APP_ENV: production
+    # DATABASE_URL: set via external secret or --set
     S3_ENDPOINT_URL: http://minio:9000
     REDIS_URL: redis://redis-master:6379
+    # JWT_SECRET_KEY: set via external secret (REQUIRED)
+    # ENCRYPTION_KEY: set via external secret (REQUIRED)
+    # OPENAI_API_KEY: set via external secret (if using AI features)
     # OLLAMA_URL not set by default - use cloud API keys. Set if ollama.enabled: true
-    # OLLAMA_URL: http://ollama:11434
+  # Mount secrets from K8s secrets (recommended)
+  envFrom:
+    - secretRef:
+        name: qaai-backend-secrets
+        optional: true
   resources:
     requests:
       memory: "2Gi"
@@ -66,6 +134,19 @@ backend:
     minReplicas: 2
     maxReplicas: 10
     targetCPUUtilizationPercentage: 70
+  # Writable temp directories (readOnlyRootFilesystem=true requires these)
+  extraVolumeMounts:
+    - name: tmp
+      mountPath: /tmp
+    - name: app-logs
+      mountPath: /app/logs
+  extraVolumes:
+    - name: tmp
+      emptyDir:
+        sizeLimit: 500Mi
+    - name: app-logs
+      emptyDir:
+        sizeLimit: 1Gi
 
 # Ollama (local LLM) - DISABLED by default. We use cloud API keys (OpenAI/Anthropic) for SaaS.
 # Set enabled: true and set backend env OLLAMA_URL for on-prem with local LLM.
@@ -92,6 +173,24 @@ testWorkers:
   image:
     repository: qaai/test-worker
     tag: latest
+  # Service account with minimal permissions
+  serviceAccount:
+    create: true
+    name: qaai-test-worker
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    # Note: readOnlyRootFilesystem=false for workers (Playwright needs writable browser cache)
+    readOnlyRootFilesystem: false
   resources:
     requests:
       memory: "1Gi"
@@ -100,12 +199,24 @@ testWorkers:
       memory: "2Gi"
       cpu: "1000m"
 
+# Network Policy — restrict pod-to-pod communication
+networkPolicy:
+  enabled: true
+  # Backend can reach: PostgreSQL, Redis, MinIO, Ollama
+  # Test workers can reach: Backend, PostgreSQL, Redis
+  # Frontend can reach: Backend only
+
 # Ingress
 ingress:
   enabled: true
   className: nginx
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/rate-limit: "30"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
   hosts:
     - host: qaai.example.com
       paths:

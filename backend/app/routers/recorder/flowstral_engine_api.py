@@ -13,6 +13,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import the engine components
 from app.services.flowstral_engine.code_generator import (
@@ -121,9 +124,10 @@ async def generate_test(request: GenerateTestRequest):
         )
         
     except Exception as e:
+        logger.error(f"Failed to generate test: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate test: {str(e)}"
+            detail="Failed to generate test"
         )
 
 
@@ -375,9 +379,10 @@ async def build_from_recording(request: BuildFromRecordingRequest):
         }
         
     except Exception as e:
+        logger.error(f"Failed to build test from recording: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to build test: {str(e)}"
+            detail="Failed to build test"
         )
 
 
@@ -407,9 +412,10 @@ async def build_from_testcase(request: BuildFromTestCaseRequest):
         }
         
     except Exception as e:
+        logger.error(f"Failed to build test from test case: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to build test: {str(e)}"
+            detail="Failed to build test"
         )
 
 
@@ -458,9 +464,10 @@ async def process_analysis_endpoint(request: PageAnalysisRequest):
         }
         
     except Exception as e:
+        logger.error(f"Failed to process analysis: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to process analysis: {str(e)}"
+            detail="Failed to process analysis"
         )
 
 
@@ -506,9 +513,10 @@ async def generate_from_analysis_endpoint(request: GenerateFromAnalysisRequest):
         }
         
     except Exception as e:
+        logger.error(f"Failed to generate from analysis: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate from analysis: {str(e)}"
+            detail="Failed to generate from analysis"
         )
 
 
@@ -543,7 +551,8 @@ async def suggest_actions(request: PageAnalysisRequest):
         }
         
     except Exception as e:
+        logger.error(f"Failed to suggest actions: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to suggest actions: {str(e)}"
+            detail="Failed to suggest actions"
         )

@@ -31,7 +31,7 @@ async def get_flows(project_id: Optional[str] = None, platform: Optional[str] = 
         return {"flows": flows, "total": len(flows)}
     except Exception as e:
         logger.error(f"Error getting mobile flows: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve mobile flows")
 
 
 @router.post("/flows")
@@ -50,7 +50,7 @@ async def save_flow(request: Request, project_id: Optional[str] = None):
         raise
     except Exception as e:
         logger.error(f"Error saving mobile flow: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to save mobile flow")
 
 
 @router.delete("/flows/{flow_id}")
@@ -66,7 +66,7 @@ async def delete_flow(flow_id: str):
         raise
     except Exception as e:
         logger.error(f"Error deleting mobile flow: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to delete mobile flow")
 
 
 # ─── Folders ─────────────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ async def get_folders(project_id: Optional[str] = None):
         return {"folders": folders}
     except Exception as e:
         logger.error(f"Error getting mobile folders: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve mobile folders")
 
 
 @router.post("/folders")
@@ -101,7 +101,7 @@ async def save_folder(request: Request, project_id: Optional[str] = None):
         raise
     except Exception as e:
         logger.error(f"Error saving mobile folder: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to save mobile folder")
 
 
 # ─── Runs ────────────────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ async def get_runs(project_id: Optional[str] = None, limit: int = 50):
         return {"runs": runs, "total": len(runs)}
     except Exception as e:
         logger.error(f"Error getting mobile runs: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve mobile test runs")
 
 
 @router.post("/runs")
@@ -136,7 +136,7 @@ async def save_run(request: Request, project_id: Optional[str] = None):
         raise
     except Exception as e:
         logger.error(f"Error saving mobile run: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to save mobile test run")
 
 
 # ─── Bulk Sync ───────────────────────────────────────────────────────────
@@ -156,4 +156,4 @@ async def sync_from_client(request: Request, project_id: Optional[str] = None):
         return result
     except Exception as e:
         logger.error(f"Error in mobile bulk sync: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to sync mobile test data")

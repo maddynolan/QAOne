@@ -177,14 +177,16 @@ class AxeCoreScanner:
                 
                 # Wait for specific element if requested
                 if wait_for_selector:
+                    if len(wait_for_selector) > 500:
+                        raise ValueError("wait_for_selector is too long (max 500 characters)")
                     page.wait_for_selector(wait_for_selector, timeout=timeout_ms)
-                
+
                 # Inject axe-core and run analysis
                 wcag_tags = self._get_wcag_tags(wcag_level)
                 script = AXE_RUN_SCRIPT % (AXE_CORE_CDN, json.dumps(wcag_tags))
-                
+
                 results = page.evaluate(script)
-                
+
                 # Get page title and meta
                 results['pageTitle'] = page.title()
                 results['pageUrl'] = page.url
@@ -226,6 +228,8 @@ class AxeCoreScanner:
                 
                 # Wait for specific element if requested
                 if wait_for_selector:
+                    if len(wait_for_selector) > 500:
+                        raise ValueError("wait_for_selector is too long (max 500 characters)")
                     await page.wait_for_selector(wait_for_selector, timeout=timeout_ms)
                 
                 # Inject axe-core and run analysis

@@ -31,7 +31,7 @@ async def create_multi_agent_workflow(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Failed to create multi-agent workflow: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Workflow operation failed")
 
 
 @router.post("/create")
@@ -64,8 +64,8 @@ async def create_workflow(request: Request, body: dict):
         
         return {"workflow_id": workflow_id, "status": "created"}
     except Exception as e:
-        logger.error(f"Error creating workflow: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error creating workflow: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create workflow")
 
 
 @router.post("/{workflow_id}/execute")
@@ -75,10 +75,11 @@ async def execute_workflow(request: Request, workflow_id: str):
         result = await orchestrator.execute_workflow(workflow_id)
         return result
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"Workflow not found: {e}")
+        raise HTTPException(status_code=404, detail="Workflow not found")
     except Exception as e:
-        logger.error(f"Error executing workflow: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error executing workflow: {e}")
+        raise HTTPException(status_code=500, detail="Failed to execute workflow")
 
 
 @router.get("/{workflow_id}")
@@ -98,7 +99,7 @@ async def get_workflow(request: Request, workflow_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting workflow: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting workflow: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve workflow")
 
 

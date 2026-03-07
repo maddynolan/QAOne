@@ -1,3 +1,4 @@
+# RBAC: Permission checks added for enterprise security compliance
 """
 Secrets Management API Router
 Provides secure storage and retrieval of API keys, passwords, and sensitive test data.
@@ -11,6 +12,7 @@ from datetime import datetime
 import logging
 
 from app.services.core.secrets_service import get_secrets_service
+from app.middleware.rbac_middleware import require_permission
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/secrets", tags=["secrets"])
@@ -50,7 +52,9 @@ class SecretResponse(BaseModel):
 
 
 @router.get("/")
+@require_permission("secrets:read")
 async def list_secrets(
+    request: Request,
     project_id: Optional[str] = None,
     environment: Optional[str] = None,
     secret_type: Optional[str] = None
@@ -88,11 +92,12 @@ async def list_secrets(
         }
     except Exception as e:
         logger.error(f"Failed to list secrets: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/")
-async def create_secret(request: CreateSecretRequest) -> Dict[str, Any]:
+@require_permission("secrets:create")
+async def create_secret(request: Request, body: CreateSecretRequest) -> Dict[str, Any]:
     """
     Create a new encrypted secret.
     
@@ -101,30 +106,31 @@ async def create_secret(request: CreateSecretRequest) -> Dict[str, Any]:
     try:
         secrets_service = get_secrets_service()
         result = await secrets_service.create_secret(
-            name=request.name,
-            value=request.value,
-            secret_type=request.secret_type,
-            description=request.description,
-            project_id=request.project_id
+            name=body.name,
+            value=body.value,
+            secret_type=body.secret_type,
+            description=body.description,
+            project_id=body.project_id
         )
-        
+
         # Store environment if provided
-        if request.environment:
-            result["environment"] = request.environment
-        
+        if body.environment:
+            result["environment"] = body.environment
+
         return {
             "status": "success",
-            "message": f"Secret '{request.name}' created successfully",
+            "message": f"Secret '{body.name}' created successfully",
             "secret_id": result.get("secret_id"),
-            "name": request.name,
-            "secret_type": request.secret_type
+            "name": body.name,
+            "secret_type": body.secret_type
         }
     except Exception as e:
         logger.error(f"Failed to create secret: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{secret_id}")
+@require_permission("secrets:read")
 async def get_secret(request: Request, secret_id: str, reveal: bool = False) -> Dict[str, Any]:
     """
     Get a secret by ID.
@@ -178,7 +184,8 @@ async def get_secret(request: Request, secret_id: str, reveal: bool = False) -> 
 
 
 @router.put("/{secret_id}")
-async def update_secret(secret_id: str, request: UpdateSecretRequest) -> Dict[str, Any]:
+@require_permission("secrets:update")
+async def update_secret(request: Request, secret_id: str, body: UpdateSecretRequest) -> Dict[str, Any]:
     """
     Update an existing secret.
     """
@@ -192,8 +199,8 @@ async def update_secret(secret_id: str, request: UpdateSecretRequest) -> Dict[st
         
         result = await secrets_service.update_secret(
             secret_id=secret_id,
-            value=request.value,
-            description=request.description
+            value=body.value,
+            description=body.description
         )
         
         return {
@@ -205,11 +212,12 @@ async def update_secret(secret_id: str, request: UpdateSecretRequest) -> Dict[st
         raise
     except Exception as e:
         logger.error(f"Failed to update secret: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.delete("/{secret_id}")
-async def delete_secret(secret_id: str) -> Dict[str, Any]:
+@require_permission("secrets:delete")
+async def delete_secret(request: Request, secret_id: str) -> Dict[str, Any]:
     """
     Delete a secret.
     """
@@ -232,11 +240,12 @@ async def delete_secret(secret_id: str) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"Failed to delete secret: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/resolve/{secret_name}")
-async def resolve_secret(secret_name: str, project_id: Optional[str] = None) -> Dict[str, Any]:
+@require_permission("secrets:read")
+async def resolve_secret(request: Request, secret_name: str, project_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Resolve a secret by name (for use in test execution).
     Returns the decrypted value.
@@ -259,11 +268,12 @@ async def resolve_secret(secret_name: str, project_id: Optional[str] = None) -> 
         raise
     except Exception as e:
         logger.error(f"Failed to resolve secret: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/validate")
-async def validate_secrets(secret_names: List[str], project_id: Optional[str] = None) -> Dict[str, Any]:
+@require_permission("secrets:read")
+async def validate_secrets(request: Request, secret_names: List[str], project_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Validate that all required secrets exist before test execution.
     
@@ -291,7 +301,7 @@ async def validate_secrets(secret_names: List[str], project_id: Optional[str] = 
         }
     except Exception as e:
         logger.error(f"Failed to validate secrets: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def _mask_value(value: str) -> str:

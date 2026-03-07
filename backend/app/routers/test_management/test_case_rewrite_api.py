@@ -88,6 +88,6 @@ async def rewrite_test_case(request: RewriteRequest) -> Dict[str, Any]:
         logger.error(f"Failed to rewrite test case: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to rewrite test case: {str(e)}"
+            detail="Failed to rewrite test case"
         )
 

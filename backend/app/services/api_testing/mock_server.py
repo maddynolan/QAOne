@@ -26,6 +26,8 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import socket
 
+from app.services.utils.safe_regex import safe_regex_match
+
 logger = logging.getLogger(__name__)
 
 
@@ -484,7 +486,13 @@ class MockServer:
                 elif condition_type == "exists":
                     return actual is not None
                 elif condition_type == "regex":
-                    return bool(re.match(value, str(actual))) if actual else False
+                    if not actual:
+                        return False
+                    try:
+                        return bool(safe_regex_match(value, str(actual)))
+                    except (ValueError, TimeoutError):
+                        logger.warning(f"Unsafe or timed-out regex in mock condition: {value}")
+                        return False
                 
                 return False
             

@@ -15,12 +15,15 @@ Endpoints:
     GET    /api/ai/settings/usage       - Get usage statistics
 """
 
+# RBAC: Permission checks added for enterprise security compliance
 import logging
 import time
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from enum import Enum
+
+from app.middleware.rbac_middleware import require_permission
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +230,7 @@ def _mask_api_key(api_key: str) -> str:
 # ============================================================================
 
 @router.get("/", response_model=AISettingsResponse)
+@require_permission("admin:read")
 async def get_settings(
     request: Request,
     project_id: Optional[str] = Query(None, description="Filter by project ID")
@@ -273,6 +277,7 @@ async def get_settings(
 
 
 @router.put("/", response_model=AISettingsResponse)
+@require_permission("admin:manage")
 async def update_settings(
     body: UpdateAISettingsRequest,
     request: Request,
@@ -338,10 +343,11 @@ async def update_settings(
         raise
     except Exception as e:
         logger.error(f"Failed to update AI settings: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="AI settings operation failed")
 
 
 @router.post("/key", response_model=StoreAPIKeyResponse)
+@require_permission("admin:manage")
 async def store_api_key(
     body: StoreAPIKeyRequest,
     request: Request,
@@ -381,10 +387,11 @@ async def store_api_key(
         raise
     except Exception as e:
         logger.error(f"Failed to store API key: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to store API key")
 
 
 @router.delete("/key/{provider}")
+@require_permission("admin:manage")
 async def delete_api_key(
     provider: str,
     request: Request,
@@ -414,10 +421,11 @@ async def delete_api_key(
         raise
     except Exception as e:
         logger.error(f"Failed to delete API key: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to delete API key")
 
 
 @router.post("/test", response_model=TestConnectionResponse)
+@require_permission("admin:read")
 async def test_connection(
     body: TestConnectionRequest,
     request: Request,
@@ -483,6 +491,7 @@ async def test_connection(
 
 
 @router.get("/providers", response_model=ProvidersResponse)
+@require_permission("admin:read")
 async def list_providers(
     request: Request,
 ):
@@ -564,10 +573,11 @@ async def list_providers(
         return ProvidersResponse(providers=providers)
     except Exception as e:
         logger.error(f"Failed to list providers: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to list AI providers")
 
 
 @router.get("/usage", response_model=UsageResponse)
+@require_permission("admin:read")
 async def get_usage(
     request: Request,
     days: int = Query(default=7, ge=1, le=90, description="Number of days of history to return"),
@@ -602,7 +612,7 @@ async def get_usage(
         )
     except Exception as e:
         logger.error(f"Failed to get AI usage: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve AI usage statistics")
 
 
 # ============================================================================

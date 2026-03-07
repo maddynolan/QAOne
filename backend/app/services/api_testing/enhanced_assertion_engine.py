@@ -11,6 +11,8 @@ from typing import Dict, Any, List, Optional, Union
 from datetime import datetime
 import xml.etree.ElementTree as ET
 
+from app.services.utils.safe_regex import safe_regex_search
+
 try:
     import jsonpath_ng
     JSONPATH_AVAILABLE = True
@@ -686,9 +688,9 @@ class EnhancedAssertionEngine:
         response_text = self._to_string(response_data)
         
         try:
-            match = re.search(pattern, response_text, re.IGNORECASE | re.MULTILINE)
+            match = safe_regex_search(pattern, response_text, flags=re.IGNORECASE | re.MULTILINE)
             passed = match is not None
-            
+
             return AssertionResult(
                 "regex",
                 name,
@@ -697,7 +699,15 @@ class EnhancedAssertionEngine:
                 actual=match.group(0) if match else None,
                 message=f"Regex pattern {'matched' if passed else 'did not match'} in response"
             )
-            
+
+        except (ValueError, TimeoutError) as e:
+            return AssertionResult(
+                "regex",
+                name,
+                False,
+                error=str(e),
+                message=f"Regex rejected (unsafe or timed out): {e}"
+            )
         except Exception as e:
             return AssertionResult(
                 "regex",
