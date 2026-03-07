@@ -11,6 +11,7 @@ import base64
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
 import asyncio
 from app.utils.endpoint_helpers import (
     ensure_default_org_project,
@@ -1064,6 +1065,91 @@ async def get_test_run_comments(run_id: str, case_id: Optional[str] = None, step
     except Exception as e:
         logger.error(f"Error getting comments: {str(e)}")
         return {"comments": []}
+
+
+@router.get("/{run_id}/export")
+async def export_test_run(run_id: str, format: str = "junit"):
+    """Export test run results in JUnit XML or HTML format"""
+    try:
+        # Try to get test run from storage
+        test_run = None
+
+        # Check in-memory storage first
+        if run_id in _test_runs_store:
+            test_run = _test_runs_store[run_id]
+
+        # Try database
+        if not test_run:
+            try:
+                from app.services.storage.postgres_direct import execute_query
+                run_results = await execute_query(
+                    "SELECT * FROM test_runs WHERE id = %s", (run_id,)
+                )
+                if run_results:
+                    run = run_results[0]
+                    test_run = {
+                        "id": str(run.get("id", "")),
+                        "test_case_name": run.get("name", "Test Run"),
+                        "name": run.get("name", "Test Run"),
+                        "status": run.get("status", "unknown"),
+                        "duration_ms": run.get("duration_ms", 0),
+                        "started_at": str(run.get("started_at", "")),
+                        "environment": run.get("environment", "Default"),
+                        "steps": []
+                    }
+
+                    # Fetch steps
+                    step_results = await execute_query(
+                        """SELECT id, step_number, action, selector, value, status,
+                                  error_message, duration_ms, healed, working_selector
+                           FROM test_run_steps WHERE run_id = %s ORDER BY step_number""",
+                        (run_id,)
+                    )
+                    if step_results:
+                        for s in step_results:
+                            test_run["steps"].append({
+                                "name": s.get("action", f"Step {s.get('step_number', 0)}"),
+                                "description": s.get("action", ""),
+                                "status": s.get("status", "passed"),
+                                "duration_ms": s.get("duration_ms", 0),
+                                "error": s.get("error_message", ""),
+                                "healed": bool(s.get("healed", False)),
+                                "working_selector": s.get("working_selector", "")
+                            })
+            except Exception as db_err:
+                logger.warning(f"Database lookup for export failed: {db_err}")
+
+        if not test_run:
+            # Return a sample/empty report if run not found
+            test_run = {
+                "id": run_id,
+                "test_case_name": "Test Run " + run_id[:8],
+                "status": "unknown",
+                "duration_ms": 0,
+                "started_at": datetime.utcnow().isoformat(),
+                "steps": []
+            }
+
+        if format == "html":
+            from app.services.executors.html_report_generator import HTMLReportGenerator
+            content = HTMLReportGenerator.generate(test_run)
+            return Response(
+                content=content,
+                media_type="text/html",
+                headers={"Content-Disposition": f'attachment; filename="test-report-{run_id[:8]}.html"'}
+            )
+        else:
+            from app.services.executors.junit_report_generator import JUnitReportGenerator
+            content = JUnitReportGenerator.generate(test_run)
+            return Response(
+                content=content,
+                media_type="application/xml",
+                headers={"Content-Disposition": f'attachment; filename="test-report-{run_id[:8]}.xml"'}
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to export test run {run_id}: {e}")
+        return {"error": str(e)}
 
 
 @router.websocket("/ws/{execution_id}")

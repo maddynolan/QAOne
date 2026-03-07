@@ -20,6 +20,9 @@ interface StepResult {
   error?: string;
   healed?: boolean;
   workingSelector?: string;
+  screenshot?: string;     // base64 screenshot on failure
+  retries?: number;        // number of retry attempts
+  tracePath?: string;      // path to Playwright trace file
 }
 
 interface ExecutionResult {
@@ -206,6 +209,7 @@ export default function TestResultsPanel({
                 passed: <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />,
                 failed: <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />,
                 running: <RefreshCw className="h-4 w-4 text-blue-500 animate-spin flex-shrink-0" />,
+                skipped: <SkipForward className="h-4 w-4 text-gray-400 flex-shrink-0" />,
                 pending: <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 flex-shrink-0" />,
               };
 
@@ -213,6 +217,7 @@ export default function TestResultsPanel({
                 passed: 'border-green-500/20 bg-green-500/5',
                 failed: 'border-red-500/20 bg-red-500/5',
                 running: 'border-blue-500/30 bg-blue-500/10',
+                skipped: 'border-gray-500/20 bg-gray-500/5',
                 pending: 'border-border/50 bg-transparent opacity-50',
               };
 
@@ -241,17 +246,29 @@ export default function TestResultsPanel({
                     )}
 
                     {/* Expand arrow */}
-                    {(result?.error || result?.healed || result?.workingSelector) && (
+                    {(result?.error || result?.healed || result?.workingSelector || result?.screenshot) && (
                       isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                     )}
                   </div>
 
                   {/* Expanded details */}
-                  {isExpanded && (result?.error || result?.healed || result?.workingSelector) && (
+                  {isExpanded && (result?.error || result?.healed || result?.workingSelector || result?.screenshot) && (
                     <div className="px-3 pb-2 ml-[52px] space-y-2">
                       {result.error && (
                         <div className="text-xs text-red-600 dark:text-red-400 bg-red-500/10 rounded px-2 py-1.5 font-mono">
                           {result.error}
+                        </div>
+                      )}
+                      {result.screenshot && (
+                        <div className="mt-2">
+                          <img
+                            src={result.screenshot.startsWith('data:') ? result.screenshot : `data:image/png;base64,${result.screenshot}`}
+                            alt="Failure screenshot"
+                            className="max-w-full rounded border border-border/50 cursor-pointer hover:opacity-90"
+                            style={{ maxHeight: '200px' }}
+                            onClick={() => window.open(result.screenshot!.startsWith('data:') ? result.screenshot! : `data:image/png;base64,${result.screenshot}`, '_blank')}
+                          />
+                          <span className="text-[10px] text-muted-foreground">Click to enlarge</span>
                         </div>
                       )}
                       {result.healed && result.workingSelector && (

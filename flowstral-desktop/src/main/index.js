@@ -16,6 +16,25 @@ const Store = require('electron-store');
 const { autoUpdater } = require('electron-updater');
 const { v4: uuidv4 } = require('uuid');
 
+/**
+ * Validate IPC sender - ensure it comes from our main window
+ * @param {Electron.IpcMainInvokeEvent} event - IPC event
+ * @returns {boolean} - true if sender is valid
+ */
+function isValidIPCSender(event) {
+  try {
+    const senderWebContents = event.sender;
+    // In packaged app, only accept from our known windows
+    if (app.isPackaged) {
+      const validWindows = BrowserWindow.getAllWindows();
+      return validWindows.some(win => win.webContents === senderWebContents);
+    }
+    return true; // Allow all in dev mode
+  } catch (e) {
+    return false;
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Single Instance Lock - Ensures only one instance runs at a time
 // This also helps the installer close the app cleanly during updates
@@ -374,13 +393,15 @@ function createWebappView() {
     setTimeout(() => sendWithRetry(), 300);
   });
   
-  // Enable opening DevTools for webapp with Ctrl+Shift+I when focused on webapp
-  webappView.webContents.on('before-input-event', (event, input) => {
-    if (input.control && input.shift && input.key.toLowerCase() === 'i') {
-      webappView?.webContents.openDevTools({ mode: 'detach' });
-      event.preventDefault();
-    }
-  });
+  // Enable opening DevTools for webapp with Ctrl+Shift+I when focused on webapp - dev only
+  if (!app.isPackaged) {
+    webappView.webContents.on('before-input-event', (event, input) => {
+      if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+        webappView?.webContents.openDevTools({ mode: 'detach' });
+        event.preventDefault();
+      }
+    });
+  }
 }
 
 // Update view bounds based on current view mode
@@ -798,14 +819,16 @@ ipcMain.handle('focus-webapp', () => {
   return false;
 });
 
-// Open webapp DevTools (for debugging the React app)
-ipcMain.handle('open-webapp-devtools', () => {
-  if (webappView) {
-    webappView.webContents.openDevTools({ mode: 'detach' });
-    return true;
-  }
-  return false;
-});
+// Open webapp DevTools (for debugging the React app) - dev only
+if (!app.isPackaged) {
+  ipcMain.handle('open-webapp-devtools', () => {
+    if (webappView) {
+      webappView.webContents.openDevTools({ mode: 'detach' });
+      return true;
+    }
+    return false;
+  });
+}
 
 // Configuration handlers
 ipcMain.handle('get-config', () => {
@@ -1934,6 +1957,10 @@ ipcMain.handle('mobile-stop-logs', async () => {
 
 // Install app on device
 ipcMain.handle('mobile-install-app', async (event, { appPath, platform, deviceId } = {}) => {
+  if (!isValidIPCSender(event)) {
+    console.warn('[IPC] Rejected mobile-install-app call from unknown sender');
+    return { success: false, error: 'Unauthorized IPC call' };
+  }
   try {
     const { MaestroRunner } = require('./lib/maestro-integration');
     const runner = new MaestroRunner({ platform: platform || 'android' });
@@ -1945,6 +1972,10 @@ ipcMain.handle('mobile-install-app', async (event, { appPath, platform, deviceId
 
 // Uninstall app from device
 ipcMain.handle('mobile-uninstall-app', async (event, { bundleId, platform, deviceId } = {}) => {
+  if (!isValidIPCSender(event)) {
+    console.warn('[IPC] Rejected mobile-uninstall-app call from unknown sender');
+    return { success: false, error: 'Unauthorized IPC call' };
+  }
   try {
     const { MaestroRunner } = require('./lib/maestro-integration');
     const runner = new MaestroRunner({ platform: platform || 'android' });
@@ -1955,7 +1986,11 @@ ipcMain.handle('mobile-uninstall-app', async (event, { bundleId, platform, devic
 });
 
 // Browse for app file (file dialog)
-ipcMain.handle('mobile-browse-app', async () => {
+ipcMain.handle('mobile-browse-app', async (event) => {
+  if (!isValidIPCSender(event)) {
+    console.warn('[IPC] Rejected mobile-browse-app call from unknown sender');
+    return { success: false, error: 'Unauthorized IPC call' };
+  }
   try {
     const { dialog } = require('electron');
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -2661,7 +2696,7 @@ ipcMain.handle('goal-agent-execute', async (event, options = {}) => {
           headless: false,
           viewport: null,
           args: ['--start-maximized', '--disable-blink-features=AutomationControlled'],
-          ignoreHTTPSErrors: true
+          ignoreHTTPSErrors: false
         });
         
         const pages = context.pages();
@@ -3642,12 +3677,19 @@ ipcMain.handle('install-update', () => {
 });
 
 ipcMain.handle('open-external', (event, url) => {
+  if (!isValidIPCSender(event)) {
+    console.warn('[IPC] Rejected open-external call from unknown sender');
+    return;
+  }
   shell.openExternal(url);
 });
 
-ipcMain.handle('open-devtools', () => {
-  webappView?.webContents.openDevTools({ mode: 'detach' });
-});
+// Gate DevTools behind development mode only
+if (!app.isPackaged) {
+  ipcMain.handle('open-devtools', () => {
+    webappView?.webContents.openDevTools({ mode: 'detach' });
+  });
+}
 
 // ============================================================================
 // Local Storage IPC Handlers
@@ -3969,21 +4011,24 @@ app.whenReady().then(async () => {
   registerDiagnosticsIPC(ipcMain);
   console.log('[App] Diagnostics collector initialized');
   
-  // Register global shortcut to open webapp DevTools (F12)
-  globalShortcut.register('F12', () => {
-    if (webappView) {
-      webappView.webContents.openDevTools({ mode: 'detach' });
-    } else {
-      mainWindow?.webContents.openDevTools({ mode: 'detach' });
-    }
-  });
-  
-  // Also register Ctrl+Shift+D for webapp DevTools specifically
-  globalShortcut.register('CommandOrControl+Shift+D', () => {
-    if (webappView) {
-      webappView.webContents.openDevTools({ mode: 'detach' });
-    }
-  });
+  // Register global shortcuts to open DevTools - dev only
+  if (!app.isPackaged) {
+    // Register global shortcut to open webapp DevTools (F12)
+    globalShortcut.register('F12', () => {
+      if (webappView) {
+        webappView.webContents.openDevTools({ mode: 'detach' });
+      } else {
+        mainWindow?.webContents.openDevTools({ mode: 'detach' });
+      }
+    });
+
+    // Also register Ctrl+Shift+D for webapp DevTools specifically
+    globalShortcut.register('CommandOrControl+Shift+D', () => {
+      if (webappView) {
+        webappView.webContents.openDevTools({ mode: 'detach' });
+      }
+    });
+  }
   
   // Check for updates in production
   if (!process.argv.includes('--dev')) {

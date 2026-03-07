@@ -85,8 +85,7 @@ class BrowserController {
       headless: false,  // ALWAYS visible
       viewport: this.viewport,
       args: [
-        '--disable-blink-features=AutomationControlled',
-        '--no-sandbox'
+        '--disable-blink-features=AutomationControlled'
       ],
       ignoreDefaultArgs: ['--enable-automation']
     });

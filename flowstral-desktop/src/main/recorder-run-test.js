@@ -82,10 +82,7 @@ async function runTest(recorder, options = {}) {
           const stealthArgs = [
             '--start-maximized',
             '--disable-blink-features=AutomationControlled',
-            '--disable-features=IsolateOrigins,site-per-process',
             '--disable-infobars',
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
           ];
 
           // Get mobile emulation options (backward compatible)
@@ -110,7 +107,7 @@ async function runTest(recorder, options = {}) {
               isMobile: mobileOptions.isMobile,
               hasTouch: mobileOptions.hasTouch
             }),
-            ignoreHTTPSErrors: true,
+            ignoreHTTPSErrors: false,
           };
 
           // launchBrowserWithFallback is a module-level function in the original file
@@ -152,9 +149,7 @@ async function runTest(recorder, options = {}) {
           const persistentStealthArgs = [
             '--start-maximized',
             '--disable-blink-features=AutomationControlled',
-            '--disable-features=IsolateOrigins,site-per-process',
             '--disable-infobars',
-            '--no-sandbox',
           ];
 
           // Use fallback helper for system Chrome/Edge when Playwright browsers not bundled
@@ -172,7 +167,7 @@ async function runTest(recorder, options = {}) {
               isMobile: mobileOptions.isMobile,
               hasTouch: mobileOptions.hasTouch
             }),
-            ignoreHTTPSErrors: true,
+            ignoreHTTPSErrors: false,
           }, userDataDir);
 
           // STEALTH: Add anti-detection script

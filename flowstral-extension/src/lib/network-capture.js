@@ -15,6 +15,60 @@
  * 7. HAR 1.2 standard format
  */
 
+/**
+ * Mask sensitive fields in request/response body content
+ * Scans for common sensitive field names and replaces their values with [MASKED]
+ */
+function maskSensitiveBodyContent(bodyText) {
+  if (!bodyText || typeof bodyText !== 'string') return bodyText;
+
+  // Only attempt masking on JSON-like content
+  if (!bodyText.trim().startsWith('{') && !bodyText.trim().startsWith('[')) {
+    return bodyText;
+  }
+
+  try {
+    const SENSITIVE_KEYS = [
+      'password', 'passwd', 'pwd', 'secret', 'token', 'access_token',
+      'refresh_token', 'api_key', 'apikey', 'api_secret', 'auth',
+      'authorization', 'credential', 'credit_card', 'card_number',
+      'cvv', 'cvc', 'ssn', 'social_security', 'private_key',
+      'client_secret', 'session_id', 'sessionid', 'cookie'
+    ];
+
+    const parsed = JSON.parse(bodyText);
+
+    function maskObject(obj) {
+      if (Array.isArray(obj)) {
+        return obj.map(item => maskObject(item));
+      }
+      if (obj && typeof obj === 'object') {
+        const masked = {};
+        for (const [key, value] of Object.entries(obj)) {
+          const keyLower = key.toLowerCase().replace(/[-_]/g, '');
+          const isSensitive = SENSITIVE_KEYS.some(sk =>
+            keyLower.includes(sk.replace(/[-_]/g, ''))
+          );
+          if (isSensitive && typeof value === 'string') {
+            masked[key] = '[MASKED]';
+          } else if (typeof value === 'object' && value !== null) {
+            masked[key] = maskObject(value);
+          } else {
+            masked[key] = value;
+          }
+        }
+        return masked;
+      }
+      return obj;
+    }
+
+    return JSON.stringify(maskObject(parsed));
+  } catch (e) {
+    // Not valid JSON, return as-is (don't break non-JSON bodies)
+    return bodyText;
+  }
+}
+
 class NetworkCapture {
   // CWS Compliance: Headers that must be masked to protect user privacy
   static SENSITIVE_HEADERS = new Set([
@@ -378,21 +432,23 @@ class NetworkCapture {
    */
   _parseRequestBody(requestBody) {
     if (!requestBody) return null;
-    
+
     if (requestBody.raw) {
       // Binary data - decode if possible
       try {
         const decoder = new TextDecoder('utf-8');
-        return decoder.decode(requestBody.raw[0].bytes);
+        const decoded = decoder.decode(requestBody.raw[0].bytes);
+        // CWS Compliance: Mask sensitive fields in JSON request bodies
+        return maskSensitiveBodyContent(decoded);
       } catch {
         return '[binary data]';
       }
     }
-    
+
     if (requestBody.formData) {
       return requestBody.formData;
     }
-    
+
     return null;
   }
 
@@ -492,7 +548,7 @@ class NetworkCapture {
             httpVersion: 'HTTP/1.1',
             headers: Object.entries(r.requestHeaders || {}).map(([name, value]) => ({ name, value })),
             queryString: this._parseQueryString(r.url),
-            postData: r.requestBody ? { mimeType: 'application/json', text: JSON.stringify(r.requestBody) } : null,
+            postData: r.requestBody ? { mimeType: 'application/json', text: maskSensitiveBodyContent(JSON.stringify(r.requestBody)) } : null,
             headersSize: -1,
             bodySize: r.requestBody ? JSON.stringify(r.requestBody).length : 0,
           },
