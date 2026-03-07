@@ -18,7 +18,7 @@
  * Color scheme: Purple primary (#8B5CF6), Cyan accent (#38BDF8)
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import {
   Play, Save, Download, Plus, Trash2, Copy,
@@ -198,6 +198,15 @@ export default function UnifiedWorkflowEditor() {
   const [rightPanelTab, setRightPanelTab] = useState<'details' | 'validations'>('details');
   const [rightPanelMode, setRightPanelMode] = useState<'step' | 'protocol'>('step');
   
+  // Auto-clear stale test results when steps change (add/remove/reorder)
+  const prevStepCountRef = useRef(testCase.steps.length);
+  useEffect(() => {
+    if (testCase.steps.length !== prevStepCountRef.current && executionResult.status !== 'idle' && executionResult.status !== 'running') {
+      setExecutionResult({ status: 'idle', currentStep: 0, results: [], logs: [] });
+    }
+    prevStepCountRef.current = testCase.steps.length;
+  }, [testCase.steps.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Clipboard for step copy/paste
   const [stepClipboard, setStepClipboard] = useState<TestStep[] | null>(null);
   
