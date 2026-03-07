@@ -192,18 +192,18 @@ function StepCard({
 
       {/* Actions */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        {/* Record This Step button - shown for manual/automatable steps without existing automation */}
-        {onRecordStep && !((step as any).qword && (step as any).args?.length > 0) && 
+        {/* Trace This Step button - shown for manual/automatable steps without existing automation */}
+        {onRecordStep && !((step as any).qword && (step as any).args?.length > 0) &&
          ['click', 'input', 'select', 'hover', 'navigate', 'manual_step'].includes(step.type) && (
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             className="h-7 px-2 text-xs bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300"
             onClick={(e) => { e.stopPropagation(); onRecordStep(step.id, index); }}
-            title="Record automation for this step"
+            title="Trace automation for this step"
           >
             <Video className="h-3 w-3 mr-1" />
-            Record
+            Trace
           </Button>
         )}
         <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onMove('up'); }} disabled={isFirst}>
@@ -219,15 +219,15 @@ function StepCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="bg-popover border-border">
-            {/* Record This Step option in menu */}
+            {/* Trace This Step option in menu */}
             {onRecordStep && !((step as any).qword && (step as any).args?.length > 0) && (
               <>
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   onClick={() => onRecordStep(step.id, index)}
                   className="text-purple-400 hover:bg-purple-500/10 focus:bg-purple-500/10 cursor-pointer"
                 >
                   <Video className="h-4 w-4 mr-2" />
-                  Record This Step
+                  Trace This Step
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-border" />
               </>

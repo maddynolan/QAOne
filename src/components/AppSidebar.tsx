@@ -49,10 +49,10 @@ const navigationGroups = [
   {
     label: "Create & Build",
     items: [
-      { title: "Test Builder", url: "/builder", icon: Layers, highlight: true, description: "Build & record tests" },
-      // Recorder is only shown when running in Electron Desktop
-      ...(typeof window !== 'undefined' && (window as any).electronAPI?.isElectron 
-        ? [{ title: "Recorder", url: "#recorder", icon: Circle, highlight: true, description: "Record in docked browser", isElectronOnly: true }]
+      { title: "Test Builder", url: "/builder", icon: Layers, highlight: true, description: "Build & trace tests" },
+      // Trace is only shown when running in Electron Desktop
+      ...(typeof window !== 'undefined' && (window as any).electronAPI?.isElectron
+        ? [{ title: "Smart Trace", url: "#recorder", icon: Circle, highlight: true, description: "Trace actions in browser", isElectronOnly: true }]
         : []),
       { title: "Elements", url: "/elements", icon: MousePointerClick, description: "Element repository" },
     ],
@@ -243,7 +243,7 @@ export function AppSidebar() {
                                 >
                                   <item.icon className="h-4 w-4 text-cyan-600 fill-cyan-600" />
                                   <span>{item.title}</span>
-                                  <span className="ml-auto text-[10px] bg-cyan-600 text-white px-1.5 py-0.5 rounded font-medium">REC</span>
+                                  <span className="ml-auto text-[10px] bg-cyan-600 text-white px-1.5 py-0.5 rounded font-medium">TRACE</span>
                                 </button>
                               </SidebarMenuButton>
                             </SidebarMenuItem>
@@ -298,7 +298,7 @@ export function AppSidebar() {
                               >
                                 <item.icon className="h-4 w-4 text-cyan-600 dark:text-cyan-400 fill-cyan-600 dark:fill-cyan-400" />
                                 <span>{item.title}</span>
-                                <span className="ml-auto text-[10px] bg-cyan-600 dark:bg-cyan-500 text-white px-1.5 py-0.5 rounded font-medium">REC</span>
+                                <span className="ml-auto text-[10px] bg-cyan-600 dark:bg-cyan-500 text-white px-1.5 py-0.5 rounded font-medium">TRACE</span>
                               </button>
                             </SidebarMenuButton>
                           </SidebarMenuItem>

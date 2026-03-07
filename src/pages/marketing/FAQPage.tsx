@@ -70,7 +70,7 @@ const faqCategories = [
       },
       {
         q: 'How do I create my first test?',
-        a: 'You can start by using our Smart Recorder to record your interactions with your application, or use the Visual Builder to drag and drop test steps. Both methods create unified test cases that can be executed manually or as automated tests.'
+        a: 'You can start by using our Smart Trace to record your interactions with your application, or use the Visual Builder to drag and drop test steps. Both methods create unified test cases that can be executed manually or as automated tests.'
       },
       {
         q: 'Is there a free trial?',
@@ -111,8 +111,8 @@ const faqCategories = [
         a: 'Flowstral supports functional testing, API testing (REST, GraphQL, SOAP), performance testing (up to 50k+ virtual users), visual regression testing, accessibility testing (WCAG 2.1), and Salesforce-native testing with 20+ specialized tools.'
       },
       {
-        q: 'How does the Smart Recorder work?',
-        a: 'The Smart Recorder captures your browser interactions and automatically generates test steps. It uses intelligent element recognition to create robust locators, suggests assertions, and handles dynamic content. For Salesforce, it also understands metadata context.'
+        q: 'How does the Smart Trace work?',
+        a: 'The Smart Trace captures your browser interactions and automatically generates test steps. It uses intelligent element recognition to create robust locators, suggests assertions, and handles dynamic content. For Salesforce, it also understands metadata context.'
       },
       {
         q: 'Can the same test run manually and automated?',

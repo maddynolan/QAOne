@@ -145,23 +145,23 @@ export default function SmartRecorderPage() {
             {/* Left Content */}
             <div className="space-y-6">
               <Badge className="bg-amber-100 text-amber-700 border-0 px-4 py-1.5">
-                <MousePointer className="w-3 h-3 mr-1" /> Smart Recorder
+                <MousePointer className="w-3 h-3 mr-1" /> Smart Trace
               </Badge>
               <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 leading-tight">
-                Record Tests by
+                Trace Tests by
                 <span className="block text-amber-600">Simply Using Your App</span>
               </h1>
               <p className="text-xl text-slate-600 leading-relaxed">
-                No coding required. Just click record, interact with your application naturally, 
+                No coding required. Just click trace, interact with your application naturally,
                 and get a complete automated test with intelligent element detection.
               </p>
               <div className="flex flex-wrap gap-4">
-                <Button 
+                <Button
                   size="lg"
                   onClick={() => navigate('/signup')}
                   className="h-12 px-8 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-xl shadow-lg"
                 >
-                  <Rocket className="w-5 h-5 mr-2" /> Try Smart Recorder
+                  <Rocket className="w-5 h-5 mr-2" /> Try Smart Trace
                 </Button>
                 <Button size="lg" variant="outline" className="h-12 px-8 rounded-xl">
                   <Play className="w-5 h-5 mr-2" /> See It In Action

@@ -144,7 +144,7 @@ const comparisonSections = [
     iconBg: 'bg-blue-50',
     iconColor: 'text-blue-700',
     rows: [
-      { feature: 'Smart Recorder', free: true, enterprise: true },
+      { feature: 'Smart Trace', free: true, enterprise: true },
       { feature: 'Visual Test Builder (60+ step types)', free: true, enterprise: true },
       { feature: 'Test Cases, Suites & Runs', free: true, enterprise: true },
       { feature: 'Test Plans & Releases', free: false, enterprise: true },
@@ -423,7 +423,7 @@ export default function PricingPage() {
                   'Up to 3 users',
                   '1,000 test runs / month',
                   '1 parallel execution',
-                  'Smart Recorder (full)',
+                  'Smart Trace (full)',
                   'Visual Test Builder (all 60+ step types)',
                   'Test Cases, Suites & Runs',
                   'Self-Healing Locators (basic)',

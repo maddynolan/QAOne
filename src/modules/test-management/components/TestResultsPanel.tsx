@@ -271,7 +271,7 @@ export default function TestResultsPanel({
                           {onRerecordStep && (
                             <Button size="sm" variant="outline" className="h-6 text-[11px] border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-500/10"
                               onClick={(e) => { e.stopPropagation(); onRerecordStep(idx); }}>
-                              <Crosshair className="h-3 w-3 mr-1" /> Re-record
+                              <Crosshair className="h-3 w-3 mr-1" /> Re-trace
                             </Button>
                           )}
                           {browserKeptOpen && onSkipAndContinue && (

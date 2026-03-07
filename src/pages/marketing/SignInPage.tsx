@@ -174,7 +174,7 @@ export default function SignInPage() {
           
           <div className="space-y-4">
             {[
-              { icon: CheckCircle2, text: 'Smart Recorder with intelligent element recognition' },
+              { icon: CheckCircle2, text: 'Smart Trace with intelligent element recognition' },
               { icon: Shield, text: 'Enterprise-grade security & compliance' },
               { icon: Users, text: 'Built for QA teams of all sizes' },
             ].map((item, idx) => (

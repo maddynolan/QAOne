@@ -554,7 +554,7 @@ export default function PlaywrightRecorderPage() {
             }
           }
           
-          toast.info(`Recording for step ${context.stepIndex + 1}: ${context.stepName}`, {
+          toast.info(`Tracing for step ${context.stepIndex + 1}: ${context.stepName}`, {
             duration: 5000,
           });
         } else {
@@ -577,7 +577,7 @@ export default function PlaywrightRecorderPage() {
             setUrl(context.step.url);
           }
           
-          toast.info(`🔄 Re-record Mode: Recording replacement for step ${context.stepIndex + 1}`, {
+          toast.info(`🔄 Re-trace Mode: Tracing replacement for step ${context.stepIndex + 1}`, {
             description: `"${context.step?.name || context.step?.type || 'Unknown step'}" in "${context.testCaseName}"`,
             duration: 8000,
           });
@@ -980,7 +980,7 @@ export default function PlaywrightRecorderPage() {
       setCurrentStepIndex(nextIndex);
     }
     
-    toast.success(`Step ${currentStepIndex + 1} automated with recording`);
+    toast.success(`Step ${currentStepIndex + 1} automated with trace`);
   }, [selectedTestCase, mode, currentStepIndex]);
   
   // Assign a DOM suggestion to the current step
@@ -1864,7 +1864,7 @@ export default function PlaywrightRecorderPage() {
     
     // Check if recording is active first
     if (!isRecording) {
-      toast.error('Start recording first to execute actions', { id: 'exec', duration: 3000 });
+      toast.error('Start tracing first to execute actions', { id: 'exec', duration: 3000 });
       return;
     }
     
@@ -1898,7 +1898,7 @@ export default function PlaywrightRecorderPage() {
         const errorMsg = result?.error || 'Failed';
         // Provide more helpful error messages
         if (errorMsg.toLowerCase().includes('no browser')) {
-          toast.error('Browser not active. Start recording first.', { id: 'exec', duration: 3000 });
+          toast.error('Browser not active. Start tracing first.', { id: 'exec', duration: 3000 });
         } else {
           toast.error(errorMsg, { id: 'exec' });
         }
@@ -1906,7 +1906,7 @@ export default function PlaywrightRecorderPage() {
     } catch (error: any) {
       const msg = error?.message || 'Failed to execute';
       if (msg.toLowerCase().includes('no browser')) {
-        toast.error('Browser not active. Start recording first.', { id: 'exec', duration: 3000 });
+        toast.error('Browser not active. Start tracing first.', { id: 'exec', duration: 3000 });
       } else {
         toast.error(msg, { id: 'exec' });
       }
@@ -2035,7 +2035,7 @@ export default function PlaywrightRecorderPage() {
     const electronAPI = (window as any).electronAPI;
     
     if (!flowstral?.playwrightRecorder && !electronAPI?.startRecording) {
-      toast.error("Recorder not available");
+      toast.error("Trace not available");
       return;
     }
 
@@ -2086,7 +2086,7 @@ export default function PlaywrightRecorderPage() {
         const captureMsg = captureNetwork ? " (capturing network traffic)" : "";
         const mobileMsg = isMobile ? ` on ${getDeviceName(selectedMobileDevice)}` : "";
         const browserMsg = selectedBrowser !== 'chromium' ? ` [${selectedBrowser}]` : "";
-        toast.success(`Recording started${mobileMsg}${browserMsg}!${captureMsg}`);
+        toast.success(`Trace started${mobileMsg}${browserMsg}!${captureMsg}`);
       } else {
         toast.error(result?.error || "Failed to start");
       }
@@ -2167,9 +2167,9 @@ export default function PlaywrightRecorderPage() {
       }
       
       const networkMsg = capturedNetworkRequests.length > 0 ? ` (${capturedNetworkRequests.length} HTTP requests)` : '';
-      toast.success(`Recording stopped - ${actions.length} actions${networkMsg}`);
+      toast.success(`Trace stopped - ${actions.length} actions${networkMsg}`);
     } catch (error) {
-      toast.error("Failed to stop recording");
+      toast.error("Failed to stop trace");
     }
   };
 
@@ -2365,7 +2365,7 @@ export default function PlaywrightRecorderPage() {
           await electronAPI.resumeRecording();
         }
         setIsPaused(false);
-        toast.success("Recording resumed");
+        toast.success("Trace resumed");
       } else {
         // Pause
         if (flowstral?.playwrightRecorder?.pause) {
@@ -2374,7 +2374,7 @@ export default function PlaywrightRecorderPage() {
           await electronAPI.pauseRecording();
         }
         setIsPaused(true);
-        toast.info("Recording paused - interact with app then resume");
+        toast.info("Trace paused - interact with app then resume");
       }
     } catch (error) {
       toast.error("Failed to pause/resume");
@@ -3006,7 +3006,7 @@ const handleExportToBuilder = async () => {
                   }));
                   localStorage.removeItem('flowstral_rerecord_context');
                   setShowRerecordBanner(false);
-                  toast.success('Step recorded! Returning to builder...');
+                  toast.success('Step traced! Returning to builder...');
                   setTimeout(() => {
                     if (rerecordContext.returnTo) {
                       navigate(rerecordContext.returnTo);
