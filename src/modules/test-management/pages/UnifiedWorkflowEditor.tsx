@@ -2158,13 +2158,15 @@ export default function UnifiedWorkflowEditor() {
             const duration = result?.duration || result?.totalDuration || 0;
 
             // Build step results from the response
+            // When overall test passed, all steps are considered passed (overall result is source of truth)
             const stepResults = result?.stepResults || result?.results || [];
             const mappedResults = allSteps.filter(s => s.enabled).map((step, idx) => {
               const sr = stepResults[idx];
+              const stepPassed = passed ? true : (sr ? sr.success : (idx < (result?.failedStep ?? 999)));
               return {
                 stepId: step.id,
-                status: sr ? (sr.success ? 'passed' : 'failed') : (passed ? 'passed' : (idx >= (result?.failedStep || 999) ? 'failed' : 'passed')),
-                error: sr?.error || undefined,
+                status: stepPassed ? 'passed' : 'failed',
+                error: (!stepPassed && sr?.error) ? sr.error : undefined,
                 healed: sr?.healed || false,
                 workingSelector: sr?.workingSelector || undefined,
               };
