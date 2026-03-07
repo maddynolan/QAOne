@@ -1809,15 +1809,15 @@ export default function UnifiedWorkflowEditor() {
       toast.success(`Opening recorder for step ${stepIndex + 1}: ${step.name}`, {
         description: 'Record actions to automate this step',
       });
-      
-      // Navigate to recorder in "existing" mode with step context
-      window.open(`/flowstral?mode=existing&stepId=${stepId}&stepIndex=${stepIndex}`, '_blank');
-      
+
+      // Navigate to recorder — use react-router navigate for Electron HashRouter compat
+      navigate(`/playwright-recorder?mode=existing&stepId=${stepId}&stepIndex=${stepIndex}`);
+
     } catch (err) {
       console.error('Failed to setup recording:', err);
       toast.error('Failed to open recorder');
     }
-  }, [testCase]);
+  }, [testCase, navigate]);
 
   const duplicateStep = (stepId: string) => {
     const step = testCase.steps.find(s => s.id === stepId);
@@ -3478,7 +3478,7 @@ export default function UnifiedWorkflowEditor() {
                         <Plus className="h-4 w-4 mr-1" />
                         Add Step
                       </Button>
-                      <Button onClick={() => window.open('/flowstral', '_blank')} className="gradient-primary text-white">
+                      <Button onClick={() => navigate('/playwright-recorder')} className="gradient-primary text-white">
                         <Video className="h-4 w-4 mr-1" />
                         Record
                       </Button>
@@ -3744,7 +3744,7 @@ export default function UnifiedWorkflowEditor() {
                           onClick={() => {
                             // Navigate to load test page with protocol data
                             localStorage.setItem('qaai_load_test_protocol', JSON.stringify(protocolData));
-                            window.open('/load-testing?hasProtocolData=true&source=builder', '_blank');
+                            navigate('/load-testing?hasProtocolData=true&source=builder');
                           }}
                         >
                           <Gauge className="h-3 w-3 mr-1" />
