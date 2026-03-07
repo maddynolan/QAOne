@@ -63,8 +63,8 @@ function MarketingHeader() {
 const demoSteps = [
   {
     id: 'recorder',
-    title: 'Smart Recorder',
-    subtitle: 'Record tests with intelligent recognition',
+    title: 'Smart Trace',
+    subtitle: 'Trace tests with intelligent recognition',
     description: 'Watch how Flowstral captures your interactions and automatically generates robust test steps with smart element recognition.',
     duration: 45,
     highlights: [

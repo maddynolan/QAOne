@@ -2,7 +2,7 @@
  * ArisTrace/Flowstral - QA Excellence Platform
  * 
  * CORE MODULES:
- * 1. Recorder - Browser test recording & automation (PlaywrightRecorderPage)
+ * 1. Smart Trace - Browser test tracing & automation (PlaywrightRecorderPage)
  * 2. Builder - Visual test workflow editor (UnifiedWorkflowEditor)
  * 3. Tests - Test repository & management (TestRepository)
  * 4. Automation - Test execution & runs (TestCaseExecution, TestRuns)
@@ -279,12 +279,12 @@ const App = () => {
                     ═══════════════════════════════════════════════════════════ */}
                 <Route element={<LicenseGate><StreamlinedLayout /></LicenseGate>}>
                   
-                  {/* Default App Home: Redirect to Recorder */}
+                  {/* Default App Home: Redirect to Smart Trace */}
                   <Route path="/app" element={<Navigate to="/recorder" replace />} />
-                  
+
                   {/* ─────────────────────────────────────────────────────────
-                      1. RECORDER MODULE
-                      Browser test recording, playback, and automation
+                      1. SMART TRACE MODULE
+                      Browser test tracing, playback, and automation
                       ───────────────────────────────────────────────────────── */}
                   <Route path="/recorder" element={<PlaywrightRecorderPage />} />
                   <Route path="/playwright-recorder" element={<Navigate to="/recorder" replace />} />

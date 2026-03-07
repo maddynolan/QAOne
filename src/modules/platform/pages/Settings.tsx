@@ -472,14 +472,6 @@ export default function Settings() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label>Parallel Execution</Label>
-                  <p className="text-sm text-muted-foreground">Run tests in parallel for faster execution</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
                   <Label>Auto Retry Failed Tests</Label>
                   <p className="text-sm text-muted-foreground">Automatically retry failed tests once</p>
                 </div>

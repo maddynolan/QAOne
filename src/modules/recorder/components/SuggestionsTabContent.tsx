@@ -282,7 +282,7 @@ export default function SuggestionsTabContent({
           <div className="text-center py-12 text-muted-foreground">
             <Lightbulb className="h-10 w-10 mx-auto mb-3 opacity-30" />
             <p className="text-sm font-medium">No suggestions yet</p>
-            <p className="text-xs mt-1">Start recording to see page elements</p>
+            <p className="text-xs mt-1">Start tracing to see page elements</p>
             <Button
               onClick={handleRefreshSuggestions}
               variant="outline"

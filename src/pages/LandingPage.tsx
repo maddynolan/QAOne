@@ -526,8 +526,8 @@ function FlowstralSection() {
     {
       letters: 'L',
       title: 'Load Testing',
-      subtitle: 'Record → Load, SRM & Lighthouse',
-      description: 'Record once, load test at scale. Server Resource Monitoring (SRM) and Lighthouse in one place—better than k6 for integrated observability. Scenario mix, ramp-up, and distributed runs.',
+      subtitle: 'Trace → Load, SRM & Lighthouse',
+      description: 'Trace once, load test at scale. Server Resource Monitoring (SRM) and Lighthouse in one place—better than k6 for integrated observability. Scenario mix, ramp-up, and distributed runs.',
       icon: Activity,
       color: 'from-emerald-500 to-teal-500',
       bgColor: 'from-emerald-100 to-teal-100',
@@ -790,8 +790,8 @@ const features: Array<{
 }> = [
   {
     icon: MousePointer,
-    title: 'Smart Recorder',
-    description: 'Record browser interactions with intelligent element detection. Get contextual suggestions as you record.',
+    title: 'Smart Trace',
+    description: 'Trace browser interactions with intelligent element detection. Get contextual suggestions as you trace.',
     gradient: 'from-amber-500 to-orange-500',
     bgGradient: 'from-amber-50 to-orange-50',
     highlights: ['Element Detection', 'Smart Suggestions', 'Auto-Wait'],
@@ -972,7 +972,7 @@ function PerformanceAPISection() {
               Integrated Load + SRM + Lighthouse — <span className="text-emerald-600">All Built-In</span>
             </h3>
             <p className="text-slate-600 leading-relaxed">
-              Record once, load test at scale. Server Resource Monitoring (SRM) and Lighthouse built in—no scripting needed.
+              Trace once, load test at scale. Server Resource Monitoring (SRM) and Lighthouse built in—no scripting needed.
               Scenario mix, ramp-up, distributed runs. Real-time metrics and threshold-based validation.
             </p>
 
@@ -1539,7 +1539,7 @@ function SocialProofSection() {
     },
     {
       title: 'No-Code Visual Builder',
-      description: 'Record browser interactions or drag-and-drop from 59 step types. Manual testers and SDETs alike can build automated tests — zero code required.',
+      description: 'Trace browser interactions or drag-and-drop from 59 step types. Manual testers and SDETs alike can build automated tests — zero code required.',
       metric: '59 step types',
     },
   ];
@@ -1810,7 +1810,7 @@ function Footer() {
   
   const footerLinks = {
     Product: [
-      { name: 'Smart Recorder', href: '/products/smart-recorder' },
+      { name: 'Smart Trace', href: '/products/smart-recorder' },
       { name: 'Visual Builder', href: '/products/visual-builder' },
       { name: 'Flowpilot ✨', href: '/products/flowpilot' },
       { name: 'Mobile Testing ✨', href: '/products/mobile-testing' },

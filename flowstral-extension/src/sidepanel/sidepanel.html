@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QAAI Recorder</title>
+  <title>QAAI Smart Trace</title>
   <style>
     /* =========================================
-       QAAI RECORDER - COLOR SCHEME MATCHED
+       QAAI SMART TRACE - COLOR SCHEME MATCHED
        Primary: #8B5CF6 (Purple)
        Accent: #38BDF8 (Cyan)
        ========================================= */
@@ -1194,8 +1194,8 @@
       <div class="logo-section">
         <div class="logo">🎯</div>
         <div>
-          <h1>QAAI Recorder</h1>
-          <div class="header-subtitle">Record • Build • Test</div>
+          <h1>QAAI Smart Trace</h1>
+          <div class="header-subtitle">Trace • Build • Test</div>
         </div>
       </div>
       <div class="server-status" id="serverStatus">
@@ -1208,7 +1208,7 @@
   <!-- Tab Bar - Optimized 3 Tabs -->
   <div class="tab-bar">
     <div class="tab active" data-tab="record">
-      <span class="tab-icon">🎥</span> Record
+      <span class="tab-icon">🔍</span> Trace
     </div>
     <div class="tab" data-tab="suggest">
       <span class="tab-icon">💡</span> Suggest
@@ -1258,7 +1258,7 @@
         </span>
       </div>
       <div class="status-row">
-        <span class="status-label">Actions Recorded</span>
+        <span class="status-label">Actions Traced</span>
         <span class="status-value" id="actionCount">0</span>
       </div>
       <!-- HAR capture for load testing & API testing (OFF by default) -->
@@ -1300,7 +1300,7 @@
       <button class="btn btn-outline" id="exportOptionsBtn" title="Export Options" disabled style="flex: 1; padding: 6px;">
         📥 Export
       </button>
-      <button class="btn btn-outline" id="openDesktopBtn" title="Open in Desktop Recorder" disabled style="flex: 1; padding: 6px;">
+      <button class="btn btn-outline" id="openDesktopBtn" title="Open in Desktop" disabled style="flex: 1; padding: 6px;">
         🖥️ Desktop
       </button>
     </div>
@@ -1328,7 +1328,7 @@
 
     <div class="actions-container">
       <div class="actions-header">
-        <span>Recorded Steps</span>
+        <span>Traced Steps</span>
         <span id="liveCount">0 actions</span>
       </div>
       <div class="actions-list" id="actionsList">
@@ -1880,7 +1880,7 @@
         <span>Generated Test Script</span>
         <span id="scriptLang">Python</span>
       </div>
-      <pre class="script-preview" id="scriptPreview">// Record actions and click Generate to see script...</pre>
+      <pre class="script-preview" id="scriptPreview">// Trace actions and click Generate to see script...</pre>
     </div>
 
     <!-- POM Classes Section -->
@@ -2088,13 +2088,13 @@
 
     <!-- Save & Continue Actions -->
     <div class="settings-section">
-      <div class="section-title">💾 Save Recording</div>
+      <div class="section-title">💾 Save Trace</div>
       <p style="font-size: 10px; color: rgba(255,255,255,0.5); margin-bottom: 8px;">
-        Recording is auto-saved. Use Trace page for approval workflow.
+        Trace is auto-saved. Use Trace page for approval workflow.
       </p>
       <div class="save-options" style="display: flex; flex-direction: column; gap: 8px;">
         <button class="btn btn-primary" id="saveWithAssertionsBtn" style="width: 100%;" disabled>
-          💾 Update Recording with Assertions
+          💾 Update Trace with Assertions
         </button>
         <button class="btn btn-success" id="viewInTraceBtn" style="width: 100%;">
           📋 View in Trace Page →
@@ -2321,7 +2321,7 @@
         
         <!-- Recording Options -->
         <div class="settings-section">
-          <div class="section-title">🎥 Recording Options</div>
+          <div class="section-title">🔍 Trace Options</div>
           <div class="toggle-row">
             <span class="toggle-label">Auto-scroll to elements</span>
             <label class="toggle-switch">

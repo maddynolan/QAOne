@@ -562,7 +562,7 @@ class SidebarController {
     // Update recording status
     if (recording) {
       this.elements.recordingDot.classList.add('active');
-      this.elements.statusText.textContent = this.state.paused ? 'Paused' : 'Recording...';
+      this.elements.statusText.textContent = this.state.paused ? 'Paused' : 'Tracing...';
       this.elements.startBtn.classList.add('hidden');
       this.elements.stopBtn.classList.remove('hidden');
     } else {
@@ -882,7 +882,7 @@ class SidebarController {
         }
       }).catch(() => {});
       
-      this.addLog('success', 'Recording started');
+      this.addLog('success', 'Trace started');
     } catch (error) {
       console.error('[Sidebar] Failed to start recording:', error);
       this.addLog('error', 'Failed to start recording');
@@ -924,7 +924,7 @@ class SidebarController {
 
       this.updateUI();
       this.updateProtocolActionsVisibility();
-      this.addLog('info', `Recording stopped. ${this.state.actions.length} actions captured.`);
+      this.addLog('info', `Trace stopped. ${this.state.actions.length} actions captured.`);
       
       // Show network summary if protocol data was captured
       if (response?.networkSummary) {
@@ -1658,7 +1658,7 @@ Date: ${new Date().toISOString()}
             actions: exportData.actions,
             metadata: {
               ...exportData.metadata,
-              title: this.elements.testCaseName.value || 'Recorded Test'
+              title: this.elements.testCaseName.value || 'Traced Test'
             },
             options: { language: format }
           })
@@ -1676,7 +1676,7 @@ Date: ${new Date().toISOString()}
           body: JSON.stringify({
             actions: exportData.actions,
             format: format,
-            testName: this.elements.testCaseName.value || 'Recorded Test',
+            testName: this.elements.testCaseName.value || 'Traced Test',
             appType: this.options.appType
           })
         });

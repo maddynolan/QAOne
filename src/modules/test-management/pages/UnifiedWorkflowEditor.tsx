@@ -607,7 +607,7 @@ export default function UnifiedWorkflowEditor() {
             setTestCase(prev => ({
               ...prev,
               id: parsed.id || prev.id,
-              name: parsed.name || 'Recorded Test',
+              name: parsed.name || 'Traced Test',
               description: parsed.description || '',
               steps: cleanedSteps,
               settings: {
@@ -640,7 +640,7 @@ export default function UnifiedWorkflowEditor() {
           
           setTestCase(prev => ({
             ...prev,
-            name: parsed.name || parsed.workflowName || parsed.title || 'Recorded Test',
+            name: parsed.name || parsed.workflowName || parsed.title || 'Traced Test',
             description: parsed.description || '',
             steps,
             settings: {
@@ -1815,16 +1815,16 @@ export default function UnifiedWorkflowEditor() {
       // Also save the full test case for potential auto-save
       localStorage.setItem('pendingTestCase', JSON.stringify(savedTestCase));
       
-      toast.success(`Opening recorder for step ${stepIndex + 1}: ${step.name}`, {
-        description: 'Record actions to automate this step',
+      toast.success(`Opening trace for step ${stepIndex + 1}: ${step.name}`, {
+        description: 'Trace actions to automate this step',
       });
 
-      // Navigate to recorder — use react-router navigate for Electron HashRouter compat
+      // Navigate to trace page — use react-router navigate for Electron HashRouter compat
       navigate(`/playwright-recorder?mode=existing&stepId=${stepId}&stepIndex=${stepIndex}`);
 
     } catch (err) {
-      console.error('Failed to setup recording:', err);
-      toast.error('Failed to open recorder');
+      console.error('Failed to setup trace:', err);
+      toast.error('Failed to open trace');
     }
   }, [testCase, navigate]);
 
@@ -2703,10 +2703,10 @@ export default function UnifiedWorkflowEditor() {
     // Save to localStorage for the recorder to pick up
     localStorage.setItem('flowstral_rerecord_context', JSON.stringify(rerecordContext));
     
-    // Navigate to recorder tab
+    // Navigate to trace page
     navigate('/playwright-recorder?mode=rerecord');
-    
-    toast.info('📹 Opening Recorder... Re-record the step and save to update the test case.');
+
+    toast.info('🔍 Opening Smart Trace... Re-trace the step and save to update the test case.');
   }, [testCase, savedTestCaseId, navigate]);
 
   /**
@@ -3319,7 +3319,7 @@ export default function UnifiedWorkflowEditor() {
               <div className="p-2 border border-border rounded-md bg-secondary/50">
                 <div className="flex items-center gap-2 mb-1">
                   <TestTube className="h-3.5 w-3.5 text-blue-500" />
-                  <span className="text-[11px] font-medium text-foreground truncate">{testCase.name || 'Recorded Test'}</span>
+                  <span className="text-[11px] font-medium text-foreground truncate">{testCase.name || 'Traced Test'}</span>
                 </div>
                 <div className="text-[10px] text-muted-foreground">
                   {testCase.steps.length} step{testCase.steps.length !== 1 ? 's' : ''} • {testCase.steps.filter(s => s.type.startsWith('assert')).length} verifications

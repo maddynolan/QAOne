@@ -25,7 +25,7 @@ export default function DesktopRequiredCard() {
             </div>
             <h2 className="text-2xl font-bold mb-3 text-foreground">Desktop App Required</h2>
             <p className="text-muted-foreground mb-6">
-              The Smart Recorder requires the Flowstral Desktop app for browser automation capabilities.
+              Smart Trace requires the Flowstral Desktop app for browser automation capabilities.
             </p>
 
             {/* Steps */}
@@ -48,8 +48,8 @@ export default function DesktopRequiredCard() {
               <div className="flex items-start gap-3">
                 <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">3</div>
                 <div>
-                  <p className="text-sm font-medium text-foreground">Click Record</p>
-                  <p className="text-xs text-muted-foreground">Browser launches automatically, start recording!</p>
+                  <p className="text-sm font-medium text-foreground">Click Trace</p>
+                  <p className="text-xs text-muted-foreground">Browser launches automatically, start tracing!</p>
                 </div>
               </div>
             </div>

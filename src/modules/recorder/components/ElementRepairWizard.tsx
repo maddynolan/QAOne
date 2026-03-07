@@ -885,7 +885,7 @@ export default function ElementRepairWizard({
                 <p className="text-sm text-amber-400 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 flex-shrink-0" />
                   <span>
-                    <strong>Browser not open.</strong> Start recording or open a page first, 
+                    <strong>Browser not open.</strong> Start tracing or open a page first,
                     or use the <strong>Manual Edit</strong> tab.
                   </span>
                 </p>

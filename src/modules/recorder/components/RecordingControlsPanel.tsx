@@ -317,7 +317,7 @@ export default function RecordingControlsPanel({
                 ) : (
                   <Circle className="h-4 w-4 mr-2 fill-current" />
                 )}
-                Start Recording
+                Start Trace
               </Button>
               {!selectedTestCase ? (
                 <Button
