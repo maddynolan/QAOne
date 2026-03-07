@@ -78,7 +78,7 @@ async def import_api_specification(request: APIImportRequest):
         }
     except Exception as e:
         logger.error(f"Error importing API spec: {e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=f"Failed to import API specification: {str(e)}")
+        raise HTTPException(status_code=400, detail="Failed to import API specification")
 
 
 @router.post("/spec/file")
@@ -144,7 +144,7 @@ async def import_api_specification_file(
         }
     except Exception as e:
         logger.error(f"Error importing API spec file: {e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=f"Failed to import API specification file: {str(e)}")
+        raise HTTPException(status_code=400, detail="Failed to import API specification file")
 
 
 @router.post("/generate-tests")
@@ -419,11 +419,7 @@ async def generate_api_tests(request: APITestGenerationRequest):
         logger.error(f"Error generating API tests: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail={
-                "error": "Failed to generate API tests",
-                "message": str(e),
-                "type": type(e).__name__
-            }
+            detail="Failed to generate API tests"
         )
 
 
@@ -480,7 +476,7 @@ async def import_har(body: dict):
         }
     except Exception as e:
         logger.error(f"Error importing HAR: {e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=f"Failed to import HAR: {str(e)}")
+        raise HTTPException(status_code=400, detail="Failed to import HAR")
 
 
 class ExportPostmanRequest(BaseModel):
@@ -561,7 +557,7 @@ async def export_postman(request: ExportPostmanRequest):
         raise
     except Exception as e:
         logger.error(f"Error exporting Postman: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to export Postman collection")
 
 
 @router.post("/export-openapi")
@@ -614,7 +610,7 @@ async def export_openapi_skeleton(request: ExportOpenAPIRequest):
         }
     except Exception as e:
         logger.error(f"Error exporting OpenAPI: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to export OpenAPI specification")
 
 
 @router.post("/export-har")
@@ -675,7 +671,7 @@ async def export_har_from_requests(request: ExportHARRequest):
         }
     except Exception as e:
         logger.error(f"Error exporting HAR: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to export HAR")
 
 
 @router.get("/formats")
@@ -702,21 +698,27 @@ async def fetch_url_proxy(url: str):
     Proxy endpoint to fetch external URLs server-side, avoiding CORS issues.
     Used by the Import tab to fetch OpenAPI/Swagger/WSDL/Postman specs from URLs.
     """
-    if not url or not url.startswith(("http://", "https://")):
-        raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
-    
-    import httpx
-    
+    # SEC-INPUT-004: SSRF prevention — validate URL before fetching
+    from app.utils.url_validator import validate_url, sanitize_url_for_logging
     try:
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, verify=False) as client:
+        validate_url(url)
+    except ValueError as e:
+        logger.error(f"Invalid URL for spec fetch: {e}")
+        raise HTTPException(status_code=400, detail="Invalid URL provided")
+
+    import httpx
+
+    try:
+        # SEC-DATA-002: SSL verification enabled (removed verify=False)
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             response = await client.get(url, headers={
                 "Accept": "application/json, application/xml, text/xml, text/yaml, text/plain, */*",
                 "User-Agent": "Flowstral-API-Testing/1.0",
             })
-            
+
             content_type = response.headers.get("content-type", "")
             text = response.text
-            
+
             return {
                 "status": "success",
                 "content": text,
@@ -725,7 +727,8 @@ async def fetch_url_proxy(url: str):
                 "url": str(response.url),
             }
     except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail=f"Timeout fetching URL: {url}")
+        raise HTTPException(status_code=504, detail="Timeout fetching the specified URL")
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch URL: {str(e)}")
+        logger.error(f"Failed to fetch URL {sanitize_url_for_logging(url)}: {e}")
+        raise HTTPException(status_code=502, detail="Failed to fetch the specified URL")
 

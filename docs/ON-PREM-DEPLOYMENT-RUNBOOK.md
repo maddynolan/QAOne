@@ -23,6 +23,8 @@
 12. [Monitoring Setup](#monitoring-setup)
 13. [Troubleshooting](#troubleshooting)
 14. [Upgrade Procedure](#upgrade-procedure)
+15. [Pre-Deployment Security Checklist](#pre-deployment-security-checklist)
+16. [Secret Rotation Schedule](#secret-rotation-schedule)
 
 ---
 
@@ -148,8 +150,9 @@ POSTGRES_PASSWORD=CHANGE_ME_strong_password_here
 POSTGRES_DB=qaai
 
 # --- MinIO (S3-compatible storage) ---
-MINIO_ROOT_USER=minioadmin
-MINIO_ROOT_PASSWORD=CHANGE_ME_minio_secret_here
+# WARNING: NEVER use default MinIO credentials in production
+MINIO_ROOT_USER=<GENERATE: openssl rand -hex 16>
+MINIO_ROOT_PASSWORD=<GENERATE: openssl rand -base64 32>
 
 # --- AI / LLM Configuration ---
 # AI is OFF by default. No AI keys are required for deployment.
@@ -167,8 +170,14 @@ DEFAULT_LLM_PROVIDER=openai
 ENCRYPTION_KEY=CHANGE_ME_generate_fernet_key
 
 # --- JWT Authentication ---
-JWT_SECRET=CHANGE_ME_generate_with_openssl_rand_hex_32
+JWT_SECRET_KEY=CHANGE_ME_generate_with_openssl_rand_hex_32
 JWT_ALGORITHM=HS256
+
+# --- Application ---
+APP_ENV=production
+INTERNAL_SERVICE_KEY=<generate with: openssl rand -hex 32>
+RATE_LIMIT_BACKEND=redis
+UPLOAD_MAX_SIZE_MB=50
 
 # --- Frontend Build-Time Variable ---
 # Set to your server's public URL or IP
@@ -184,8 +193,8 @@ Generate strong passwords and keys:
 ```bash
 # Generate random passwords
 openssl rand -hex 16   # Use for POSTGRES_PASSWORD
-openssl rand -hex 16   # Use for MINIO_ROOT_PASSWORD
-openssl rand -hex 32   # Use for JWT_SECRET
+openssl rand -base64 32  # Use for MINIO_ROOT_PASSWORD
+openssl rand -hex 32   # Use for JWT_SECRET_KEY
 
 # Generate Fernet key for BYOK API key encryption
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -205,6 +214,39 @@ This builds three images:
 - `qaai-backend` from `backend/Dockerfile` (Python 3.10, non-root user)
 - `qaai-frontend` from `Dockerfile.frontend` (Node 20 build stage, nginx:alpine serve stage)
 - `qaai-test-worker` from `backend/Dockerfile.worker` (Playwright base with browser binaries)
+
+### Step 3.5: Harden Docker Compose Security Contexts
+
+Add `security_opt` to **every service** in `docker-compose.full.yml` to prevent privilege escalation:
+
+```yaml
+# Add to each service definition (backend, frontend, postgres, redis, minio, test-worker):
+services:
+  backend:
+    # ... existing config ...
+    security_opt:
+      - no-new-privileges:true
+  frontend:
+    # ... existing config ...
+    security_opt:
+      - no-new-privileges:true
+  postgres:
+    # ... existing config ...
+    security_opt:
+      - no-new-privileges:true
+  redis:
+    # ... existing config ...
+    security_opt:
+      - no-new-privileges:true
+  minio:
+    # ... existing config ...
+    security_opt:
+      - no-new-privileges:true
+  test-worker:
+    # ... existing config ...
+    security_opt:
+      - no-new-privileges:true
+```
 
 ### Step 4: Start All Services
 
@@ -259,7 +301,7 @@ docker exec qaai-redis redis-cli ping
 
 ```bash
 # Install MinIO client
-docker exec qaai-minio mc alias set local http://localhost:9000 minioadmin minioadmin
+docker exec qaai-minio mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
 
 # Create the artifacts bucket
 docker exec qaai-minio mc mb local/qa-artifacts
@@ -317,10 +359,12 @@ kubectl create namespace flowstral
 # Create secrets for sensitive values
 kubectl create secret generic qaai-secrets \
   --namespace flowstral \
-  --from-literal=JWT_SECRET="$(openssl rand -hex 32)" \
+  --from-literal=JWT_SECRET_KEY="$(openssl rand -hex 32)" \
   --from-literal=POSTGRES_PASSWORD="$(openssl rand -hex 16)" \
   --from-literal=MINIO_ROOT_PASSWORD="$(openssl rand -hex 16)" \
-  --from-literal=ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+  --from-literal=REDIS_PASSWORD="$(openssl rand -hex 16)" \
+  --from-literal=ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" \
+  --from-literal=INTERNAL_SERVICE_KEY="$(openssl rand -hex 32)"
   # Optional: Add server-provided AI keys as fallbacks (AI is OFF by default)
   # --from-literal=OPENAI_API_KEY='sk-your-openai-api-key' \
   # --from-literal=ANTHROPIC_API_KEY='sk-ant-your-anthropic-key'
@@ -386,7 +430,7 @@ postgresql:
 minio:
   enabled: true
   auth:
-    rootUser: minioadmin
+    rootUser: ""               # Pulled from qaai-secrets
     rootPassword: ""
     existingSecret: qaai-secrets
   persistence:
@@ -399,7 +443,10 @@ minio:
 redis:
   enabled: true
   auth:
-    enabled: false
+    enabled: true
+    password: ""               # Pulled from qaai-secrets
+    existingSecret: qaai-secrets
+    existingSecretPasswordKey: REDIS_PASSWORD
   master:
     persistence:
       enabled: true
@@ -419,11 +466,15 @@ backend:
   env:
     DATABASE_URL: "postgresql://qaai:$(POSTGRES_PASSWORD)@qaai-postgresql:5432/qaai"
     S3_ENDPOINT_URL: "http://qaai-minio:9000"
-    S3_ACCESS_KEY: "minioadmin"
+    S3_ACCESS_KEY: ""             # Set to match MINIO_ROOT_USER from qaai-secrets
     S3_BUCKET_NAME: "qa-artifacts"
-    REDIS_URL: "redis://qaai-redis-master:6379"
+    REDIS_URL: "redis://:$(REDIS_PASSWORD)@qaai-redis-master:6379"
     DEFAULT_LLM_PROVIDER: "openai"
     TRACK_LLM_USAGE: "true"
+    APP_ENV: "production"
+    INTERNAL_SERVICE_KEY: ""     # Pulled from qaai-secrets
+    RATE_LIMIT_BACKEND: "redis"
+    UPLOAD_MAX_SIZE_MB: "50"
   resources:
     requests:
       memory: "2Gi"
@@ -692,8 +743,14 @@ POSTGRES_DB=qaai
 AIR_GAPPED_MODE=true
 
 # --- JWT ---
-JWT_SECRET=CHANGE_ME_generate_a_long_random_string
+JWT_SECRET_KEY=CHANGE_ME_generate_a_long_random_string
 JWT_ALGORITHM=HS256
+
+# --- Application ---
+APP_ENV=production
+INTERNAL_SERVICE_KEY=<generate with: openssl rand -hex 32>
+RATE_LIMIT_BACKEND=redis
+UPLOAD_MAX_SIZE_MB=50
 
 # --- No cloud API keys needed ---
 # OPENAI_API_KEY is not set (Ollama provides LLM)
@@ -834,8 +891,8 @@ DATABASE_URL=postgresql://qaai:password@postgres.internal:5432/qaai
 
 # Storage (on-prem MinIO)
 S3_ENDPOINT_URL=http://minio.internal:9000
-S3_ACCESS_KEY=minioadmin
-S3_SECRET_KEY=<strong-password>
+S3_ACCESS_KEY=<same as MINIO_ROOT_USER>
+S3_SECRET_KEY=<same as MINIO_ROOT_PASSWORD>
 S3_BUCKET_NAME=qa-artifacts
 
 # Redis (on-prem)
@@ -845,8 +902,14 @@ REDIS_URL=redis://redis.internal:6379
 CORS_ORIGINS=https://app.flowstral.com,https://customer-app.flowstral.com
 
 # JWT and encryption
-JWT_SECRET=<generate-64-char-hex>
+JWT_SECRET_KEY=<generate-64-char-hex>
 ENCRYPTION_KEY=<generate-fernet-key>
+
+# Application
+APP_ENV=production
+INTERNAL_SERVICE_KEY=<generate with: openssl rand -hex 32>
+RATE_LIMIT_BACKEND=redis
+UPLOAD_MAX_SIZE_MB=50
 
 # AI -- keys stay on customer infrastructure
 # OPENAI_API_KEY=sk-... (optional server fallback)
@@ -921,11 +984,11 @@ This ensures AI API keys never leave the customer's infrastructure boundary.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql://qaai:qaai_password@postgres:5432/qaai` | PostgreSQL connection string |
+| `DATABASE_URL` | `postgresql://qaai:<password>@postgres:5432/qaai` | PostgreSQL connection string |
 | `POSTGRES_USER` | `qaai` | PostgreSQL username |
-| `POSTGRES_PASSWORD` | `qaai_password` | PostgreSQL password (**change in production**) |
+| `POSTGRES_PASSWORD` | none | PostgreSQL password (`<GENERATE: openssl rand -base64 32>`) (**required**) |
 | `POSTGRES_DB` | `qaai` | PostgreSQL database name |
-| `JWT_SECRET` | none | Secret key for JWT token signing (**required**) |
+| `JWT_SECRET_KEY` | none | Secret key for JWT token signing (**required**) |
 | `JWT_ALGORITHM` | `HS256` | JWT signing algorithm |
 
 ### Storage Variables
@@ -933,12 +996,12 @@ This ensures AI API keys never leave the customer's infrastructure boundary.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `S3_ENDPOINT_URL` | `http://minio:9000` | MinIO/S3 endpoint |
-| `S3_ACCESS_KEY` | `minioadmin` | MinIO access key |
-| `S3_SECRET_KEY` | `minioadmin` | MinIO secret key (**change in production**) |
+| `S3_ACCESS_KEY` | none | MinIO access key (`<same as MINIO_ROOT_USER>`) |
+| `S3_SECRET_KEY` | none | MinIO secret key (`<same as MINIO_ROOT_PASSWORD>`) |
 | `S3_BUCKET_NAME` | `qa-artifacts` | Bucket for test artifacts |
 | `REDIS_URL` | `redis://redis:6379` | Redis connection string |
-| `MINIO_ROOT_USER` | `minioadmin` | MinIO console username |
-| `MINIO_ROOT_PASSWORD` | `minioadmin` | MinIO console password (**change in production**) |
+| `MINIO_ROOT_USER` | none | MinIO console username (`<GENERATE: openssl rand -hex 16>`) |
+| `MINIO_ROOT_PASSWORD` | none | MinIO console password (`<GENERATE: openssl rand -base64 32>`) |
 
 ### LLM Provider Variables
 
@@ -1022,7 +1085,7 @@ server {
     ssl_certificate /etc/nginx/certs/flowstral.crt;
     ssl_certificate_key /etc/nginx/certs/flowstral.key;
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_ciphers 'ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM';
     ssl_prefer_server_ciphers on;
 
     root /usr/share/nginx/html;
@@ -1081,6 +1144,8 @@ frontend:
   ports:
     - "80:80"
     - "443:443"
+  security_opt:
+    - no-new-privileges:true
 ```
 
 ### Option C: Corporate CA Certificate
@@ -1145,8 +1210,8 @@ postgresql://<user>:<password>@<host>:<port>/<database>
 ```
 
 Examples:
-- Docker Compose: `postgresql://qaai:qaai_password@postgres:5432/qaai`
-- Kubernetes: `postgresql://qaai:qaai_password@qaai-postgresql:5432/qaai`
+- Docker Compose: `postgresql://qaai:<GENERATE: openssl rand -base64 32>@postgres:5432/qaai`
+- Kubernetes: `postgresql://qaai:<from-qaai-secrets>@qaai-postgresql:5432/qaai`
 - External DB: `postgresql://qaai:password@db.yourcompany.com:5432/qaai?sslmode=require`
 
 ### Using an External PostgreSQL Database
@@ -1275,13 +1340,13 @@ kubectl exec -i -n flowstral deploy/qaai-postgresql -- \
 
 ```bash
 # Install mc (MinIO Client) if not available
-docker exec qaai-minio mc alias set local http://localhost:9000 minioadmin minioadmin
+docker exec qaai-minio mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
 
 # Mirror the artifacts bucket to a local directory
 docker exec qaai-minio mc mirror local/qa-artifacts /backup/minio-artifacts
 
 # Or use mc from outside the container
-mc alias set flowstral http://localhost:9000 minioadmin minioadmin
+mc alias set flowstral http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
 mc mirror flowstral/qa-artifacts ./backup/minio-artifacts/
 ```
 
@@ -1332,7 +1397,7 @@ echo "  Redis: $(du -h "${BACKUP_PATH}/redis.rdb" | cut -f1)"
 
 # 3. MinIO artifacts
 echo "[$(date)] Backing up MinIO artifacts..."
-docker exec qaai-minio mc alias set local http://localhost:9000 minioadmin minioadmin 2>/dev/null
+docker exec qaai-minio mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD 2>/dev/null
 docker exec qaai-minio mc mirror --quiet local/qa-artifacts /tmp/minio-backup
 docker cp qaai-minio:/tmp/minio-backup "${BACKUP_PATH}/minio-artifacts"
 docker exec qaai-minio rm -rf /tmp/minio-backup
@@ -1669,7 +1734,7 @@ kubectl scale deployment qaai-backend -n flowstral --replicas=4
 
 ```bash
 # Create the bucket manually
-docker exec qaai-minio mc alias set local http://localhost:9000 minioadmin minioadmin
+docker exec qaai-minio mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
 docker exec qaai-minio mc mb local/qa-artifacts --ignore-existing
 docker exec qaai-minio mc ls local/
 ```
@@ -1870,3 +1935,36 @@ helm rollback qaai <revision-number> --namespace flowstral
 | K8s: Scale backend | `kubectl scale deployment qaai-backend -n flowstral --replicas=4` |
 | K8s: Helm upgrade | `helm upgrade qaai ./helm/qaai -n flowstral -f values-production.yaml` |
 | K8s: Helm rollback | `helm rollback qaai <revision> -n flowstral` |
+
+---
+
+## Pre-Deployment Security Checklist
+
+- [ ] All default credentials replaced (MinIO, PostgreSQL, Redis)
+- [ ] JWT_SECRET_KEY set to cryptographically random value
+- [ ] ENCRYPTION_KEY set (Fernet key for BYOK encryption)
+- [ ] APP_ENV=production
+- [ ] TLS certificates installed and configured
+- [ ] SSL cipher suite uses ECDHE+AESGCM only
+- [ ] All 7 security headers configured in nginx
+- [ ] Redis authentication enabled with strong password
+- [ ] Database SSL/TLS enabled
+- [ ] Container security contexts applied (non-root, no-new-privileges)
+- [ ] Kubernetes NetworkPolicy applied (if K8s)
+- [ ] Firewall rules configured (only 80, 443, 22 exposed)
+- [ ] Backup strategy configured
+- [ ] Monitoring/alerting configured
+- [ ] Log aggregation/SIEM configured
+- [ ] Key rotation schedule documented (JWT: 90d, Fernet: 180d, DB: 90d)
+
+---
+
+## Secret Rotation Schedule
+
+| Secret | Rotation Interval | Procedure |
+|--------|------------------|-----------|
+| JWT_SECRET_KEY | 90 days | Generate new key, deploy, old tokens expire naturally (15min) |
+| ENCRYPTION_KEY | 180 days | Re-encrypt stored keys with new Fernet key before rotating |
+| POSTGRES_PASSWORD | 90 days | Update in database, then update env var and restart |
+| MINIO credentials | 90 days | Create new access key, migrate, delete old |
+| REDIS_PASSWORD | 90 days | Update Redis config, then update env var and restart |

@@ -11,18 +11,20 @@ Endpoints:
 - POST /api/a11y/batch-scan - Scan multiple URLs
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, HttpUrl
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 import logging
-import uuid
+import secrets
 import asyncio
 
 # Import our new scanner
 from app.services.accessibility.axe_core_scanner import get_scanner
 from app.services.accessibility.accessibility_report_generator import get_report_generator
+from app.utils.url_validator import validate_url, sanitize_url_for_logging
+from app.middleware.rbac_middleware import require_permission
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +60,8 @@ class ScanResponse(BaseModel):
 
 
 @router.post("/scan", response_model=ScanResponse)
-async def scan_url(request: ScanRequest):
+@require_permission("accessibility:execute")
+async def scan_url(request: Request, body: ScanRequest):
     """
     Scan a URL for accessibility issues using real axe-core.
     
@@ -69,42 +72,53 @@ async def scan_url(request: ScanRequest):
         - summary: Quick overview of issues found
         - report_url: URL to get full HTML report
     """
-    scan_id = str(uuid.uuid4())[:8]
-    
+    # SSRF prevention: validate user-supplied URL
     try:
-        logger.info(f"Starting accessibility scan {scan_id} for {request.url}")
-        
+        validate_url(body.url)
+    except ValueError as e:
+        logger.error(f"Invalid URL for accessibility scan: {e}")
+        raise HTTPException(status_code=400, detail="Invalid URL provided for accessibility scan")
+
+    scan_id = secrets.token_urlsafe(12)
+
+    try:
+        logger.info(f"Starting accessibility scan {scan_id} for {sanitize_url_for_logging(body.url)}")
+
         scanner = get_scanner()
-        
+
         # Run the real scan
         result = await scanner.scan_url(
-            url=request.url,
-            wcag_level=request.wcag_level,
-            include_passes=request.include_passes,
-            wait_for_selector=request.wait_for_selector
+            url=body.url,
+            wcag_level=body.wcag_level,
+            include_passes=body.include_passes,
+            wait_for_selector=body.wait_for_selector
         )
-        
+
         # Store result for later retrieval
         _scan_results[scan_id] = result
-        
+
         logger.info(f"Scan {scan_id} complete: {result['summary']['total_violations']} issues found")
-        
+
         return ScanResponse(
             scan_id=scan_id,
             status=result["summary"]["status"],
-            url=request.url,
-            wcag_level=request.wcag_level,
+            url=body.url,
+            wcag_level=body.wcag_level,
             summary=result["summary"],
             report_url=f"/api/a11y/report/{scan_id}"
         )
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Scan failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
+        logger.error(f"Scan failed for {scan_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Accessibility scan failed")
 
 
 @router.get("/report/{scan_id}")
+@require_permission("accessibility:read")
 async def get_report(
+    request: Request,
     scan_id: str,
     format: str = "html"
 ):
@@ -141,7 +155,9 @@ async def get_report(
 
 
 @router.get("/report/{scan_id}/download")
+@require_permission("accessibility:read")
 async def download_report(
+    request: Request,
     scan_id: str,
     format: str = "html"
 ):
@@ -182,8 +198,10 @@ async def download_report(
 
 
 @router.post("/batch-scan")
+@require_permission("accessibility:execute")
 async def batch_scan(
-    request: BatchScanRequest,
+    request: Request,
+    body: BatchScanRequest,
     background_tasks: BackgroundTasks
 ):
     """
@@ -192,15 +210,29 @@ async def batch_scan(
     Scans are performed concurrently with a configurable limit.
     Returns a batch ID to check progress.
     """
-    batch_id = str(uuid.uuid4())[:8]
-    
+    # Batch size limits
+    if len(body.urls) > 20:
+        raise HTTPException(status_code=400, detail="batch scan limited to 20 URLs")
+    if body.max_concurrent > 5:
+        raise HTTPException(status_code=400, detail="max_concurrent cannot exceed 5")
+
+    # SSRF prevention: validate all user-supplied URLs
+    for url in body.urls:
+        try:
+            validate_url(url)
+        except ValueError as e:
+            logger.error(f"Invalid URL in batch scan: {e}")
+            raise HTTPException(status_code=400, detail="Invalid URL provided in batch scan")
+
+    batch_id = secrets.token_urlsafe(12)
+
     # Store batch info
     _scan_results[f"batch_{batch_id}"] = {
         "status": "in_progress",
-        "urls": request.urls,
+        "urls": body.urls,
         "completed": [],
         "failed": [],
-        "total": len(request.urls),
+        "total": len(body.urls),
         "started_at": datetime.utcnow().isoformat()
     }
     
@@ -208,21 +240,22 @@ async def batch_scan(
     background_tasks.add_task(
         _process_batch,
         batch_id,
-        request.urls,
-        request.wcag_level,
-        request.max_concurrent
+        body.urls,
+        body.wcag_level,
+        body.max_concurrent
     )
-    
+
     return {
         "batch_id": batch_id,
         "status": "in_progress",
-        "total_urls": len(request.urls),
+        "total_urls": len(body.urls),
         "progress_url": f"/api/a11y/batch/{batch_id}"
     }
 
 
 @router.get("/batch/{batch_id}")
-async def get_batch_status(batch_id: str):
+@require_permission("accessibility:read")
+async def get_batch_status(request: Request, batch_id: str):
     """Get status of a batch scan"""
     key = f"batch_{batch_id}"
     if key not in _scan_results:
@@ -247,18 +280,19 @@ async def _process_batch(
         async with semaphore:
             try:
                 result = await scanner.scan_url(url, wcag_level=wcag_level)
-                scan_id = str(uuid.uuid4())[:8]
+                scan_id = secrets.token_urlsafe(12)
                 _scan_results[scan_id] = result
-                
+
                 _scan_results[key]["completed"].append({
                     "url": url,
                     "scan_id": scan_id,
                     "summary": result["summary"]
                 })
             except Exception as e:
+                logger.error(f"Batch scan failed for URL in batch {batch_id}: {e}")
                 _scan_results[key]["failed"].append({
                     "url": url,
-                    "error": str(e)
+                    "error": "Scan failed for this URL"
                 })
     
     tasks = [scan_one(url) for url in urls]
@@ -269,21 +303,29 @@ async def _process_batch(
 
 
 @router.get("/quick-check")
-async def quick_check(url: str, wcag_level: str = "AA"):
+@require_permission("accessibility:execute")
+async def quick_check(request: Request, url: str, wcag_level: str = "AA"):
     """
     Quick accessibility check - returns summary only, no full report.
     
     Faster than full scan, good for CI/CD pipelines.
     """
+    # SSRF prevention: validate user-supplied URL
+    try:
+        validate_url(url)
+    except ValueError as e:
+        logger.error(f"Invalid URL for quick check: {e}")
+        raise HTTPException(status_code=400, detail="Invalid URL provided for accessibility check")
+
     try:
         scanner = get_scanner()
         result = await scanner.scan_url(url, wcag_level=wcag_level, include_passes=False)
-        
+
         summary = result["summary"]
-        
+
         # Determine pass/fail based on critical issues
         passed = summary["critical"] == 0 and summary["serious"] == 0
-        
+
         return {
             "url": url,
             "wcag_level": wcag_level,
@@ -297,7 +339,9 @@ async def quick_check(url: str, wcag_level: str = "AA"):
             },
             "recommendation": "PASS - No critical or serious issues" if passed else "FAIL - Fix critical/serious issues"
         }
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Quick check failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Accessibility quick check failed")

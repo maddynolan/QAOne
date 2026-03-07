@@ -8,7 +8,7 @@ Endpoints for:
 """
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Body
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 import base64
@@ -16,6 +16,15 @@ import tempfile
 import os
 import logging
 
+from app.utils.url_validator import validate_url
+
+# Security constants
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50MB
+ALLOWED_PDF_EXTENSIONS = {'.pdf'}
+ALLOWED_FILE_EXTENSIONS = {'.csv', '.xlsx', '.xls', '.json', '.xml', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.txt'}
+
+# Credentials that MUST NOT be logged
+_CREDENTIAL_KEYS = {'client_secret', 'password', 'api_key', 'token', 'secret', 'credentials_json'}
 from app.services.complex_verifications.email_service import (
     EmailVerificationService, EmailProvider, EmailAssertion, get_email_service
 )
@@ -46,13 +55,26 @@ class EmailVerifyRequest(BaseModel):
     """Request to verify an email"""
     provider: Literal["microsoft_365", "gmail"] = Field(..., description="Email provider")
     inbox: str = Field(..., description="Inbox/email address to monitor")
+    # SECURITY: Credentials should ideally be referenced by stored credential ID
+    # via the secrets service (/api/secrets) or BYOK architecture (ai_settings_service.py).
+    # When credentials are passed directly, they are validated but NEVER logged.
     credentials: Dict[str, str] = Field(default={}, description="Provider credentials (or use env vars)")
     subject_filter: Optional[str] = Field(default=None, description="Filter by subject")
     sender_filter: Optional[str] = Field(default=None, description="Filter by sender")
-    timeout_seconds: int = Field(default=60, description="Max time to wait for email")
+    timeout_seconds: int = Field(default=60, ge=5, le=300, description="Max time to wait for email (5-300s)")
     assertions: List[EmailAssertionModel] = Field(default=[], description="Assertions to verify")
     extract_link: Optional[Dict[str, str]] = Field(default=None, description="Extract link: {pattern, store_as}")
     extract_otp: Optional[Dict[str, str]] = Field(default=None, description="Extract OTP: {pattern, store_as}")
+
+    @validator('credentials')
+    def validate_credentials_not_empty_values(cls, v):
+        """Ensure credential values are non-empty strings when provided."""
+        for key, val in v.items():
+            if not isinstance(val, str) or len(val.strip()) == 0:
+                raise ValueError(f"Credential field '{key}' must be a non-empty string")
+            if len(val) > 10000:
+                raise ValueError(f"Credential field '{key}' exceeds maximum length")
+        return v
 
 
 class EmailVerifyResponse(BaseModel):
@@ -143,23 +165,38 @@ async def initialize_email_service(
 ):
     """
     Initialize email verification service with credentials.
-    
+
     For Microsoft 365:
     - client_id: Azure AD App Client ID
     - client_secret: Azure AD App Client Secret
     - tenant_id: Azure AD Tenant ID
     - user_email: Email to monitor (optional, defaults to service account)
-    
+
     For Gmail:
     - credentials_json: Path to OAuth credentials file
     - token_json: Path to save token (optional)
     - user_email: Email to monitor (optional, defaults to 'me')
+
+    SECURITY: In production, credentials should be stored encrypted via the secrets
+    service (/api/secrets) or BYOK architecture (see ai_settings_service.py) and
+    referenced by credential ID. Direct credential passing is supported but credentials
+    are never logged or included in error responses.
     """
+    # Validate credential fields are present and non-empty
+    for key, val in credentials.items():
+        if not isinstance(val, str) or len(val.strip()) == 0:
+            raise HTTPException(status_code=400, detail=f"Credential field '{key}' must be a non-empty string")
+        if len(val) > 10000:
+            raise HTTPException(status_code=400, detail=f"Credential field '{key}' exceeds maximum length")
+
+    # SECURITY: Log only that initialization was attempted, never the credential values
+    logger.info(f"Initializing {provider} email service (credential fields: {list(credentials.keys())})")
+
     service = get_email_service()
     provider_enum = EmailProvider(provider)
-    
+
     success = await service.initialize(provider_enum, credentials)
-    
+
     if success:
         return {"success": True, "message": f"{provider} email service initialized successfully"}
     else:
@@ -265,7 +302,14 @@ async def verify_pdf(request: PDFVerifyRequest):
     - base64: Base64-encoded PDF content
     """
     service = get_pdf_service()
-    
+
+    # SSRF protection: validate URL sources before downloading
+    if request.source_type == "url":
+        try:
+            validate_url(request.source)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid or blocked PDF URL")
+
     # Convert assertions
     assertions = [
         PDFAssertion(
@@ -278,7 +322,7 @@ async def verify_pdf(request: PDFVerifyRequest):
         )
         for a in request.assertions
     ]
-    
+
     # Run verification
     result = await service.verify_pdf(
         pdf_source=request.source,
@@ -315,13 +359,24 @@ async def verify_pdf_upload(
     import json
     
     service = get_pdf_service()
-    
+
+    # Validate file type
+    ext = os.path.splitext(file.filename or '')[1].lower()
+    if ext not in ALLOWED_PDF_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Invalid file type '{ext}'. Only PDF files are accepted.")
+
+    # Read and validate file size
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=400, detail=f"File exceeds maximum allowed size of {MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
+    if len(content) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
     # Save uploaded file to temp
     with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as f:
-        content = await file.read()
         f.write(content)
         temp_path = f.name
-    
+
     try:
         # Parse JSON form fields
         assertions_list = json.loads(assertions)
@@ -378,7 +433,14 @@ async def parse_pdf(
     """
     service = get_pdf_service()
     temp_file = None
-    
+
+    # SSRF protection: validate URL sources before downloading
+    if source_type == "url":
+        try:
+            validate_url(source)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid or blocked PDF URL")
+
     try:
         # Get PDF file
         if source_type == "url":
@@ -488,13 +550,21 @@ async def verify_file_upload(
     import json
     
     service = get_file_service()
-    
-    # Determine file extension from upload
-    ext = os.path.splitext(file.filename or '')[1]
-    
+
+    # Determine file extension from upload and validate
+    ext = os.path.splitext(file.filename or '')[1].lower()
+    if ext and ext not in ALLOWED_FILE_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Invalid file type '{ext}'. Allowed types: {', '.join(sorted(ALLOWED_FILE_EXTENSIONS))}")
+
+    # Read and validate file size
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=400, detail=f"File exceeds maximum allowed size of {MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
+    if len(content) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
     # Save uploaded file to temp
     with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as f:
-        content = await file.read()
         f.write(content)
         temp_path = f.name
     

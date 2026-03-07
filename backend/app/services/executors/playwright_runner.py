@@ -293,6 +293,8 @@ except Exception as e:
                     if test_base and env_base and test_base != env_base and url.startswith(test_base):
                         url = env_base + url[len(test_base):]
                         logger.info(f"Environment rewrite: {data.get('url')} → {url}")
+                if url and (url.strip().lower().startswith('javascript:') or url.strip().lower().startswith('data:')):
+                    raise ValueError(f"Blocked unsafe URL scheme")
                 await self._run_sync(lambda: self.page.goto(url))
             elif 'click' in action:
                 if 'login' in action.lower() and 'button' in action.lower():
@@ -353,6 +355,8 @@ except Exception as e:
                     if test_base and env_base and test_base != env_base and url.startswith(test_base):
                         url = env_base + url[len(test_base):]
                         logger.info(f"Environment rewrite: {data.get('url')} → {url}")
+                if url and (url.strip().lower().startswith('javascript:') or url.strip().lower().startswith('data:')):
+                    raise ValueError(f"Blocked unsafe URL scheme")
                 await self.page.goto(url)
             elif 'click' in action:
                 if 'login' in action.lower() and 'button' in action.lower():

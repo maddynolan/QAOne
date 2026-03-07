@@ -35,7 +35,7 @@ async def get_exploration_report(exploration_run_id: str, project_id: Optional[s
         logger.error(f"Failed to generate report: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Report generation failed: {str(e)}"
+            detail="Report generation failed"
         )
 
 
@@ -94,7 +94,7 @@ async def get_defect_statistics(project_id: Optional[str] = None):
         logger.error(f"Failed to get defect statistics: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to get statistics: {str(e)}"
+            detail="Failed to get statistics"
         )
 
 

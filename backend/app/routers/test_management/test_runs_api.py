@@ -86,7 +86,7 @@ async def get_test_runs(project_id: Optional[str] = None):
         return {"testRuns": list(_test_runs_store.values())}
     except Exception as e:
         logger.error(f"Error getting test runs: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving test runs")
 
 
 @router.get("/{run_id}")
@@ -398,7 +398,7 @@ async def get_test_run(run_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting test run: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving test run")
 
 
 @router.post("")
@@ -575,7 +575,7 @@ async def create_test_run(request: Request):
         raise
     except Exception as e:
         logger.error(f"Error creating test run: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while creating test run")
 
 
 @router.put("/{run_id}")
@@ -626,7 +626,7 @@ async def update_test_run(run_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error updating test run: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while updating test run")
 
 
 @router.post("/{run_id}/start")
@@ -664,7 +664,7 @@ async def start_test_run(run_id: str):
         raise
     except Exception as e:
         logger.error(f"Error starting test run: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while starting test run")
 
 
 @router.post("/{run_id}/execute-selected")
@@ -710,7 +710,7 @@ async def execute_selected_test_cases(run_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error executing selected test cases: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while executing test cases")
 
 
 @router.post("/{run_id}/steps/{step_id}/mark")
@@ -780,7 +780,7 @@ async def mark_test_step(run_id: str, step_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error marking test step: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while marking test step")
 
 
 @router.post("/{run_id}/steps/{step_id}/screenshot")
@@ -802,7 +802,7 @@ async def upload_step_screenshot(run_id: str, step_id: str, request: Request):
         try:
             image_bytes = base64.b64decode(image_base64)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid base64 image: {str(e)}")
+            raise HTTPException(status_code=400, detail="Invalid base64 image data")
         
         # Store as data URL (base64)
         image_url = f"data:{image_type};base64,{image_base64}"
@@ -824,7 +824,7 @@ async def upload_step_screenshot(run_id: str, step_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error uploading step screenshot: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while uploading screenshot")
 
 
 @router.post("/{run_id}/screenshot")
@@ -846,7 +846,7 @@ async def upload_run_screenshot(run_id: str, request: Request):
         try:
             image_bytes = base64.b64decode(image_base64)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid base64 image: {str(e)}")
+            raise HTTPException(status_code=400, detail="Invalid base64 image data")
         
         # Store as data URL (base64)
         image_url = f"data:{image_type};base64,{image_base64}"
@@ -868,7 +868,7 @@ async def upload_run_screenshot(run_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error uploading run screenshot: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while uploading screenshot")
 
 
 @router.post("/{run_id}/steps/{step_id}/link-defect")
@@ -908,7 +908,7 @@ async def link_defect_to_step(run_id: str, step_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error linking defect to step: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while linking defect")
 
 
 @router.post("/{run_id}/link-defect")
@@ -948,7 +948,7 @@ async def link_defect_to_run(run_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error linking defect to run: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while linking defect")
 
 
 @router.delete("/{run_id}")
@@ -976,7 +976,7 @@ async def delete_test_run(run_id: str):
         raise
     except Exception as e:
         logger.error(f"Error deleting test run: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while deleting test run")
 
 
 @router.post("/{run_id}/comments")
@@ -1011,7 +1011,7 @@ async def add_test_run_comment(run_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error adding comment: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while adding comment")
 
 
 @router.get("/{run_id}/comments")

@@ -237,8 +237,9 @@ async def capture_lead(lead: LeadCreate):
         }
         
     except Exception as e:
-        print(f"[Leads] ❌ Failed to capture lead: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import logging as _logging
+        _logging.getLogger(__name__).error(f"Failed to capture lead: {e}")
+        raise HTTPException(status_code=500, detail="Failed to capture lead")
 
 @router.get("/list", response_model=List[dict])
 async def list_leads(

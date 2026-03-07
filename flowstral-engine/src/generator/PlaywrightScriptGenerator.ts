@@ -379,13 +379,16 @@ async function retryAction<T>(
   private generateWaitCode(condition: import('../types').WaitCondition): string {
     switch (condition.type) {
       case 'visible':
-        return `await page.waitForSelector('${condition.customCondition}', { state: 'visible', timeout: ${condition.timeout || 30000} });`;
+        return `await page.waitForSelector('${this.escapeString(condition.customCondition || '')}', { state: 'visible', timeout: ${condition.timeout || 30000} });`;
       case 'hidden':
-        return `await page.waitForSelector('${condition.customCondition}', { state: 'hidden', timeout: ${condition.timeout || 30000} });`;
+        return `await page.waitForSelector('${this.escapeString(condition.customCondition || '')}', { state: 'hidden', timeout: ${condition.timeout || 30000} });`;
       case 'networkidle':
         return `await page.waitForLoadState('networkidle', { timeout: ${condition.timeout || 30000} });`;
       case 'custom':
-        return condition.customCondition || '';
+        if (condition.customCondition) {
+          return `await page.waitForSelector('${this.escapeString(condition.customCondition)}', { timeout: ${condition.timeout || 30000} });`;
+        }
+        return '';
       default:
         return `await page.waitForTimeout(${condition.timeout || 1000});`;
     }

@@ -36,10 +36,12 @@ logging.basicConfig(
     ]
 )
 # Add trace_id to all log records (set by TraceLoggingMiddleware per request)
-from app.middleware.trace_logging_middleware import TraceIdFilter
+# Add PII sanitization filter to prevent accidental PII leakage in logs
+from app.middleware.trace_logging_middleware import TraceIdFilter, PIISanitizationFilter
 _root_logger = logging.getLogger()
 for h in _root_logger.handlers:
     h.addFilter(TraceIdFilter())
+    h.addFilter(PIISanitizationFilter())
 
 # Load environment variables from .env file FIRST, before importing services
 try:
@@ -88,11 +90,41 @@ ollama_service = get_ollama_service()  # Get service instance with environment l
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+def _validate_startup_security():
+    """Validate critical security configuration at startup.
+    In production (APP_ENV=production), missing secrets cause startup failure.
+    In development, warnings are logged but app continues.
+    """
+    is_production = os.getenv("APP_ENV", "development") == "production"
+    missing = []
+
+    # JWT secret — required for token signing
+    jwt_secret = os.getenv("JWT_SECRET_KEY", os.getenv("JWT_SECRET", ""))
+    if not jwt_secret or jwt_secret in ("", "your-secret-key-change-in-production", "dev-only-insecure-secret-change-me"):
+        missing.append("JWT_SECRET_KEY")
+
+    # Encryption key — required for secrets vault
+    enc_key = os.getenv("SECRETS_ENCRYPTION_KEY", os.getenv("ENCRYPTION_KEY", ""))
+    if not enc_key or enc_key in ("", "dev-only-insecure-key-do-not-use-in-prod"):
+        missing.append("ENCRYPTION_KEY or SECRETS_ENCRYPTION_KEY")
+
+    if missing:
+        msg = f"[SECURITY] Missing critical secrets: {', '.join(missing)}"
+        if is_production:
+            logger.critical(msg + " — REFUSING TO START in production mode.")
+            raise RuntimeError(msg)
+        else:
+            logger.warning(msg + " — using insecure dev defaults. Set APP_ENV=production to enforce.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle application startup and shutdown gracefully"""
     # Startup
     try:
+        # Validate security configuration before anything else
+        _validate_startup_security()
+
         # Initialize SQLite database (local fallback)
         from app.services.storage.database_service import init_database
         await init_database()
@@ -184,38 +216,82 @@ app.add_middleware(RateLimitMiddleware)
 # This ensures CORS headers are present on ALL responses, including error responses
 # from inner middleware/routes. Without this, BaseHTTPMiddleware exceptions can
 # bypass CORS header injection, causing browser CORS blocks on legitimate origins.
+_default_origins = [
+    "http://localhost:8080",  # Frontend
+    "http://localhost:3000",  # Alternative frontend
+    "http://localhost:5173",  # Vite dev server
+    "http://localhost:5174",  # Vite dev server (alt port)
+    "http://localhost:8081",  # Tools server (Flowstral recorder)
+    "http://127.0.0.1:8081",  # Tools server (alternative)
+    "http://127.0.0.1:8080",  # Frontend (alternative)
+    "http://127.0.0.1:5173",  # Vite dev (alternative)
+    "https://flowstral.com",   # Production site
+    "https://www.flowstral.com",
+    "https://qaone-production.up.railway.app",  # Railway production
+]
+_cors_env = os.getenv("CORS_ALLOWED_ORIGINS", "")
+_cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else _default_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8080",  # Frontend
-        "http://localhost:3000",  # Alternative frontend
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:5174",  # Vite dev server (alt port)
-        "http://localhost:8081",  # Tools server (Flowstral recorder)
-        "http://127.0.0.1:8081",  # Tools server (alternative)
-        "http://127.0.0.1:8080",  # Frontend (alternative)
-        "http://127.0.0.1:5173",  # Vite dev (alternative)
-        "https://flowstral.com",   # Production site
-        "https://www.flowstral.com",
-        "https://qaone-production.up.railway.app",  # Railway production
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=[
+        "Authorization", "Content-Type", "X-Request-ID", "Accept",
+        "X-Tenant-ID", "X-User-ID", "X-Trace-ID", "Cache-Control",
+        "X-Internal-Service-Key",
+    ],
 )
 
 # Global exception handler: ensures unhandled exceptions return JSON (not plain text)
 # so that CORSMiddleware can properly add headers to the response.
 from starlette.responses import JSONResponse
 
+# Request size limiting middleware (Phase 1.6: File upload validation)
+_max_upload_mb = int(os.getenv("UPLOAD_MAX_SIZE_MB", "50"))
+
+@app.middleware("http")
+async def limit_request_size(request: Request, call_next):
+    """Reject requests exceeding UPLOAD_MAX_SIZE_MB (default 50MB)."""
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > _max_upload_mb * 1024 * 1024:
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": f"Request body too large. Maximum: {_max_upload_mb}MB"},
+                )
+        except (ValueError, TypeError):
+            pass
+    return await call_next(request)
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Catch-all for unhandled exceptions. Returns JSON so CORS middleware can add headers."""
-    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error"},
-    )
+    """Catch-all for unhandled exceptions.
+    - Production: generic message + request_id for correlation
+    - Development: includes exception details for debugging
+    """
+    request_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())[:8]
+    logger.error(f"Unhandled exception on {request.method} {request.url.path} "
+                 f"[request_id={request_id}]: {exc}", exc_info=True)
+
+    is_production = os.getenv("APP_ENV", "development") == "production"
+    if is_production:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error", "request_id": request_id},
+        )
+    else:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": str(exc),
+                "type": type(exc).__name__,
+                "request_id": request_id,
+            },
+        )
 
 # Pydantic models
 class GenerateTestsRequest(BaseModel):
@@ -814,6 +890,23 @@ try:
 except Exception as e:
     logger.warning(f"AI Enhancements API not loaded (non-critical): {e}")
 
+# MFA API — TOTP enrollment, verification, recovery codes
+try:
+    from app.routers.platform.mfa_api import router as mfa_router
+    app.include_router(mfa_router)
+    logger.info("MFA API registered")
+except Exception as e:
+    logger.warning(f"MFA API not loaded (non-critical): {e}")
+
+# Data Privacy API — GDPR erasure requests, data export (Article 17 & 20)
+try:
+    from app.routers.platform.data_privacy_api import router as data_privacy_router
+    app.include_router(data_privacy_router)
+    logger.info("Data Privacy API registered")
+except Exception as e:
+    logger.warning(f"Data Privacy API not loaded (non-critical): {e}")
+
+
 if __name__ == "__main__":
     # On Windows, set event loop policy for Playwright compatibility
     import sys
@@ -823,5 +916,5 @@ if __name__ == "__main__":
         if not isinstance(asyncio.get_event_loop_policy(), asyncio.WindowsProactorEventLoopPolicy):
             asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
             logger.info("Set WindowsProactorEventLoopPolicy for Playwright compatibility")
-    
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

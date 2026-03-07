@@ -33,7 +33,7 @@ async def create_tenant(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Failed to create tenant: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to create tenant")
 
 
 @router.get("/{tenant_id}")
@@ -52,7 +52,7 @@ async def get_tenant(tenant_id: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get tenant: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve tenant")
 
 
 @router.get("")
@@ -68,7 +68,7 @@ async def list_tenants(limit: int = 100):
         }
     except Exception as e:
         logger.error(f"Failed to list tenants: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to list tenants")
 
 
 @router.patch("/{tenant_id}/settings")
@@ -89,6 +89,6 @@ async def update_tenant_settings(tenant_id: str, body: dict):
         raise
     except Exception as e:
         logger.error(f"Failed to update tenant settings: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to update tenant settings")
 
 

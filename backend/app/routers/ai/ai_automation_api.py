@@ -223,7 +223,7 @@ async def resolve_element_with_ai(request: ResolveElementRequest):
         
     except Exception as e:
         logger.error(f"Resolution error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/analyze-failure", response_model=AnalyzeFailureResponse)
@@ -277,7 +277,7 @@ async def analyze_test_failure(request: AnalyzeFailureRequest):
         raise
     except Exception as e:
         logger.error(f"Failure analysis error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/budget", response_model=AIBudgetResponse)
@@ -444,7 +444,7 @@ async def validate_recorded_steps(request: ValidateStepsRequest):
         
     except Exception as e:
         logger.error(f"Step validation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/quality-score")
@@ -471,4 +471,4 @@ async def get_flow_quality(request: ValidateStepsRequest):
         
     except Exception as e:
         logger.error(f"Quality score error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")

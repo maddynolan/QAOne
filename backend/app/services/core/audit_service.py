@@ -2,15 +2,23 @@
 Enterprise Audit Trail Service
 
 Provides comprehensive audit logging for compliance and security monitoring.
-Stores events in-memory with optional PostgreSQL persistence.
+Stores events in-memory with PostgreSQL persistence.
+
+Security features:
+- Hash chain: each entry includes SHA-256 hash of previous entry for tamper detection
+- Append-only: audit entries cannot be modified or deleted
+- Security event logging: login, logout, failed auth, permission denied, secret access
 
 Usage:
     from app.services.core.audit_service import audit_service
 
     await audit_service.log("user-123", "create", "test_case", {"name": "Login Test"})
+    await audit_service.log_security_event("user-123", "login", ip="1.2.3.4")
     logs = await audit_service.get_logs(action="create", limit=50)
+    integrity = await audit_service.verify_integrity()
 """
 
+import hashlib
 import os
 import json
 import logging
@@ -25,16 +33,24 @@ logger = logging.getLogger(__name__)
 # Maximum in-memory audit log entries (circular buffer)
 MAX_MEMORY_ENTRIES = 10_000
 
+# Security event types for explicit tracking
+SECURITY_EVENTS = {
+    "login", "logout", "login_failed", "mfa_verified", "mfa_failed",
+    "permission_denied", "secret_revealed", "data_export", "data_erasure",
+    "password_changed", "mfa_enabled", "mfa_disabled", "api_key_stored",
+    "suspicious_activity", "rate_limited",
+}
+
 
 @dataclass
 class AuditEvent:
-    """A single audit log entry."""
+    """A single audit log entry with hash chain support."""
     id: str
     timestamp: str
     user_id: str
     user_email: Optional[str]
     action: str           # create, read, update, delete, login, logout, export, scan, execute
-    resource_type: str    # test_case, test_run, api_request, scan, user, settings, etc.
+    resource_type: str    # test_case, test_run, api_request, scan, user, settings, security, etc.
     resource_id: Optional[str]
     details: Dict[str, Any] = field(default_factory=dict)
     ip_address: Optional[str] = None
@@ -42,16 +58,18 @@ class AuditEvent:
     org_id: Optional[str] = None
     project_id: Optional[str] = None
     status: str = "success"  # success, failure, denied
+    hash_chain: Optional[str] = None  # SHA-256 hash of previous entry (tamper detection)
 
 
 class AuditService:
-    """Enterprise audit trail with in-memory store and optional DB persistence."""
+    """Enterprise audit trail with hash chain, in-memory store, and DB persistence."""
 
     def __init__(self):
         self._events: deque = deque(maxlen=MAX_MEMORY_ENTRIES)
         self._counter = 0
         self._lock = asyncio.Lock()
         self._db_enabled = False
+        self._last_hash = "GENESIS"  # Initial hash chain seed
         self._init_db()
 
     def _init_db(self):
@@ -96,6 +114,10 @@ class AuditService:
             self._counter += 1
             event_id = f"audit-{self._counter}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
 
+        # Compute hash chain — SHA-256 of previous entry + current event data
+        chain_input = f"{self._last_hash}|{event_id}|{user_id}|{action}|{resource_type}"
+        event_hash = hashlib.sha256(chain_input.encode()).hexdigest()
+
         event = AuditEvent(
             id=event_id,
             timestamp=datetime.utcnow().isoformat() + "Z",
@@ -110,8 +132,10 @@ class AuditService:
             org_id=org_id,
             project_id=project_id,
             status=status,
+            hash_chain=event_hash,
         )
 
+        self._last_hash = event_hash
         self._events.appendleft(event)
 
         # Persist to PostgreSQL if available
@@ -238,6 +262,79 @@ class AuditService:
         except Exception as e:
             # DB persistence is best-effort; don't fail the operation
             logger.debug(f"[Audit] DB persist failed (non-critical): {e}")
+
+
+    async def log_security_event(
+        self,
+        user_id: str,
+        event_type: str,
+        details: Optional[Dict[str, Any]] = None,
+        ip: Optional[str] = None,
+        status: str = "success",
+        org_id: Optional[str] = None,
+    ) -> AuditEvent:
+        """
+        Log a security-specific event (login, MFA, permission denied, etc.).
+
+        Args:
+            user_id: User involved
+            event_type: One of SECURITY_EVENTS (login, logout, login_failed, etc.)
+            details: Additional context
+            ip: Client IP address
+            status: Outcome (success, failure, denied)
+            org_id: Organization context
+        """
+        return await self.log(
+            user_id=user_id,
+            action=event_type,
+            resource_type="security",
+            details=details or {},
+            ip_address=ip,
+            status=status,
+            org_id=org_id,
+        )
+
+    async def verify_integrity(self) -> Dict[str, Any]:
+        """
+        Verify the hash chain integrity of in-memory audit log.
+        Detects if any entries have been tampered with.
+
+        Returns:
+            Dict with 'intact' bool, 'total_entries', and any 'broken_at' index
+        """
+        events = list(self._events)
+        if not events:
+            return {"intact": True, "total_entries": 0, "message": "No audit entries to verify"}
+
+        # Events are stored newest-first; reverse for chain verification
+        events_ordered = list(reversed(events))
+        prev_hash = "GENESIS"
+        broken_at = None
+
+        for i, event in enumerate(events_ordered):
+            chain_input = f"{prev_hash}|{event.id}|{event.user_id}|{event.action}|{event.resource_type}"
+            expected_hash = hashlib.sha256(chain_input.encode()).hexdigest()
+
+            if event.hash_chain != expected_hash:
+                broken_at = i
+                break
+
+            prev_hash = event.hash_chain
+
+        if broken_at is not None:
+            return {
+                "intact": False,
+                "total_entries": len(events),
+                "broken_at_index": broken_at,
+                "broken_event_id": events_ordered[broken_at].id,
+                "message": f"Hash chain broken at entry {broken_at} — possible tampering detected",
+            }
+
+        return {
+            "intact": True,
+            "total_entries": len(events),
+            "message": "All audit entries verified — hash chain intact",
+        }
 
 
 # Singleton instance

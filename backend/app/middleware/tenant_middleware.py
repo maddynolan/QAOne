@@ -22,9 +22,13 @@ _current_request: ContextVar[Optional[Request]] = ContextVar('current_request', 
 
 logger = logging.getLogger(__name__)
 
-# JWT secret key (should be in environment)
-JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
+# JWT secret key — shared with jwt_service.py
+JWT_SECRET = os.getenv("JWT_SECRET_KEY", os.getenv("JWT_SECRET", "dev-only-insecure-secret-change-me"))
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+
+# Internal service-to-service key for header-based tenant override
+# Only requests with this key in X-Internal-Service-Key can use X-Tenant-ID headers
+_INTERNAL_SERVICE_KEY = os.getenv("INTERNAL_SERVICE_KEY", "")
 
 
 class TenantContextMiddleware(BaseHTTPMiddleware):
@@ -51,23 +55,38 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         if self._is_public_endpoint(request.url.path):
             return await call_next(request)
         
-        # Try to extract from JWT token first
+        # Try to extract from JWT token first (TRUSTED source)
         tenant_id, user_id, roles, permissions = self._extract_from_jwt(request)
-        
-        # Fallback to headers (for API key authentication)
+
+        # Header-based override ONLY allowed for internal service-to-service calls
+        # with a valid X-Internal-Service-Key. This prevents client-side spoofing.
         if not tenant_id:
-            tenant_id = request.headers.get("X-Tenant-ID")
-        if not user_id:
-            user_id = request.headers.get("X-User-ID")
-        
+            internal_key = request.headers.get("X-Internal-Service-Key", "")
+            if _INTERNAL_SERVICE_KEY and internal_key == _INTERNAL_SERVICE_KEY:
+                tenant_id = request.headers.get("X-Tenant-ID")
+                if not user_id:
+                    user_id = request.headers.get("X-User-ID")
+                logger.debug("Tenant context from internal service key")
+            else:
+                # For unauthenticated API requests without JWT, tenant headers are
+                # still accepted in development mode for backwards compatibility.
+                # In production, this should be disabled.
+                if os.getenv("APP_ENV", "development") != "production":
+                    header_tenant = request.headers.get("X-Tenant-ID")
+                    header_user = request.headers.get("X-User-ID")
+                    if header_tenant:
+                        tenant_id = header_tenant
+                    if header_user and not user_id:
+                        user_id = header_user
+
         # Set request state
         request.state.tenant_id = tenant_id
         request.state.user_id = user_id
         request.state.roles = roles or []
         request.state.permissions = permissions or []
-        
-        # Log for debugging (remove in production or make conditional)
-        if tenant_id or user_id:
+
+        # Log for debugging (only in dev)
+        if (tenant_id or user_id) and os.getenv("APP_ENV", "development") != "production":
             logger.debug(f"Tenant context: tenant_id={tenant_id}, user_id={user_id}")
         
         try:

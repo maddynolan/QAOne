@@ -143,6 +143,7 @@ QAAI (also branded as Flowstral/ArisTrace) is an enterprise QA automation platfo
 │       ├── scripts/              # CLI scripts (seed_demo_data.py)
 │       ├── services/             # 295+ services across 26 subdirectories
 │       ├── schemas/              # Pydantic models
+│       ├── utils/                # Shared utilities (url_validator for SSRF prevention)
 │       └── middleware/           # RBAC, tenant, trace logging, rate limiting
 ├── flowstral-engine/             # TypeScript recording/execution engine
 │   └── src/                      # FlowstralEngine, ElementCollector, PlaywrightScriptGenerator
@@ -1142,6 +1143,46 @@ interface ComparisonResult { passed, diff_percentage, diff_pixel_count, total_pi
 - **Global Error Boundary**: `src/components/GlobalErrorBoundary.tsx` — React class component wrapping entire `<App />`, catches unhandled rendering errors, shows friendly recovery UI with "Reload App" / "Try Again" buttons, optional error reporting to backend `/api/errors`
 - **Tab Error Boundary**: `TabErrorBoundary` pattern for isolated tab failures (API Testing, etc.)
 
+### Enterprise Security Hardening (v3.17.0+)
+
+Comprehensive security compliance hardening for SOC 2, HIPAA, PCI-DSS, ISO 27001, FedRAMP, and GDPR.
+
+**Key Security Documents:**
+- `docs/SECURITY-RULES-MASTER.md` — **Authoritative security rules reference** with 40+ rules, compliance framework mappings (SOC2/HIPAA/GDPR/FedRAMP/PCI-DSS/ISO27001), per-module requirements
+- `docs/SECURITY-AUDIT-FINDINGS.md` — Consolidated audit: 69 vulnerabilities found, prioritized fix plan
+- `docs/SECURITY-CONFIGURATION-GUIDE.md` — Required env vars, TLS setup, encryption config
+- `docs/INCIDENT-RESPONSE-PLAN.md` — Severity classification, notification procedures, containment
+- `docs/SECURITY-QUESTIONNAIRE-RESPONSES.md` — Pre-written enterprise security questionnaire answers
+- `docs/COMPLIANCE-READINESS-MATRIX.md` — SOC 2 / HIPAA / PCI-DSS / ISO 27001 control mapping
+
+**SSRF Prevention Utility:**
+- `backend/app/utils/url_validator.py` — Reusable URL validation with SSRF protection (SEC-INPUT-004)
+  - `validate_url(url)` — Raises ValueError if URL targets private IPs, internal hostnames, blocked schemes
+  - `is_url_safe(url)` — Non-raising bool version
+  - `sanitize_url_for_logging(url)` — Strips query params and credentials for safe logging
+  - `validate_webhook_url(url)` — Stricter HTTPS-only validation for webhooks
+  - Blocks: private IP ranges, IPv6 private ranges, localhost, metadata endpoints, file/ftp/data schemes
+  - Detects obfuscated IPs (hex, octal, decimal encoding), DNS rebinding attacks
+
+**Security Fixes Applied (v3.17.0):**
+- SSRF validation on all user-supplied URL endpoints (9 router files)
+- Error response sanitization — removed `str(e)` from 100+ HTTPException details across all modules
+- Resource limits on performance testing (10K VU cap, 1hr duration cap), exploration, batch scans
+- Session ID hardening — `secrets.token_urlsafe()` replaces truncated UUIDs
+- SQL injection prevention — sort_by column whitelist in test cases
+- Path traversal prevention — test_name validation in visual testing
+- Base64 image size limits (50MB) in visual testing
+- SSL verification enforced (removed `verify=False`)
+- Input truncation for LLM prompt injection prevention
+- Webhook URL validation (HTTPS-only)
+
+**Auth & Data Protection Services (new):**
+- `backend/app/services/auth/password_service.py` — bcrypt/argon2id password hashing
+- `backend/app/services/auth/mfa_service.py` — TOTP multi-factor authentication
+- `backend/app/routers/platform/mfa_api.py` — MFA enrollment/verification endpoints
+- `backend/app/services/core/data_erasure_service.py` — GDPR right to erasure (cascading delete)
+- `backend/app/routers/platform/data_privacy_api.py` — GDPR erasure/export endpoints
+
 ### Container Security
 
 - **Docker**: All containers run as non-root user `appuser` (UID 1001) per CIS Benchmark 4.1
@@ -1436,6 +1477,12 @@ PostgreSQL (primary) with **in-memory fallback**:
 | Marketing / Analytics / SEO | `docs/FEATURE-MARKETING-ANALYTICS.md` |
 | Platform Master | `docs/PLATFORM_MASTER_DOCUMENT.md` |
 | Enterprise Security | `docs/ENTERPRISE-SECURITY-GUIDE.md` |
+| Security Rules Master | `docs/SECURITY-RULES-MASTER.md` |
+| Security Audit Findings | `docs/SECURITY-AUDIT-FINDINGS.md` |
+| Security Configuration | `docs/SECURITY-CONFIGURATION-GUIDE.md` |
+| Incident Response Plan | `docs/INCIDENT-RESPONSE-PLAN.md` |
+| Compliance Readiness | `docs/COMPLIANCE-READINESS-MATRIX.md` |
+| Security Questionnaire | `docs/SECURITY-QUESTIONNAIRE-RESPONSES.md` |
 | On-Prem Deployment | `docs/ON-PREM-DEPLOYMENT-RUNBOOK.md` |
 | SaaS Deployment | `docs/SAAS-DEPLOYMENT-GUIDE.md` |
 | Deployment / Data Architecture | `docs/DEPLOYMENT-AND-DATA-ARCHITECTURE.md` |

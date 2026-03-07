@@ -78,15 +78,28 @@ async def start_exploration(request: StartExplorationRequest, project_id: Option
     Start autonomous exploration of an application.
     Returns a capability map of discovered pages, entities, and operations.
     """
+    # SEC-INPUT-004: SSRF prevention — validate URL before crawling
+    from app.utils.url_validator import validate_url, sanitize_url_for_logging
+    try:
+        validate_url(request.base_url)
+    except ValueError as url_err:
+        raise HTTPException(status_code=400, detail=f"Invalid URL: {str(url_err)}")
+
+    # Resource limits
+    if request.max_pages > 200:
+        raise HTTPException(status_code=400, detail="max_pages cannot exceed 200")
+    if request.max_depth > 10:
+        raise HTTPException(status_code=400, detail="max_depth cannot exceed 10")
+
     try:
         storage = get_capability_map_storage()
     except Exception as storage_error:
-        logger.error(f"Failed to get capability map storage: {storage_error}", exc_info=True)
+        logger.error(f"Failed to get capability map storage: {type(storage_error).__name__}")
         raise HTTPException(
             status_code=500,
-            detail=f"Storage initialization failed: {str(storage_error)}"
+            detail="Storage initialization failed"
         )
-    
+
     try:
         # Ensure we have a project_id
         try:
@@ -94,13 +107,13 @@ async def start_exploration(request: StartExplorationRequest, project_id: Option
                 _, project_id = await ensure_default_org_project()
             logger.info(f"Using project_id: {project_id}")
         except Exception as project_error:
-            logger.error(f"Failed to get project_id: {project_error}", exc_info=True)
+            logger.error(f"Failed to get project_id: {type(project_error).__name__}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to get project: {str(project_error)}"
+                detail="Failed to initialize project"
             )
-        
-        logger.info(f"Starting exploration of {request.base_url}")
+
+        logger.info(f"Starting exploration of {sanitize_url_for_logging(request.base_url)}")
         
         # Build exploration config
         try:
@@ -282,7 +295,7 @@ async def start_exploration(request: StartExplorationRequest, project_id: Option
         error_detail = f"{str(e)}\n\nTraceback:\n{traceback.format_exc()}"
         raise HTTPException(
             status_code=500,
-            detail=f"Exploration failed: {str(e)}. Check server logs for details."
+            detail="Exploration failed. Check server logs for details."
         )
 
 
@@ -330,7 +343,7 @@ async def compare_requirements(request: CompareRequirementsRequest):
     
     except Exception as e:
         logger.error(f"Requirement comparison failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Comparison failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Comparison failed")
 
 
 @router.get("/capability-map/{map_id}")
@@ -351,7 +364,7 @@ async def get_capability_map(map_id: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get capability map: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve capability map: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve capability map")
 
 
 @router.get("/capability-maps")
@@ -372,7 +385,7 @@ async def get_capability_maps(project_id: Optional[str] = None, limit: int = 10)
         }
     except Exception as e:
         logger.error(f"Failed to get capability maps: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve capability maps: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve capability maps")
 
 
 @router.get("/exploration-run/{run_id}")
@@ -393,5 +406,5 @@ async def get_exploration_run(run_id: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get exploration run: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve exploration run: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve exploration run")
 

@@ -29,7 +29,7 @@ async def get_collections(project_id: Optional[str] = None):
         return {"collections": collections, "total": len(collections)}
     except Exception as e:
         logger.error(f"Error getting collections: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{collection_id}")
@@ -45,7 +45,7 @@ async def get_collection(collection_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting collection: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("")
@@ -64,7 +64,7 @@ async def save_collection(request: Request, project_id: Optional[str] = None):
         raise
     except Exception as e:
         logger.error(f"Error saving collection: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.delete("/{collection_id}")
@@ -80,7 +80,7 @@ async def delete_collection(collection_id: str):
         raise
     except Exception as e:
         logger.error(f"Error deleting collection: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ─── Requests ────────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ async def save_request(collection_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error saving request: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.delete("/{collection_id}/requests/{request_id}")
@@ -115,7 +115,7 @@ async def delete_request(collection_id: str, request_id: str):
         raise
     except Exception as e:
         logger.error(f"Error deleting request: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ─── Folders ─────────────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ async def save_folder(collection_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error saving folder: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ─── Environments ────────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ async def get_environments(project_id: Optional[str] = None):
         return {"environments": envs}
     except Exception as e:
         logger.error(f"Error getting environments: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/environments")
@@ -169,7 +169,7 @@ async def save_environment(request: Request, project_id: Optional[str] = None):
         raise
     except Exception as e:
         logger.error(f"Error saving environment: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ─── Chains ──────────────────────────────────────────────────────────────
@@ -185,7 +185,7 @@ async def get_chains(project_id: Optional[str] = None):
         return {"chains": chains}
     except Exception as e:
         logger.error(f"Error getting chains: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/chains")
@@ -204,7 +204,7 @@ async def save_chain(request: Request, project_id: Optional[str] = None):
         raise
     except Exception as e:
         logger.error(f"Error saving chain: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ─── Bulk Sync ───────────────────────────────────────────────────────────
@@ -224,4 +224,4 @@ async def sync_from_client(request: Request, project_id: Optional[str] = None):
         return result
     except Exception as e:
         logger.error(f"Error in bulk sync: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")

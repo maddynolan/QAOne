@@ -366,20 +366,20 @@ class HeadlessExecutor:
             if not url.startswith("http"):
                 url = f"{base_url.rstrip('/')}/{url.lstrip('/')}"
             
-            # Use page.evaluate for fetch
-            result = await page.evaluate(f"""
-                async () => {{
-                    const response = await fetch('{url}', {{
-                        method: '{method}',
-                        headers: {{'Content-Type': 'application/json'}},
-                        body: {json.dumps(body) if body else 'undefined'}
-                    }});
-                    return {{
+            # Use page.evaluate for fetch — pass parameters safely to avoid injection
+            result = await page.evaluate("""
+                async ([fetchUrl, fetchMethod, fetchBody]) => {
+                    const response = await fetch(fetchUrl, {
+                        method: fetchMethod,
+                        headers: {'Content-Type': 'application/json'},
+                        body: fetchBody || undefined
+                    });
+                    return {
                         status: response.status,
                         body: await response.text()
-                    }};
-                }}
-            """)
+                    };
+                }
+            """, [url, method, json.dumps(body) if body else None])
             
             if result.get("status", 0) >= 400:
                 raise Exception(f"HTTP {method} {url} failed with status {result.get('status')}")

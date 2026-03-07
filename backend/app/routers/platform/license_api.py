@@ -292,13 +292,19 @@ login_attempts: Dict[str, Dict] = defaultdict(lambda: {"attempts": 0, "last_atte
 MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION = 300  # 5 minutes
 
-# Secret for license generation — MUST be set via environment variable (no hardcoded fallback)
-LICENSE_SECRET = os.getenv("LICENSE_SECRET")
+# Secret for license generation — MUST be set via environment variable
+LICENSE_SECRET = os.getenv("LICENSE_SECRET", "")
 if not LICENSE_SECRET:
-    import warnings
-    warnings.warn("LICENSE_SECRET not set — using temporary default. Set this env var in production!")
-    LICENSE_SECRET = "flowstral-offline-2024"  # Temporary fallback for dev only
-JWT_SECRET = os.getenv("JWT_SECRET", "flowstral-jwt-secret-2024")
+    if os.getenv("APP_ENV", "development") == "production":
+        import warnings
+        warnings.warn("CRITICAL: LICENSE_SECRET not set — license operations will fail in production!")
+    else:
+        import warnings
+        warnings.warn("LICENSE_SECRET not set — using insecure dev default. Set this env var in production!")
+        LICENSE_SECRET = "dev-only-license-secret-change-me"
+
+# JWT secret — shared with jwt_service.py via same env var
+JWT_SECRET = os.getenv("JWT_SECRET_KEY", os.getenv("JWT_SECRET", "dev-only-insecure-secret-change-me"))
 
 # Admin whitelist - only these emails can access admin endpoints
 ADMIN_EMAILS = [

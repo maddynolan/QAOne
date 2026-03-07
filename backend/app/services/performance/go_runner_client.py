@@ -10,6 +10,7 @@ Handles:
 import asyncio
 import json
 import logging
+import re
 import subprocess
 import os
 import sys
@@ -19,6 +20,10 @@ from dataclasses import dataclass, asdict
 import aiohttp
 
 logger = logging.getLogger(__name__)
+
+# SECURITY: Pattern to validate runner binary paths — only allow safe characters
+# Allows alphanumeric, path separators, dots, hyphens, underscores
+_SAFE_PATH_PATTERN = re.compile(r'^[a-zA-Z0-9_\-\./\\: ]+$')
 
 
 @dataclass
@@ -83,8 +88,47 @@ class GoRunnerClient:
         # Auto-discover local runner on init
         self._try_discover_local_runner()
     
+    @staticmethod
+    def _validate_binary_path(path: Path) -> bool:
+        """
+        Validate that a runner binary path is safe.
+
+        SECURITY: Prevents command injection via crafted binary paths.
+        Only allows alphanumeric characters, path separators, dots, hyphens,
+        underscores, spaces, and drive letters (Windows).
+        """
+        path_str = str(path.resolve())
+
+        # Check for shell metacharacters
+        if not _SAFE_PATH_PATTERN.match(path_str):
+            logger.warning(f"Runner binary path contains unsafe characters: {path_str}")
+            return False
+
+        # Block paths containing common injection patterns
+        dangerous_patterns = ['..', '&&', '||', ';', '`', '$', '|', '>', '<', '\n', '\r']
+        for pattern in dangerous_patterns:
+            if pattern in path_str:
+                logger.warning(f"Runner binary path contains dangerous pattern '{pattern}': {path_str}")
+                return False
+
+        # Ensure the path is an actual file (not a directory or symlink to unexpected location)
+        if not path.is_file():
+            return False
+
+        return True
+
     def _find_runner_binary(self) -> Optional[Path]:
         """Find the Go runner binary"""
+        # Allow override via environment variable
+        env_path = os.getenv("GO_RUNNER_BINARY_PATH")
+        if env_path:
+            p = Path(env_path)
+            if p.exists() and self._validate_binary_path(p):
+                logger.info(f"Found Go runner binary from env: {p}")
+                return p
+            else:
+                logger.warning(f"GO_RUNNER_BINARY_PATH set but path is invalid or unsafe: {env_path}")
+
         # Check common locations
         possible_paths = [
             # Built runner in runner directory (default location after go build)
@@ -97,12 +141,12 @@ class GoRunnerClient:
             Path.home() / ".aristrace" / "runner" / "runner.exe",
             Path.home() / ".aristrace" / "runner" / "runner",
         ]
-        
+
         for path in possible_paths:
-            if path.exists():
+            if path.exists() and self._validate_binary_path(path):
                 logger.info(f"Found Go runner binary at: {path}")
                 return path
-        
+
         logger.warning(f"Go runner binary not found. Checked paths: {[str(p) for p in possible_paths]}")
         return None
     
@@ -146,14 +190,24 @@ class GoRunnerClient:
             return False
         
         try:
+            # SECURITY: Re-validate the binary path before execution
+            if not self._validate_binary_path(self.runner_binary):
+                logger.error("Runner binary path failed validation before execution")
+                return False
+
+            # SECURITY: Validate arguments are safe integers (no shell metacharacters)
+            port_str = str(int(self.local_runner_port))  # Force integer conversion
+            max_vus_str = str(int(max_vus))  # Force integer conversion
+
             self.local_runner_process = subprocess.Popen(
                 [
                     str(self.runner_binary),
-                    "--port", str(self.local_runner_port),
-                    "--max-vus", str(max_vus)
+                    "--port", port_str,
+                    "--max-vus", max_vus_str
                 ],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
+                shell=False  # SECURITY: Never use shell=True
             )
             
             # Wait for startup

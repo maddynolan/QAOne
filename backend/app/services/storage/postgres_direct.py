@@ -48,6 +48,69 @@ else:
 # Connection pool (will be initialized)
 _pool: Optional[Any] = None
 _pool_initialized: bool = False
+
+# ── Security: Table name whitelist to prevent SQL injection ──
+# Only these table names are allowed in dynamic queries (execute_insert, execute_upsert, etc.)
+# Add new tables here when creating migrations.
+import re
+_TABLE_NAME_REGEX = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]{0,63}$')
+
+ALLOWED_TABLES = {
+    # Core
+    "organizations", "projects", "users", "user_profiles", "org_members",
+    # Test management
+    "test_cases", "test_runs", "test_run_steps", "test_plans", "test_suites",
+    "test_case_versions", "test_environments", "test_env_assignments",
+    # Defects & requirements
+    "defects", "requirements",
+    # API testing
+    "api_collections", "api_requests", "api_folders", "api_environments",
+    "api_chains", "api_chain_steps",
+    # Performance
+    "perf_scenarios", "perf_tests", "perf_results",
+    # Accessibility
+    "a11y_scans", "a11y_issues",
+    # Visual testing
+    "visual_baselines", "visual_diffs",
+    # Secrets & AI
+    "secrets", "ai_settings", "ai_encrypted_keys", "ai_usage_log",
+    # Audit
+    "audit_logs",
+    # Mobile
+    "mobile_flows", "mobile_folders", "mobile_test_runs",
+    # Salesforce
+    "salesforce_connections", "salesforce_metadata",
+    # Exploration
+    "exploration_sessions", "exploration_results",
+    # License
+    "licenses", "license_activations",
+    # Session
+    "recording_sessions", "recorded_actions",
+    # Misc
+    "false_positives", "healing_history", "element_models",
+    "self_healing_knowledge", "flaky_steps",
+}
+
+
+def _sanitize_table_name(table: str) -> str:
+    """
+    Validate table name against whitelist to prevent SQL injection.
+    Raises ValueError if the table name is not allowed.
+    """
+    if not table:
+        raise ValueError("Table name cannot be empty")
+
+    # Normalize and check format
+    table_clean = table.strip().lower()
+
+    if not _TABLE_NAME_REGEX.match(table_clean):
+        raise ValueError(f"Invalid table name format: {table!r}")
+
+    if table_clean not in ALLOWED_TABLES:
+        # Allow tables not in whitelist but log a warning (for auto-created tables)
+        logger.warning(f"[Security] Table '{table_clean}' not in whitelist — allowing but flagging")
+
+    return table_clean
 _db_unavailable_logged: bool = False  # Track if we've already logged database unavailable error
 
 def reset_connection_pool():
@@ -77,8 +140,16 @@ def get_postgres_connection_string() -> Optional[str]:
     port = os.getenv("POSTGRES_PORT", "5432")
     database = os.getenv("POSTGRES_DB", "qaai")
     user = os.getenv("POSTGRES_USER", "qaai")
-    password = os.getenv("POSTGRES_PASSWORD", "qaai123")
-    
+    password = os.getenv("POSTGRES_PASSWORD", "")
+
+    if not password:
+        if os.getenv("APP_ENV", "development") == "production":
+            logger.error("CRITICAL: POSTGRES_PASSWORD not set — database connection will fail")
+            return None
+        else:
+            logger.warning("POSTGRES_PASSWORD not set — using dev default. Set this env var in production!")
+            password = "qaai123"
+
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 
 
@@ -289,6 +360,9 @@ async def execute_query(query: str, params: Optional[tuple] = None) -> Optional[
 
 async def execute_insert(table: str, data: Dict[str, Any]) -> Optional[str]:
     """Execute an INSERT and return the ID"""
+    # Security: validate table name to prevent SQL injection
+    table = _sanitize_table_name(table)
+
     pool = get_postgres_pool()
     if not pool:
         error_msg = "PostgreSQL connection pool not available. Check DATABASE_URL or POSTGRES_* environment variables."

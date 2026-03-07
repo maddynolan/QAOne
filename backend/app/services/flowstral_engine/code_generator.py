@@ -218,9 +218,16 @@ class FlowstralCodeGenerator:
             '        # Strategy 7: Selector hint (fallback)',
             '        if selector_hint:',
             '            try:',
-            '                if selector_hint.startswith("page."):',
-            '                    strategies.append(("hint", eval(selector_hint)))',
-            '                else:',
+            '                if selector_hint.startswith("page.get_by_"):',
+            '                    method_name = selector_hint.split("(")[0].replace("page.", "")',
+            '                    method_arg = selector_hint.split("(", 1)[1].rstrip(")")',
+            '                    method_arg = method_arg.strip(\'"\').strip("\'")',
+            '                    strategies.append(("hint", getattr(self.page, method_name)(method_arg)))',
+            '                elif selector_hint.startswith("page.locator("):',
+            '                    loc_arg = selector_hint.split("(", 1)[1].rstrip(")")',
+            '                    loc_arg = loc_arg.strip(\'"\').strip("\'")',
+            '                    strategies.append(("hint", self.page.locator(loc_arg)))',
+            '                elif not selector_hint.startswith("page."):',
             '                    strategies.append(("hint", self.page.locator(selector_hint)))',
             '            except:',
             '                pass',
@@ -385,6 +392,7 @@ class FlowstralCodeGenerator:
             '    def sf_open_app(self, app_name: str):',
             '        """Open Salesforce app from App Launcher."""',
             '        self._log(f"[SF] Opening app: {app_name}")',
+            '        app_name = app_name.replace(\'"\', \'\\\\"\')',
             '        ',
             '        # Click waffle',
             '        self.click(component="app_launcher", description="App Launcher")',
@@ -443,6 +451,7 @@ class FlowstralCodeGenerator:
             '    def sf_click_tab(self, tab_name: str):',
             '        """Click a Salesforce record tab."""',
             '        self._log(f"[SF] Click tab: {tab_name}")',
+            '        tab_name = tab_name.replace(\'"\', \'\\\\"\')',
             '        tab_selectors = [',
             '            f\'a[data-label="{tab_name}"]\',',
             '            f\'[role="tab"]:has-text("{tab_name}")\',',
@@ -539,7 +548,7 @@ class FlowstralCodeGenerator:
         action = step.action.lower()
         
         if action == 'navigate':
-            url = step.url or step.value
+            url = (step.url or step.value or '').replace('"', '\\"').replace("'", "\\'")
             lines.append(f'{indent}engine.navigate("{url}")')
             
         elif action == 'click':
@@ -547,7 +556,7 @@ class FlowstralCodeGenerator:
             lines.append(f'{indent}engine.click({args})')
             
         elif action in ['fill', 'input', 'type']:
-            value = (step.value or '').replace("'", "\\'")
+            value = (step.value or '').replace('\\', '\\\\').replace('"', '\\"').replace("'", "\\'")
             args = self._build_element_args(step, include_value=False)
             lines.append(f'{indent}engine.fill("{value}", {args})')
             
@@ -556,15 +565,15 @@ class FlowstralCodeGenerator:
             lines.append(f'{indent}engine.hover({args})')
             
         elif action == 'sf_open_app':
-            app_name = step.value or step.target
+            app_name = (step.value or step.target or '').replace('"', '\\"')
             lines.append(f'{indent}engine.sf_open_app("{app_name}")')
             
         elif action == 'sf_global_search':
-            search_text = step.value
+            search_text = (step.value or '').replace('"', '\\"')
             lines.append(f'{indent}engine.sf_global_search("{search_text}")')
             
         elif action == 'sf_click_tab':
-            tab_name = step.target or step.value
+            tab_name = (step.target or step.value or '').replace('"', '\\"')
             lines.append(f'{indent}engine.sf_click_tab("{tab_name}")')
             
         elif action == 'sf_save':
@@ -575,14 +584,14 @@ class FlowstralCodeGenerator:
             lines.append(f'{indent}engine.page.wait_for_timeout({ms})')
             
         elif action == 'press_key':
-            key = step.value or 'Enter'
+            key = (step.value or 'Enter').replace('"', '\\"')
             lines.append(f'{indent}engine.page.keyboard.press("{key}")')
             
         else:
             # Generic action - try to map to click/fill
             if step.value:
                 args = self._build_element_args(step, include_value=False)
-                value = step.value.replace("'", "\\'")
+                value = step.value.replace('\\', '\\\\').replace('"', '\\"').replace("'", "\\'")
                 lines.append(f'{indent}engine.fill("{value}", {args})')
             else:
                 args = self._build_element_args(step)

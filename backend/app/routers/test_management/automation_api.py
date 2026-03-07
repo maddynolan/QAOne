@@ -63,7 +63,7 @@ async def convert_script(request: ScriptConversionRequest) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Script conversion failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Script conversion failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Script conversion failed")
 
 
 @router.post("/execute-test")
@@ -140,7 +140,7 @@ async def execute_test(request: TestExecutionRequest) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Test execution failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Test execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Test execution failed")
 
 
 @router.post("/analyze-locator")
@@ -166,7 +166,7 @@ async def analyze_locator(request: LocatorAnalysisRequest) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Locator analysis failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Locator analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Locator analysis failed")
 
 
 @router.post("/generate-auto-healing-code")
@@ -195,7 +195,7 @@ async def generate_auto_healing_code(
         }
     except Exception as e:
         logger.error(f"Auto-healing code generation failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Auto-healing code generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Auto-healing code generation failed")
 
 
 @router.get("/health")

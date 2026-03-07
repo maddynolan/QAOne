@@ -90,7 +90,7 @@ async def upload_recording(
     
     except Exception as e:
         logger.error(f"Failed to upload recording: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to upload recording")
 
 
 @router.post("/tests/generate")
@@ -111,7 +111,7 @@ async def generate_test_from_recording(
     
     except Exception as e:
         logger.error(f"Failed to generate test: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate test")
 
 
 @router.websocket("/events")

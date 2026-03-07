@@ -53,7 +53,7 @@ async def generate_compliance_report(request: ComplianceReportRequest):
     
     except Exception as e:
         logger.error(f"Failed to generate compliance report: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to generate compliance report: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to generate compliance report")
 
 
 @router.get("/report/{report_id}", summary="Get compliance report")
@@ -76,7 +76,7 @@ async def get_compliance_report(report_id: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get compliance report: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get compliance report: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get compliance report")
 
 
 @router.get("/frameworks", summary="List supported compliance frameworks")

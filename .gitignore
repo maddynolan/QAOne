@@ -192,3 +192,4 @@ playwright-report/
 playwright/.cache/
 
 .vercel
+nul

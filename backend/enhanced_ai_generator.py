@@ -5,6 +5,56 @@ Generates actual code (Playwright, API tests) and manual test steps
 
 import re
 from typing import Dict, List, Any, Optional
+from urllib.parse import urlparse
+
+# --- Input sanitization helpers ---
+
+# Maximum lengths to prevent abuse
+_MAX_REQUIREMENTS_LEN = 500
+_MAX_URL_LEN = 2048
+_MAX_TEST_NAME_LEN = 80
+
+def _escape_for_js_string(value: str) -> str:
+    """Escape a user-provided string so it is safe inside a JS single-quoted literal.
+
+    Handles backslashes, single quotes, backticks (template-literal break-out),
+    newlines, carriage returns, line/paragraph separators, and null bytes.
+    """
+    value = value.replace("\\", "\\\\")   # must be first
+    value = value.replace("'", "\\'")
+    value = value.replace('"', '\\"')
+    value = value.replace("`", "\\`")
+    value = value.replace("${", "\\${")   # prevent template-literal interpolation
+    value = value.replace("\n", "\\n")
+    value = value.replace("\r", "\\r")
+    value = value.replace("\0", "")        # strip null bytes
+    value = value.replace("\u2028", "\\u2028")  # JS line separator
+    value = value.replace("\u2029", "\\u2029")  # JS paragraph separator
+    return value
+
+def _sanitize_requirements(requirements: str) -> str:
+    """Truncate and escape a requirements string for safe JS interpolation."""
+    truncated = requirements[:_MAX_REQUIREMENTS_LEN]
+    return _escape_for_js_string(truncated)
+
+def _validate_and_sanitize_url(url: str, fallback: str = "https://www.saucedemo.com") -> str:
+    """Validate a URL and return an escaped version safe for JS interpolation.
+
+    Only ``http`` and ``https`` schemes are accepted.  Malformed or dangerous
+    URLs are replaced with *fallback*.
+    """
+    url = url.strip()[:_MAX_URL_LEN]
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return _escape_for_js_string(fallback)
+        if not parsed.netloc:
+            return _escape_for_js_string(fallback)
+    except Exception:
+        return _escape_for_js_string(fallback)
+    return _escape_for_js_string(url)
+
+# --- End sanitization helpers ---
 
 # Real test websites for demos
 TEST_WEBSITES = {
@@ -27,30 +77,32 @@ TEST_WEBSITES = {
 
 def generate_playwright_code(requirements: str, context: Dict[str, Any]) -> str:
     """Generate actual Playwright test code"""
-    
-    app_url = context.get("app_url", "https://www.saucedemo.com")
-    test_name = requirements[:50].replace(" ", "_")
-    
-    # Detect test website type
+
+    raw_app_url = context.get("app_url", "https://www.saucedemo.com")
+    safe_url = _validate_and_sanitize_url(raw_app_url)
+    safe_desc = _sanitize_requirements(requirements[:_MAX_TEST_NAME_LEN])
+    safe_req = _sanitize_requirements(requirements)
+
+    # Detect test website type (use raw URL for matching, not the escaped one)
     website_type = "generic"
     for site_name, site_info in TEST_WEBSITES.items():
-        if site_name in app_url.lower() or site_info["url"] in app_url:
+        if site_name in raw_app_url.lower() or site_info["url"] in raw_app_url:
             website_type = site_info["type"]
             break
-    
+
     code_template = f'''import {{ test, expect }} from '@playwright/test';
 
-test.describe('{requirements[:50]}', () => {{
-  test('{requirements}', async ({{ page }}) => {{
+test.describe('{safe_desc}', () => {{
+  test('{safe_req}', async ({{ page }}) => {{
     // Navigate to application
-    await page.goto('{app_url}');
+    await page.goto('{safe_url}');
 '''
     
     # Generate code based on requirements
     requirements_lower = requirements.lower()
     
     if "login" in requirements_lower or "authentication" in requirements_lower:
-        if "saucedemo" in app_url:
+        if "saucedemo" in raw_app_url:
             code_template += '''    // Login steps
     await page.fill('[data-test="username"]', 'standard_user');
     await page.fill('[data-test="password"]', 'secret_sauce');
@@ -70,7 +122,7 @@ test.describe('{requirements[:50]}', () => {{
 '''
     
     if "checkout" in requirements_lower or "cart" in requirements_lower:
-        if "saucedemo" in app_url:
+        if "saucedemo" in raw_app_url:
             code_template += '''    // Add item to cart
     await page.click('[data-test="add-to-cart-sauce-labs-backpack"]');
     await page.click('.shopping_cart_link');
@@ -133,17 +185,19 @@ test.describe('{requirements[:50]}', () => {{
 
 def generate_manual_test_steps(requirements: str, context: Dict[str, Any]) -> List[Dict[str, str]]:
     """Generate manual test steps in natural language"""
-    
+
     requirements_lower = requirements.lower()
-    app_url = context.get("app_url", "https://www.saucedemo.com")
-    
+    raw_app_url = context.get("app_url", "https://www.saucedemo.com")
+    # Validate URL even for manual steps (may be rendered in HTML / UI)
+    safe_url = _validate_and_sanitize_url(raw_app_url)
+
     steps = []
-    
+
     if "login" in requirements_lower:
         steps.extend([
             {
                 "step_number": len(steps) + 1,
-                "action": f"Navigate to {app_url}",
+                "action": f"Navigate to {safe_url}",
                 "expected_result": "Application home page loads successfully",
                 "notes": "Wait for page to fully load"
             },
@@ -217,16 +271,19 @@ def generate_manual_test_steps(requirements: str, context: Dict[str, Any]) -> Li
 
 def generate_api_test_code(requirements: str, context: Dict[str, Any]) -> str:
     """Generate API test code"""
-    
-    api_base_url = context.get("api_url", "https://api.example.com")
+
+    raw_api_url = context.get("api_url", "https://api.example.com")
+    safe_api_url = _validate_and_sanitize_url(raw_api_url, fallback="https://api.example.com")
+    safe_desc = _sanitize_requirements(requirements[:_MAX_TEST_NAME_LEN])
+    safe_req = _sanitize_requirements(requirements)
     requirements_lower = requirements.lower()
-    
+
     code_template = f'''import {{ test, expect }} from '@playwright/test';
 
-test.describe('API Tests - {requirements[:50]}', () => {{
-  const baseURL = '{api_base_url}';
-  
-  test('{requirements}', async ({{ request }}) => {{
+test.describe('API Tests - {safe_desc}', () => {{
+  const baseURL = '{safe_api_url}';
+
+  test('{safe_req}', async ({{ request }}) => {{
 '''
     
     if "login" in requirements_lower or "authentication" in requirements_lower:

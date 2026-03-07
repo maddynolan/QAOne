@@ -172,7 +172,7 @@ async def jira_webhook(
     
     except Exception as e:
         logger.error(f"Error processing Jira webhook: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error processing webhook: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error processing webhook")
 
 
 @router.get("/webhook/test", summary="Test webhook endpoint")

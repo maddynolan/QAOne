@@ -96,8 +96,15 @@ def _get_fernet():
 
     secret = os.getenv(
         "ENCRYPTION_KEY",
-        os.getenv("SECRETS_ENCRYPTION_KEY", "flowstral-default-key-change-me"),
+        os.getenv("SECRETS_ENCRYPTION_KEY", ""),
     )
+    if not secret:
+        if os.getenv("APP_ENV", "development") == "production":
+            logger.error("[AISettings] ENCRYPTION_KEY not set — cannot encrypt AI keys in production")
+            return None
+        else:
+            logger.warning("[AISettings] ENCRYPTION_KEY not set — using insecure dev default")
+            secret = "dev-only-insecure-key-do-not-use-in-prod"
     key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
     return Fernet(key)
 

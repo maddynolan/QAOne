@@ -7,6 +7,9 @@ API endpoints for running OWASP API Security Top 10 scans.
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.services.api_testing.owasp_api_security import (
     get_owasp_scanner,
@@ -103,7 +106,8 @@ async def run_security_scan(request: SecurityScanRequest):
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
+        logger.error(f"OWASP scan failed: {e}")
+        raise HTTPException(status_code=500, detail="Scan failed")
 
 
 @router.post("/quick-scan")
@@ -139,7 +143,8 @@ async def run_quick_scan(request: QuickScanRequest):
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Quick scan failed: {str(e)}")
+        logger.error(f"OWASP quick scan failed: {e}")
+        raise HTTPException(status_code=500, detail="Quick scan failed")
 
 
 @router.get("/categories")

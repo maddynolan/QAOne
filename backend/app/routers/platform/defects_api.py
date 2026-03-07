@@ -122,7 +122,7 @@ async def get_defect(defect_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting defect: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve defect")
 
 
 @router.post("")
@@ -186,7 +186,7 @@ async def create_defect(request: Request):
         raise
     except Exception as e:
         logger.error(f"Error creating defect: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to create defect")
 
 
 @router.put("/{defect_id}")
@@ -259,7 +259,7 @@ async def update_defect(defect_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error updating defect: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to update defect")
 
 
 @router.delete("/{defect_id}")
@@ -287,6 +287,6 @@ async def delete_defect(defect_id: str):
         raise
     except Exception as e:
         logger.error(f"Error deleting defect: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to delete defect")
 
 

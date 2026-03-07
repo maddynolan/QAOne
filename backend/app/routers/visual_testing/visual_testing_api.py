@@ -14,6 +14,7 @@ Features:
 
 import logging
 import os
+import re
 import base64
 import json
 from typing import Dict, List, Any, Optional
@@ -28,17 +29,43 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/visual-testing", tags=["Visual Testing"])
 
+# ==================== Security Constants ====================
+
+MAX_IMAGE_SIZE = 50 * 1024 * 1024  # 50MB
+
+_TEST_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9_\-\.]+$')
+
+
+def _validate_test_name(test_name: str) -> None:
+    """Validate test_name does not contain path traversal characters."""
+    if not _TEST_NAME_PATTERN.match(test_name):
+        raise HTTPException(
+            status_code=400,
+            detail="test_name must contain only alphanumeric characters, underscores, hyphens, and dots"
+        )
+
+
+def _validate_base64_image_size(data: str, field_name: str = "image") -> None:
+    """Validate that base64 image data doesn't exceed MAX_IMAGE_SIZE when decoded."""
+    # base64 encodes 3 bytes into 4 characters; estimate decoded size
+    estimated_size = len(data) * 3 // 4
+    if estimated_size > MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field_name} exceeds maximum allowed size of {MAX_IMAGE_SIZE // (1024 * 1024)}MB"
+        )
+
 
 # ==================== Pydantic Models ====================
 
 class IgnoreRegionModel(BaseModel):
     """Region to ignore during comparison"""
-    x: int = Field(..., description="X coordinate")
-    y: int = Field(..., description="Y coordinate")
-    width: int = Field(..., description="Width in pixels")
-    height: int = Field(..., description="Height in pixels")
-    name: str = Field("", description="Optional name for the region")
-    reason: str = Field("", description="Reason for ignoring (e.g., 'timestamp', 'ad')")
+    x: int = Field(..., ge=0, le=100000, description="X coordinate")
+    y: int = Field(..., ge=0, le=100000, description="Y coordinate")
+    width: int = Field(..., ge=1, le=100000, description="Width in pixels")
+    height: int = Field(..., ge=1, le=100000, description="Height in pixels")
+    name: str = Field("", max_length=200, description="Optional name for the region")
+    reason: str = Field("", max_length=500, description="Reason for ignoring (e.g., 'timestamp', 'ad')")
 
 
 class CompareRequest(BaseModel):
@@ -85,7 +112,7 @@ class BatchCompareRequest(BaseModel):
 async def compare_images(request: CompareRequest) -> Dict[str, Any]:
     """
     Compare two images and return detailed comparison result.
-    
+
     Supports multiple comparison modes:
     - pixel_perfect: Strict pixel-by-pixel comparison
     - anti_aliased: Allows anti-aliasing differences (recommended)
@@ -93,6 +120,12 @@ async def compare_images(request: CompareRequest) -> Dict[str, Any]:
     - structural: SSIM-based structural comparison
     - layout: Focus on layout, ignore content changes
     """
+    # Base64 image size validation (only for base64 inputs, not file paths)
+    if len(request.baseline) > 200:
+        _validate_base64_image_size(request.baseline, "baseline")
+    if len(request.actual) > 200:
+        _validate_base64_image_size(request.actual, "actual")
+
     try:
         from app.services.automation.visual_testing_engine import (
             VisualTestingEngine, 
@@ -143,16 +176,19 @@ async def compare_images(request: CompareRequest) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error comparing images: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error during image comparison")
 
 
 @router.post("/compare-by-name")
 async def compare_by_baseline_name(request: CompareByNameRequest) -> Dict[str, Any]:
     """
     Compare an actual image against a stored baseline by test name.
-    
+
     This is the recommended approach for CI/CD pipelines.
     """
+    # Base64 image size validation
+    _validate_base64_image_size(request.actual, "actual")
+
     try:
         from app.services.automation.visual_testing_engine import (
             VisualTestingEngine, 
@@ -210,7 +246,7 @@ async def compare_by_baseline_name(request: CompareByNameRequest) -> Dict[str, A
         
     except Exception as e:
         logger.error(f"Error comparing by name: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error during baseline comparison")
 
 
 @router.post("/batch-compare")
@@ -251,7 +287,7 @@ async def batch_compare(request: BatchCompareRequest) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error in batch compare: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error during batch comparison")
 
 
 # ==================== Baseline Management ====================
@@ -273,7 +309,7 @@ async def list_baselines() -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error listing baselines: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while listing baselines")
 
 
 @router.get("/baselines/{test_name}")
@@ -309,7 +345,7 @@ async def get_baseline(test_name: str) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"Error getting baseline: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving baseline")
 
 
 @router.get("/baselines/{test_name}/image")
@@ -334,17 +370,23 @@ async def get_baseline_image(test_name: str):
         raise
     except Exception as e:
         logger.error(f"Error getting baseline image: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving baseline image")
 
 
 @router.post("/baselines")
 async def save_baseline(request: SaveBaselineRequest) -> Dict[str, Any]:
     """Save a new baseline image"""
+    # Path traversal prevention
+    _validate_test_name(request.test_name)
+
+    # Base64 image size validation
+    _validate_base64_image_size(request.image)
+
     try:
         from app.services.automation.visual_testing_engine import VisualTestingEngine
-        
+
         engine = VisualTestingEngine()
-        
+
         # Check if baseline already exists
         existing = engine.get_baseline(request.test_name)
         if existing:
@@ -373,17 +415,20 @@ async def save_baseline(request: SaveBaselineRequest) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"Error saving baseline: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while saving baseline")
 
 
 @router.put("/baselines/{test_name}")
 async def update_baseline(test_name: str, request: UpdateBaselineRequest) -> Dict[str, Any]:
     """Update an existing baseline (with history tracking)"""
+    # Base64 image size validation
+    _validate_base64_image_size(request.image)
+
     try:
         from app.services.automation.visual_testing_engine import VisualTestingEngine
-        
+
         engine = VisualTestingEngine()
-        
+
         # Decode image
         image_bytes = base64.b64decode(request.image)
         
@@ -403,7 +448,7 @@ async def update_baseline(test_name: str, request: UpdateBaselineRequest) -> Dic
         
     except Exception as e:
         logger.error(f"Error updating baseline: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while updating baseline")
 
 
 @router.delete("/baselines/{test_name}")
@@ -427,7 +472,7 @@ async def delete_baseline(test_name: str) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"Error deleting baseline: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while deleting baseline")
 
 
 # ==================== Diff Management ====================
@@ -466,7 +511,7 @@ async def list_diffs(
         
     except Exception as e:
         logger.error(f"Error listing diffs: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while listing diffs")
 
 
 @router.get("/diffs/{filename}")
@@ -491,7 +536,7 @@ async def get_diff_image(filename: str):
         raise
     except Exception as e:
         logger.error(f"Error getting diff: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving diff")
 
 
 # ==================== Configuration ====================
@@ -522,7 +567,7 @@ async def get_config() -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error getting config: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while retrieving configuration")
 
 
 # ==================== Upload Endpoints (for multipart form data) ====================
@@ -574,7 +619,7 @@ async def upload_and_compare(
         
     except Exception as e:
         logger.error(f"Error in upload compare: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error during upload comparison")
 
 
 @router.post("/upload/baseline")
@@ -585,6 +630,9 @@ async def upload_baseline(
     """
     Upload and save a baseline image.
     """
+    # Path traversal prevention
+    _validate_test_name(test_name)
+
     try:
         from app.services.automation.visual_testing_engine import VisualTestingEngine
         
@@ -613,7 +661,7 @@ async def upload_baseline(
         raise
     except Exception as e:
         logger.error(f"Error uploading baseline: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while uploading baseline")
 
 
 # ==================== Helper Endpoints ====================
@@ -630,14 +678,30 @@ async def capture_screenshot(
 ) -> Dict[str, Any]:
     """
     Capture a screenshot from a URL.
-    
+
     Uses Playwright to render the page and capture a screenshot.
     Optionally saves it as a baseline.
+
+    SECURITY WARNING: Screenshots may contain PII (personally identifiable information)
+    visible on the captured page. Screenshots are stored server-side and returned as
+    base64. Ensure that screenshot storage is access-controlled and that screenshots
+    of pages containing sensitive data (login forms, user profiles, financial data)
+    are treated as sensitive artifacts. Consider using ignore regions to mask PII areas.
     """
+    # SSRF prevention: validate URL before navigating
+    from app.utils.url_validator import validate_url
+    try:
+        validate_url(url)
+    except ValueError as url_err:
+        raise HTTPException(status_code=400, detail=f"Invalid URL: {str(url_err)}")
+
+    # Path traversal prevention
+    _validate_test_name(test_name)
+
     try:
         from playwright.async_api import async_playwright
         from app.services.automation.visual_testing_engine import VisualTestingEngine
-        
+
         engine = VisualTestingEngine()
         
         async with async_playwright() as p:
@@ -694,7 +758,7 @@ async def capture_screenshot(
         
     except Exception as e:
         logger.error(f"Error capturing screenshot: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error while capturing screenshot")
 
 
 

@@ -93,7 +93,7 @@ async def generate_tests_from_capability_map(request: GenerateTestsRequest):
         logger.error(f"Test generation failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Test generation failed: {str(e)}"
+            detail="Test generation failed"
         )
 
 
@@ -193,6 +193,6 @@ async def generate_and_save_tests(request: GenerateTestsRequest):
         logger.error(f"Test generation and save failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Test generation failed: {str(e)}"
+            detail="Test generation failed"
         )
 

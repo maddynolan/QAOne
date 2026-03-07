@@ -78,7 +78,9 @@ async def start_recording(request: StartSessionRequest):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import logging
+        logging.getLogger(__name__).error(f"Failed to start CDP recording: {e}")
+        raise HTTPException(status_code=500, detail="Failed to start recording session")
 
 
 @router.post("/stop/{session_id}")

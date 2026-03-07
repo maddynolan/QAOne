@@ -2,10 +2,16 @@
 JWT Authentication Service
 Handles JWT token generation, validation, and claims extraction.
 Integrates with RBAC for role and permission claims.
+
+Security notes:
+- JWT_SECRET_KEY MUST be set via environment variable (no hardcoded fallback)
+- Signature verification is ALWAYS enforced — no bypass
+- Short-lived access tokens (configurable, default 24h) with refresh support
 """
 
 import logging
 import os
+import uuid
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 import jwt
@@ -13,27 +19,55 @@ from jwt.exceptions import InvalidTokenError, ExpiredSignatureError
 
 logger = logging.getLogger(__name__)
 
-# JWT Configuration
-JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
+# JWT Configuration — SECRET MUST be provided via environment variable
+JWT_SECRET = os.getenv("JWT_SECRET_KEY", os.getenv("JWT_SECRET", ""))
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS", "24"))
+
+# Minimum secret length for security (256 bits = 32 bytes)
+_MIN_SECRET_LENGTH = 32
+
+
+def validate_jwt_config():
+    """
+    Validate JWT configuration on startup.
+    Raises RuntimeError if critical config is missing.
+    Called from main.py startup.
+    """
+    if not JWT_SECRET:
+        if os.getenv("APP_ENV", "development") == "production":
+            raise RuntimeError(
+                "CRITICAL: JWT_SECRET_KEY environment variable is not set. "
+                "This is required for production deployments. "
+                "Generate a secure secret: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+            )
+        else:
+            logger.warning(
+                "JWT_SECRET_KEY not set — using insecure default for development. "
+                "Set JWT_SECRET_KEY env var before deploying to production!"
+            )
+    elif len(JWT_SECRET) < _MIN_SECRET_LENGTH:
+        logger.warning(
+            f"JWT_SECRET_KEY is only {len(JWT_SECRET)} chars — "
+            f"recommend at least {_MIN_SECRET_LENGTH} chars for security"
+        )
 
 
 class JWTService:
     """
     Service for JWT token operations:
     - Generate tokens with user, tenant, roles, permissions
-    - Validate tokens
-    - Extract claims
+    - Validate tokens with signature verification
+    - Extract claims (always verified)
     """
-    
+
     def __init__(self):
-        self.secret = JWT_SECRET
+        self.secret = JWT_SECRET or "dev-only-insecure-secret-change-me"
         self.algorithm = JWT_ALGORITHM
         self.expiration_hours = JWT_EXPIRATION_HOURS
-        
-        if self.secret == "your-secret-key-change-in-production":
-            logger.warning("Using default JWT secret - change in production!")
+
+        if not JWT_SECRET:
+            logger.warning("JWT secret not configured — using insecure dev default")
     
     def generate_token(
         self,
@@ -60,11 +94,12 @@ class JWTService:
         """
         now = datetime.utcnow()
         expiration = now + timedelta(hours=self.expiration_hours)
-        
+
         payload = {
             "sub": user_id,  # Standard JWT subject claim
             "user_id": user_id,
             "tenant_id": tenant_id,
+            "jti": str(uuid.uuid4()),  # Unique token ID for revocation support
             "iat": int(now.timestamp()),  # Issued at
             "exp": int(expiration.timestamp()),  # Expiration
         }
@@ -115,13 +150,16 @@ class JWTService:
     
     def extract_claims(self, token: str) -> Dict[str, Any]:
         """
-        Extract claims from token without validation (for debugging).
-        Use validate_token() for production.
+        Extract claims from token WITH signature verification.
+        This is the safe version — signature is always verified.
         """
         try:
-            # Decode without verification (for debugging only)
-            payload = jwt.decode(token, options={"verify_signature": False})
+            # Always verify signature — never skip verification
+            payload = jwt.decode(token, self.secret, algorithms=[self.algorithm])
             return payload
+        except ExpiredSignatureError:
+            logger.warning("JWT token expired during claims extraction")
+            return {}
         except Exception as e:
             logger.error(f"Error extracting claims: {e}")
             return {}

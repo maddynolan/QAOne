@@ -117,7 +117,7 @@ async def generate_test_cases_from_action_graph(
     
     except Exception as e:
         logger.error(f"Failed to generate test cases: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to generate test cases: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to generate test cases")
 
 
 @router.post("/convert-format")
@@ -154,7 +154,7 @@ async def convert_test_case_format(
     
     except Exception as e:
         logger.error(f"Failed to convert format: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to convert format: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to convert format")
 
 
 @router.post("/validate")
@@ -181,5 +181,5 @@ async def validate_test_cases(
     
     except Exception as e:
         logger.error(f"Failed to validate test cases: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to validate: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to validate")
 

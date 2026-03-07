@@ -141,7 +141,7 @@ async def generate_enhanced_test_suite(request: EnhancedTestSuiteRequest):
         }
     except Exception as e:
         logger.error(f"Error generating enhanced test suite: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate enhanced test suite")
 
 
 @router.post("/openapi/validate")
@@ -159,7 +159,7 @@ async def validate_openapi_spec(request: OpenAPIValidateRequest):
         return result
     except Exception as e:
         logger.error(f"OpenAPI validation error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to validate OpenAPI spec")
 
 
 @router.post("/openapi/infer-schema")
@@ -172,7 +172,7 @@ async def infer_schema_from_response(request: SchemaInferRequest):
         return {"status": "success", "schema": schema}
     except Exception as e:
         logger.error(f"Schema inference error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to infer schema from response")
 
 
 @router.post("/data-driven/source")
@@ -208,7 +208,7 @@ async def create_data_source(request: DataSourceRequest):
         raise
     except Exception as e:
         logger.error(f"Data source creation error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to create data source")
 
 
 @router.get("/data-driven/source/{source_id}/preview")
@@ -223,7 +223,7 @@ async def get_data_source_preview(source_id: str, max_rows: int = 10):
         raise
     except Exception as e:
         logger.error(f"Data source preview error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get data source preview")
 
 
 @router.post("/data-driven/execute")
@@ -242,7 +242,7 @@ async def execute_data_driven_tests(request: DataDrivenExecuteRequest):
         return results
     except Exception as e:
         logger.error(f"Data-driven execution error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to execute data-driven tests")
 
 
 @router.post("/database/connect")
@@ -270,7 +270,7 @@ async def connect_database(request: DatabaseConnectionRequest):
             raise HTTPException(status_code=400, detail="Failed to connect to database")
     except Exception as e:
         logger.error(f"Database connection error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to connect to database")
 
 
 @router.post("/database/query")
@@ -294,7 +294,7 @@ async def execute_database_query(
         }
     except Exception as e:
         logger.error(f"Database query error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to execute database query")
 
 
 @router.post("/database/assert")
@@ -312,7 +312,7 @@ async def assert_database_state(
         return result
     except Exception as e:
         logger.error(f"Database assertion error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to assert database state")
 
 
 @router.get("/database/connections")
@@ -336,7 +336,7 @@ async def disconnect_database(connection_id: str):
             raise HTTPException(status_code=404, detail=f"Connection {connection_id} not found")
     except Exception as e:
         logger.error(f"Database disconnect error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to disconnect from database")
 
 
 @router.get("/database/{connection_id}/tables")
@@ -354,10 +354,11 @@ async def list_database_tables(connection_id: str):
             "count": len(tables)
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"List tables not found: {e}")
+        raise HTTPException(status_code=404, detail="Database connection not found")
     except Exception as e:
         logger.error(f"List tables error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to list database tables")
 
 
 @router.get("/database/{connection_id}/tables/{table_name}/columns")
@@ -376,10 +377,11 @@ async def get_table_columns(connection_id: str, table_name: str):
             "count": len(columns)
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"Get columns not found: {e}")
+        raise HTTPException(status_code=404, detail="Database connection or table not found")
     except Exception as e:
         logger.error(f"Get columns error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get table columns")
 
 
 @router.post("/execute")
@@ -407,7 +409,7 @@ async def execute_tests(request: TestExecutionRequest):
         }
     except Exception as e:
         logger.error(f"Test execution error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to execute API test")
 
 
 @router.post("/execute/load")
@@ -432,7 +434,7 @@ async def execute_load_test(request: LoadTestRequest):
         }
     except Exception as e:
         logger.error(f"Load test error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to execute load test")
 
 
 @router.post("/virtual-service/create")
@@ -457,7 +459,7 @@ async def create_virtual_service(request: VirtualServiceRequest):
         }
     except Exception as e:
         logger.error(f"Virtual service creation error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to create virtual service")
 
 
 @router.post("/virtual-service/{service_id}/scenario")
@@ -478,7 +480,7 @@ async def add_virtual_service_scenario(
         }
     except Exception as e:
         logger.error(f"Scenario creation error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to add virtual service scenario")
 
 
 @router.get("/virtual-service")
@@ -513,7 +515,7 @@ async def generate_report(execution_results: Dict[str, Any]):
         }
     except Exception as e:
         logger.error(f"Report generation error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate report")
 
 
 @router.get("/report/{report_id}")
@@ -534,7 +536,7 @@ async def get_report(report_id: str, format: str = "json"):
             raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
     except Exception as e:
         logger.error(f"Report retrieval error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve report")
 
 
 @router.post("/report/trends")
@@ -552,7 +554,7 @@ async def generate_trend_report(
         }
     except Exception as e:
         logger.error(f"Trend report generation error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate trend report")
 
 
 @router.get("/protocols")
@@ -576,7 +578,7 @@ async def create_environment(request: EnvironmentRequest):
         }
     except Exception as e:
         logger.error(f"Environment creation error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to create environment")
 
 
 @router.get("/environment")
@@ -599,7 +601,8 @@ async def get_environment(environment_id: str):
             "environment": environment
         }
     except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"Error getting environment {environment_id}: {e}")
+        raise HTTPException(status_code=404, detail="Environment not found")
 
 
 @router.put("/environment/{environment_id}")
@@ -615,7 +618,8 @@ async def update_environment(
             "environment": environment
         }
     except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"Error updating environment {environment_id}: {e}")
+        raise HTTPException(status_code=404, detail="Environment not found")
 
 
 @router.delete("/environment/{environment_id}")
@@ -642,7 +646,8 @@ async def resolve_environment_variables(
             "resolved": resolved
         }
     except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"Error resolving environment variables for {environment_id}: {e}")
+        raise HTTPException(status_code=404, detail="Environment not found")
 
 
 @router.get("/capabilities")
@@ -794,7 +799,7 @@ async def run_security_scan(request: SecurityScanRequest):
         
     except Exception as e:
         logger.error(f"Security scan error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to run security scan")
 
 
 # ===================== Test Data Generator Endpoints =====================
@@ -875,10 +880,11 @@ async def generate_test_data(request: DataGenRequest):
             "value": value
         }
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Data generation validation error: {e}")
+        raise HTTPException(status_code=400, detail="Invalid data type or generation options")
     except Exception as e:
         logger.error(f"Data generation error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate test data")
 
 
 @router.post("/datagen/object")
@@ -910,7 +916,7 @@ async def generate_test_object(request: DataGenObjectRequest):
         }
     except Exception as e:
         logger.error(f"Object generation error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate test object")
 
 
 @router.post("/datagen/batch")
@@ -946,7 +952,7 @@ async def generate_large_batch(request: DataGenBatchRequest):
         }
     except Exception as e:
         logger.error(f"Batch generation error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate batch test data")
 
 
 @router.get("/datagen/stats")
@@ -1022,7 +1028,7 @@ async def create_mock_server(request: MockServerCreateRequest):
         }
     except Exception as e:
         logger.error(f"Mock server creation error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to create mock server")
 
 
 @router.post("/mock/server/{server_id}/start")
@@ -1040,10 +1046,11 @@ async def start_mock_server(server_id: str):
             "base_url": base_url
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"Mock server not found: {e}")
+        raise HTTPException(status_code=404, detail="Mock server not found")
     except Exception as e:
         logger.error(f"Mock server start error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to start mock server")
 
 
 @router.post("/mock/server/{server_id}/stop")
@@ -1134,10 +1141,11 @@ async def add_mock_endpoint(server_id: str, request: MockEndpointRequest):
             "endpoint_id": endpoint_id
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"Mock server not found for endpoint addition: {e}")
+        raise HTTPException(status_code=404, detail="Mock server not found")
     except Exception as e:
         logger.error(f"Add endpoint error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to add mock endpoint")
 
 
 @router.post("/mock/server/{server_id}/from-openapi")
@@ -1155,10 +1163,11 @@ async def create_mock_from_openapi(server_id: str, openapi_spec: Dict[str, Any])
             "endpoint_ids": endpoint_ids
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.error(f"Mock server not found for OpenAPI generation: {e}")
+        raise HTTPException(status_code=404, detail="Mock server not found")
     except Exception as e:
         logger.error(f"OpenAPI mock generation error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate mock from OpenAPI spec")
 
 
 @router.delete("/mock/server/{server_id}/endpoint/{endpoint_id}")

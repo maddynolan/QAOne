@@ -110,14 +110,23 @@ class ProtocolRecording:
 class ProtocolRecorder:
     """
     Main Protocol Recording Engine
-    
+
     Features:
     - Captures HTTP/HTTPS traffic with timing
     - Auto-detects correlatable values
     - Links requests to user actions
     - Generates performance test scripts
+    - Masks sensitive headers (Authorization, Cookie, API keys)
     """
-    
+
+    # Headers that contain sensitive data and must be masked in recordings
+    SENSITIVE_HEADERS = {
+        'authorization', 'cookie', 'set-cookie',
+        'x-api-key', 'x-auth-token', 'x-csrf-token',
+        'proxy-authorization', 'www-authenticate',
+        'x-forwarded-authorization',
+    }
+
     # Known correlation patterns
     CORRELATION_PATTERNS = [
         # Session/Auth tokens
@@ -216,20 +225,36 @@ class ProtocolRecorder:
         logger.info(f"Stopped protocol recording: {recording_id} ({recording.total_requests} requests)")
         return recording
     
+    @classmethod
+    def _mask_sensitive_headers(cls, headers: Dict[str, str]) -> Dict[str, str]:
+        """
+        Mask sensitive header values to prevent credential leakage in recordings.
+        Mirrors the masking behavior of the Chrome extension (network-capture.js).
+        """
+        if not headers:
+            return headers
+        masked = {}
+        for key, value in headers.items():
+            if key.lower() in cls.SENSITIVE_HEADERS:
+                masked[key] = "[MASKED]"
+            else:
+                masked[key] = value
+        return masked
+
     async def record_request(
         self,
         recording_id: str,
         request_data: Dict[str, Any]
     ) -> str:
-        """Record an HTTP request"""
+        """Record an HTTP request with sensitive headers masked"""
         if recording_id not in self.recordings:
             raise ValueError(f"Recording {recording_id} not found")
-        
+
         recording = self.recordings[recording_id]
-        
+
         # Generate request ID
         request_id = f"req_{len(recording.requests)}_{int(time.time() * 1000)}"
-        
+
         # Parse URL and query params
         url = request_data.get("url", "")
         query_params = {}
@@ -239,21 +264,25 @@ class ProtocolRecorder:
                 if "=" in param:
                     key, value = param.split("=", 1)
                     query_params[key] = value
-        
+
         # Classify request type
         request_type = self._classify_request(request_data)
-        
+
+        # SECURITY: Mask sensitive headers before storing in recording
+        masked_request_headers = self._mask_sensitive_headers(request_data.get("headers", {}))
+        masked_response_headers = self._mask_sensitive_headers(request_data.get("response_headers", {}))
+
         # Create recorded request
         recorded = RecordedRequest(
             request_id=request_id,
             timestamp=time.time(),
             method=request_data.get("method", "GET").upper(),
             url=url,
-            headers=request_data.get("headers", {}),
+            headers=masked_request_headers,
             body=request_data.get("body"),
             query_params=query_params,
             status_code=request_data.get("status_code", 0),
-            response_headers=request_data.get("response_headers", {}),
+            response_headers=masked_response_headers,
             response_body=self._capture_response_body(request_data),
             response_size=request_data.get("response_size", 0),
             duration_ms=request_data.get("duration_ms", 0),
@@ -613,6 +642,11 @@ class ProtocolRecorder:
         
         entries = []
         for request in recording.requests:
+            # SECURITY: Headers are already masked during recording, but re-mask on export
+            # in case older recordings pre-date the masking logic
+            export_req_headers = self._mask_sensitive_headers(request.headers)
+            export_resp_headers = self._mask_sensitive_headers(request.response_headers)
+
             entry = {
                 "startedDateTime": datetime.fromtimestamp(request.timestamp).isoformat() + "Z",
                 "time": request.duration_ms,
@@ -620,7 +654,7 @@ class ProtocolRecorder:
                     "method": request.method,
                     "url": request.url,
                     "httpVersion": "HTTP/1.1",
-                    "headers": [{"name": k, "value": v} for k, v in request.headers.items()],
+                    "headers": [{"name": k, "value": v} for k, v in export_req_headers.items()],
                     "queryString": [{"name": k, "value": v} for k, v in request.query_params.items()],
                     "postData": {
                         "mimeType": request.headers.get("Content-Type", ""),
@@ -633,7 +667,7 @@ class ProtocolRecorder:
                     "status": request.status_code,
                     "statusText": "",
                     "httpVersion": "HTTP/1.1",
-                    "headers": [{"name": k, "value": v} for k, v in request.response_headers.items()],
+                    "headers": [{"name": k, "value": v} for k, v in export_resp_headers.items()],
                     "content": {
                         "size": request.response_size,
                         "mimeType": request.response_headers.get("Content-Type", ""),

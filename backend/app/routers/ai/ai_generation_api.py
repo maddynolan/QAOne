@@ -282,10 +282,10 @@ Respond ONLY with valid JSON array:
         return response
 
     except Exception as e:
-        print(f"Error generating tests: {str(e)}")
+        logger.error(f"Error generating tests: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate test cases: {str(e)}"
+            detail="Failed to generate test cases"
         )
 
 
@@ -329,10 +329,10 @@ async def triage_failure(request: Request, body: TriageRequest):
         return response
 
     except Exception as e:
-        print(f"Error analyzing defect: {str(e)}")
+        logger.error(f"Error analyzing defect: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to analyze defect: {str(e)}"
+            detail="Failed to analyze defect"
         )
 
 @router.post("/runs/ingest")
@@ -525,11 +525,10 @@ IMPORTANT: Your response must be ONLY a valid JSON array. No markdown, no explan
                 raise Exception("No test cases generated from model response")
                 
         except Exception as e:
-            logger.error(f"Error generating test cases: {str(e)}")
-            # Return a more helpful error
+            logger.error(f"Error generating test cases: {e}")
             raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to generate test cases: {str(e)}. This might be due to: 1) Model timeout, 2) Invalid JSON response, 3) Network issue. Try again or use a simpler requirement."
+                status_code=500,
+                detail="Failed to generate test cases. This might be due to: 1) Model timeout, 2) Invalid JSON response, 3) Network issue. Try again or use a simpler requirement."
             )
         
         # Store generation for fine-tuning (fire and forget)
@@ -556,7 +555,7 @@ IMPORTANT: Your response must be ONLY a valid JSON array. No markdown, no explan
         
     except Exception as e:
         print(f"Error in jira-to-testcases: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -604,7 +603,7 @@ Respond ONLY with valid TypeScript code (no markdown, no explanations):"""
         
     except Exception as e:
         print(f"Error in testcase-to-playwright: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -768,7 +767,7 @@ Respond with valid {tool} script code (no markdown, no explanations):"""
         
     except Exception as e:
         print(f"Error in perf-tests: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -816,7 +815,7 @@ async def generate_a11y_tests(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Error in a11y-tests: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
     
 
 
@@ -868,7 +867,7 @@ Respond with valid TypeScript/Playwright code using @axe-core/playwright (no mar
         
     except Exception as e:
         print(f"Error in a11y-tests: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -938,10 +937,10 @@ Provide a comprehensive analysis in JSON format:
         }
 
     except Exception as e:
-        print(f"Error in triage: {str(e)}")
+        logger.error(f"Error in triage: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to analyze defect: {str(e)}"
+            detail="Failed to analyze defect"
         )
 
 
@@ -991,7 +990,7 @@ Provide a comprehensive analysis in JSON format with summary, root_cause, catego
         
         return {"templates": default_templates}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -1037,7 +1036,7 @@ async def save_ai_template(request: Request, body: dict):
             detail=f"Failed to save template: {str(db_error)}"
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -1098,7 +1097,7 @@ async def rate_generation(generation_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error rating generation: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -1153,7 +1152,7 @@ async def correct_generation(generation_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error correcting generation: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -1198,7 +1197,7 @@ async def gateway_generate(request: Request, body: dict):
         
     except Exception as e:
         logger.error(f"Gateway generate failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -1236,7 +1235,7 @@ async def gateway_chat(request: Request, body: dict):
         
     except Exception as e:
         logger.error(f"Gateway chat failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -1271,7 +1270,7 @@ async def gateway_embedding(request: Request, body: dict):
         
     except Exception as e:
         logger.error(f"Gateway embedding failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -1334,7 +1333,7 @@ async def get_llm_usage(
         
     except Exception as e:
         logger.error(f"Failed to get usage stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -1440,7 +1439,7 @@ async def export_training_data(
         raise
     except Exception as e:
         logger.error(f"Error exporting training data: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -2061,7 +2060,7 @@ Return ONLY valid configuration (no markdown):"""
         
     except Exception as e:
         logger.error(f"Error in generate-tests-enhanced: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -2183,7 +2182,7 @@ async def url_discover(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Error in url-discover: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/tests/job/{job_id}/status")
@@ -2198,7 +2197,7 @@ async def get_job_status(job_id: str):
         return status
     except Exception as e:
         logger.error(f"Error getting job status: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Health endpoints removed - use /health/database and /health/diagnostic from health_api router instead
@@ -2237,7 +2236,7 @@ async def validate_code(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Error in validate-code: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -2296,7 +2295,7 @@ async def convert_manual_to_playwright(request: Request, body: dict):
         
     except Exception as e:
         logger.error(f"Error in convert-to-playwright: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -2627,8 +2626,8 @@ Return ONLY the JSON array, no markdown, no explanations:"""
             print(f"Full traceback:\n{error_traceback}")
             # Don't continue if test case creation failed - we need it for foreign key
             raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to create test case in database: {str(e)}. Cannot proceed with test execution."
+                status_code=500,
+                detail="Failed to create test case in database. Cannot proceed with test execution."
             )
         
         if not test_case_created:
@@ -2771,7 +2770,7 @@ Return ONLY the JSON array, no markdown, no explanations:"""
         logger.error(f"Full traceback:\n{error_traceback}")
         print(f"[ERROR] ERROR in generate-and-execute-automated: {str(e)}")
         print(f"Full traceback:\n{error_traceback}")
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}. Check server logs for full traceback.")
+        raise HTTPException(status_code=500, detail="Internal server error. Check server logs for details.")
 
 
 

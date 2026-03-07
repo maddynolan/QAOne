@@ -53,6 +53,23 @@ Flowstral uses the same Docker images across all deployment modes. The only diff
 
 **Key Principle:** One codebase, four deployment modes. Test cases, runs, and defects are stored in PostgreSQL everywhere (Supabase in cloud, self-hosted in on-prem, SQLite in desktop). The desktop app syncs to whichever backend is configured.
 
+### Security Architecture (v3.17.0+)
+
+| Layer | Control | Reference |
+|-------|---------|-----------|
+| Authentication | JWT with 15-min access tokens, MFA support | SEC-AUTH-001 |
+| Authorization | RBAC middleware with `@require_permission` | SEC-AUTHZ-001 |
+| Tenant Isolation | JWT-based tenant extraction (not headers) | SEC-AUTHZ-002 |
+| Input Validation | SSRF prevention on all URL inputs | SEC-INPUT-004 |
+| Encryption | Fernet for BYOK keys, TLS 1.2+ in transit | SEC-CRYPTO-001 |
+| Error Handling | Sanitized responses (no stack traces in production) | SEC-API-002 |
+| Rate Limiting | Sliding window per endpoint (Redis-backed) | SEC-API-001 |
+| Audit | Append-only audit log with SHA-256 hash chain | SEC-LOG-001 |
+| Container | Non-root (UID 1001), no-new-privileges, read-only FS | SEC-CONTAINER-001 |
+
+For complete security rules, see `docs/SECURITY-RULES-MASTER.md`.
+For compliance mappings (SOC 2, HIPAA, PCI-DSS, ISO 27001, FedRAMP), see `docs/COMPLIANCE-READINESS-MATRIX.md`.
+
 ---
 
 ## 2. Deployment Options & Cost Comparison
@@ -371,6 +388,11 @@ Acme Corp (Organization)
    - Sets `request.state.tenant_id` and `request.state.user_id`
    - Every API call is scoped to the authenticated tenant
 
+   > **SECURITY NOTE (v3.17.0+):** Tenant ID is now extracted exclusively from the authenticated JWT token,
+   > NOT from client-supplied `X-Tenant-ID` headers. The header-based approach described above is deprecated
+   > and has been replaced with JWT-based tenant extraction per SEC-AUTHZ-002. Only internal service-to-service
+   > calls may use the `X-Tenant-ID` header, authenticated via `INTERNAL_SERVICE_KEY`.
+
 2. **RBAC Middleware** (`backend/app/middleware/rbac_middleware.py`):
    - Loads user permissions per tenant from `roles` + `user_roles` tables
    - Route decorators: `@require_permission("test_cases:create")`, `@require_role("admin")`
@@ -448,6 +470,12 @@ Switching updates `AuthContext` (`currentOrg`, `currentProject`), which triggers
 
 **Server-side persistence (v3.13.2):** API collections can now be synced to the server via `POST /api/v2/testing/collections/sync`. The backend stores collections, folders, requests, environments, and chains in PostgreSQL (migrations 032). The Zustand store's `syncToServer()` action pushes localStorage data to the server for team sharing. Collections still work offline via localStorage as the primary store, with optional server sync for cross-device and team access.
 
+> **SECURITY NOTE (v3.17.0+):** All user-supplied URLs (API spec imports via `/api/import/fetch-url`,
+> API request execution targets) are validated through `backend/app/utils/url_validator.py`
+> which blocks private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.169.254),
+> internal hostnames (localhost, metadata.google.internal), and unsafe schemes (file://, ftp://, data://).
+> See SEC-INPUT-004 in `docs/SECURITY-RULES-MASTER.md`.
+
 ### 5.4 Performance Tests
 
 | Data | Storage | Location |
@@ -461,6 +489,12 @@ Switching updates `AuthContext` (`currentOrg`, `currentProject`), which triggers
 
 **Note:** In-browser execution (up to 20 VUs) stores results only in localStorage. Server-side execution (up to 10,000 VUs) persists to PostgreSQL.
 
+> **SECURITY NOTE (v3.17.0+):** All user-supplied URLs (target endpoints for load testing, HAR imports)
+> are validated through `backend/app/utils/url_validator.py` which blocks private IP ranges
+> (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.169.254), internal hostnames (localhost,
+> metadata.google.internal), and unsafe schemes (file://, ftp://, data://).
+> See SEC-INPUT-004 in `docs/SECURITY-RULES-MASTER.md`.
+
 ### 5.5 Visual Tests
 
 | Data | Storage | Location |
@@ -473,6 +507,12 @@ Switching updates `AuthContext` (`currentOrg`, `currentProject`), which triggers
 
 **Note:** Visual testing data is entirely filesystem-based on the backend. No database tables for visual results. Baselines are PNG files managed via REST API endpoints (`/api/visual-testing/baselines`).
 
+> **SECURITY NOTE (v3.17.0+):** All user-supplied URLs (e.g., for screenshot capture via `/api/visual-testing/capture`)
+> are validated through `backend/app/utils/url_validator.py` which blocks private IP ranges
+> (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.169.254), internal hostnames (localhost,
+> metadata.google.internal), and unsafe schemes (file://, ftp://, data://).
+> See SEC-INPUT-004 in `docs/SECURITY-RULES-MASTER.md`.
+
 ### 5.6 Accessibility Tests
 
 | Data | Storage | Location |
@@ -481,6 +521,11 @@ Switching updates `AuthContext` (`currentOrg`, `currentProject`), which triggers
 | Violations | PostgreSQL `accessibility_issues` table | Rule, impact (critical/serious/moderate/minor), WCAG criterion |
 | Detailed findings | PostgreSQL `a11y_findings` table | Issue type, severity, element snippet, suggested fix |
 | Reports | **Generated on-demand** | HTML/JSON/Markdown format, not persisted |
+
+> **SECURITY NOTE (v3.17.0+):** All user-supplied URLs are validated through `backend/app/utils/url_validator.py`
+> which blocks private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.169.254),
+> internal hostnames (localhost, metadata.google.internal), and unsafe schemes (file://, ftp://, data://).
+> See SEC-INPUT-004 in `docs/SECURITY-RULES-MASTER.md`.
 
 ### 5.7 Mobile Tests
 
@@ -762,13 +807,16 @@ REDIS_URL=redis://redis:6379
 
 # Object Storage
 S3_ENDPOINT_URL=http://minio:9000
-S3_ACCESS_KEY=minioadmin
-S3_SECRET_KEY=minioadmin
+S3_ACCESS_KEY=<GENERATE: openssl rand -hex 16>
+S3_SECRET_KEY=<GENERATE: openssl rand -base64 32>
 S3_BUCKET=flowstral-artifacts
+
+# ⚠ WARNING: Never use default MinIO credentials (minioadmin/minioadmin) in any environment.
+# Generate unique credentials before first deployment using the commands above.
 
 # Security
 ENCRYPTION_KEY=<Fernet-key>     # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-SECRET_KEY=<random-string>       # JWT signing
+JWT_SECRET_KEY=<random-string>   # JWT signing (generate with: openssl rand -base64 48)
 
 # AI (optional -- OFF by default, users enable via Settings > AI)
 # OPENAI_API_KEY=sk-...          # Server-level fallback (optional)

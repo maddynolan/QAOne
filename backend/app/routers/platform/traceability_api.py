@@ -424,7 +424,7 @@ async def create_traceability_link(
         raise
     except Exception as e:
         logger.error(f"Error creating traceability link: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to create traceability link")
 
 
 # ==================== HELPER FUNCTIONS ====================

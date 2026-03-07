@@ -101,7 +101,7 @@ async def convert_requirement_to_gherkin(request: RequirementToGherkinRequest):
         raise
     except Exception as e:
         logger.error(f"Error converting requirement to Gherkin: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to convert requirement to Gherkin: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to convert requirement to Gherkin")
 
 
 @router.post("/convert-batch")
@@ -191,7 +191,7 @@ async def convert_batch_requirements_to_gherkin(request: BatchGherkinRequest):
         raise
     except Exception as e:
         logger.error(f"Error converting batch requirements to Gherkin: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to convert requirements to Gherkin: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to convert requirements to Gherkin")
 
 
 @router.get("/formats")

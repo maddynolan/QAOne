@@ -181,7 +181,7 @@ async def find_element_by_description(request: FindElementRequest):
         raise
     except Exception as e:
         logger.error(f"Error finding element: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to find element by description")
 
 
 @router.post("/heal-selector", response_model=HealSelectorResponse)
@@ -246,7 +246,7 @@ async def heal_broken_selector(request: HealSelectorRequest):
         raise
     except Exception as e:
         logger.error(f"Error healing selector: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to heal broken selector")
 
 
 @router.post("/suggest-selectors", response_model=List[SelectorSuggestion])
@@ -289,7 +289,7 @@ async def suggest_better_selectors(request: SuggestSelectorsRequest):
         raise
     except Exception as e:
         logger.error(f"Error suggesting selectors: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to suggest selectors")
 
 
 # ============================================================================

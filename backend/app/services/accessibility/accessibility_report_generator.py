@@ -13,6 +13,7 @@ Reports clearly explain:
 - WHO is affected
 """
 
+import html
 import json
 from typing import Dict, List, Any, Optional
 from datetime import datetime
@@ -20,6 +21,13 @@ from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _h(text):
+    """HTML-escape text for safe insertion into HTML."""
+    if text is None:
+        return ""
+    return html.escape(str(text))
 
 
 class AccessibilityReportGenerator:
@@ -62,74 +70,80 @@ class AccessibilityReportGenerator:
             
             affected_html = ""
             for idx, elem in enumerate(v.get("affected_elements", [])[:5], 1):
-                html_escaped = elem.get("html", "").replace("<", "&lt;").replace(">", "&gt;")
+                html_escaped = _h(elem.get("html", ""))
                 css_selector = elem.get("css_selector", "")
+                css_selector_escaped = _h(css_selector)
+                css_selector_js = _h(json.dumps(css_selector))
                 xpath = elem.get("xpath", "")
-                fix_example = elem.get("fix_example", "").replace("<", "&lt;").replace(">", "&gt;")
-                
+                xpath_escaped = _h(xpath)
+                fix_example = _h(elem.get("fix_example", ""))
+
                 # Build failure reasons list
                 failure_reasons = elem.get("failure_reasons", [])
                 reasons_html = ""
                 if failure_reasons:
                     reasons_html = "<ul class='failure-reasons'>" + "".join([
-                        f"<li>{r}</li>" for r in failure_reasons[:3]
+                        f"<li>{_h(r)}</li>" for r in failure_reasons[:3]
                     ]) + "</ul>"
-                
+
                 affected_html += f"""
                 <div class="element-card">
                     <div class="element-header">
                         <span class="element-number">Element #{idx}</span>
                     </div>
-                    
+
                     <div class="element-locator">
                         <strong>📍 CSS Selector:</strong>
-                        <code class="selector">{css_selector}</code>
-                        <button onclick="navigator.clipboard.writeText('{css_selector}')" class="copy-btn" title="Copy selector">📋</button>
+                        <code class="selector">{css_selector_escaped}</code>
+                        <button onclick="navigator.clipboard.writeText({css_selector_js})" class="copy-btn" title="Copy selector">📋</button>
                     </div>
-                    
-                    {f'<div class="element-locator"><strong>🔗 XPath:</strong><code class="selector">{xpath}</code></div>' if xpath else ''}
-                    
+
+                    {f'<div class="element-locator"><strong>🔗 XPath:</strong><code class="selector">{xpath_escaped}</code></div>' if xpath else ''}
+
                     <div class="element-html">
                         <strong>🏷️ Current HTML:</strong>
                         <div class="code-block"><code>{html_escaped}</code></div>
                     </div>
-                    
+
                     {reasons_html}
-                    
+
                     {f'<div class="fix-example"><strong>✅ Fix Example:</strong><pre>{fix_example}</pre></div>' if fix_example else ''}
                 </div>
                 """
             
             wcag_badges = "".join([
-                f'<span class="wcag-badge">{c}</span>'
+                f'<span class="wcag-badge">{_h(c)}</span>'
                 for c in v.get("wcag_criteria", [])
             ])
             
+            learn_more = v.get("learn_more", "#")
+            learn_more_href = _h(learn_more) if str(learn_more).startswith(('http://', 'https://')) else '#'
+
             violation_cards += f"""
             <div class="violation-card" style="border-left-color: {impact_color}">
                 <div class="violation-header">
                     <span class="impact-badge" style="background: {impact_color}">
-                        {v.get("impact_emoji", "")} {v.get("impact", "").upper()}
+                        {_h(v.get("impact_emoji", ""))} {_h(v.get("impact", "").upper())}
                     </span>
-                    <span class="rule-id">{v.get("rule_id", "")}</span>
+                    <span class="rule-id">{_h(v.get("rule_id", ""))}</span>
                 </div>
-                
+
                 <h3>❌ What's Wrong</h3>
-                <p>{v.get("what_is_wrong", "")}</p>
-                
+                <p>{_h(v.get("what_is_wrong", ""))}</p>
+
                 <h3>⚠️ Why It Matters</h3>
-                <p>{v.get("why_it_matters", "")}</p>
-                
+                <p>{_h(v.get("why_it_matters", ""))}</p>
+
                 <h3>✅ How to Fix</h3>
-                <p class="fix-instruction">{v.get("how_to_fix", "")}</p>
-                
+                <p class="fix-instruction">{_h(v.get("how_to_fix", ""))}</p>
+
                 <h3>🎯 WCAG Criteria</h3>
                 <div class="wcag-badges">{wcag_badges}</div>
-                
-                <h3>📍 Affected Elements ({v.get("element_count", 0)} found)</h3>
+
+                <h3>📍 Affected Elements ({int(v.get("element_count", 0))} found)</h3>
                 {affected_html}
-                
-                <a href="{v.get("learn_more", "#")}" target="_blank" class="learn-more">
+
+                <a href="{learn_more_href}" target="_blank" class="learn-more">
                     📚 Learn More →
                 </a>
             </div>
@@ -141,7 +155,7 @@ class AccessibilityReportGenerator:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Accessibility Report - {scan_info.get("url", "")}</title>
+    <title>Accessibility Report - {_h(scan_info.get("url", ""))}</title>
     <style>
         * {{
             margin: 0;
@@ -553,11 +567,11 @@ class AccessibilityReportGenerator:
     <div class="container">
         <div class="header">
             <h1>♿ Accessibility Report</h1>
-            <p class="url">{scan_info.get("url", "Unknown URL")}</p>
+            <p class="url">{_h(scan_info.get("url", "Unknown URL"))}</p>
             <p class="timestamp">
-                Scanned: {scan_info.get("scan_time", "")} | 
-                WCAG Level: {scan_info.get("wcag_level", "AA")} |
-                Duration: {scan_info.get("scan_duration_ms", 0)}ms
+                Scanned: {_h(scan_info.get("scan_time", ""))} |
+                WCAG Level: {_h(scan_info.get("wcag_level", "AA"))} |
+                Duration: {int(scan_info.get("scan_duration_ms", 0))}ms
             </p>
         </div>
         
@@ -572,7 +586,7 @@ class AccessibilityReportGenerator:
                 <div class="status-indicator" style="background: {status_color}"></div>
                 <div>
                     <div style="font-size: 1.5em; font-weight: bold; color: {status_color}">
-                        {status.replace("_", " ")}
+                        {_h(status.replace("_", " "))}
                     </div>
                     <div class="score-label">Overall Status</div>
                 </div>
@@ -600,7 +614,7 @@ class AccessibilityReportGenerator:
         
         <div class="section">
             <h2>📋 Executive Summary</h2>
-            <div class="executive-summary">{executive_summary}</div>
+            <div class="executive-summary">{_h(executive_summary)}</div>
         </div>
         
         <div class="section">

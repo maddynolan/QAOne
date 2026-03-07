@@ -69,7 +69,7 @@ async def generate_test(request: GenerateTestRequest) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Generate test error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate test")
 
 
 @router.post("/generate-selector")
@@ -96,7 +96,7 @@ async def generate_selector(request: GenerateSelectorRequest) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Generate selector error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate selector")
 
 
 @router.get("/status")
@@ -131,7 +131,7 @@ async def get_llm_status() -> Dict[str, Any]:
         return {
             "anthropic_available": False,
             "api_configured": False,
-            "error": str(e),
+            "error": "Failed to check LLM service status",
             "can_make_requests": False
         }
 
@@ -168,7 +168,7 @@ async def analyze_failure(request: AnalyzeFailureRequest) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Analyze failure error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to analyze test failure")
 
 
 @router.get("/usage-stats")
@@ -197,7 +197,7 @@ async def get_usage_stats() -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Get usage stats error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get usage statistics")
 
 
 @router.get("/cache-stats")
@@ -222,7 +222,7 @@ async def get_cache_stats() -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Get cache stats error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get cache statistics")
 
 
 class ClearCacheRequest(BaseModel):
@@ -254,7 +254,7 @@ async def clear_cache(request: Optional[ClearCacheRequest] = None) -> Dict[str, 
         
     except Exception as e:
         logger.error(f"Clear cache error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to clear cache")
 
 
 @router.get("/health")

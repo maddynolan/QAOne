@@ -125,7 +125,7 @@ async def create_requirement_endpoint(request: Request):
         raise
     except Exception as e:
         logger.error(f"Error creating requirement: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to create requirement")
 
 
 @router.post("/convert-to-gherkin/{requirement_id}")
@@ -281,7 +281,7 @@ Return ONLY the Gherkin feature code. Do not include explanations or markdown fo
         raise
     except Exception as e:
         logger.error(f"Error converting requirement to Gherkin: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to convert requirement to Gherkin")
 
 
 @router.get("/{requirement_id}")
@@ -316,7 +316,7 @@ async def get_requirement(requirement_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting requirement: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve requirement")
 
 
 @router.put("/{requirement_id}")
@@ -382,6 +382,6 @@ async def update_requirement(requirement_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error updating requirement: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to update requirement")
 
 

@@ -38,7 +38,7 @@ async def create_scenario(request: Request, body: dict):
     
     except Exception as e:
         logger.error(f"Error creating scenario: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/scenarios/from-flowstral")
@@ -100,7 +100,7 @@ async def create_scenario_from_flowstral(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error creating scenario from Flowstral: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/scenarios")
@@ -115,7 +115,7 @@ async def list_scenarios(request: Request):
     
     except Exception as e:
         logger.error(f"Error listing scenarios: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/scenarios/{scenario_id}")
@@ -161,7 +161,7 @@ async def get_scenario(request: Request, scenario_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting scenario: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/scenarios/{scenario_id}/steps")
@@ -192,7 +192,7 @@ async def add_step(request: Request, scenario_id: str, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error adding step: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -235,10 +235,11 @@ async def compile_har(request: Request, body: dict):
         }
     
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Error compiling HAR (validation): {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail="Invalid HAR content")
     except Exception as e:
         logger.error(f"Error compiling HAR: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/compile/recording")
@@ -279,7 +280,7 @@ async def compile_recording(request: Request, body: dict):
     
     except Exception as e:
         logger.error(f"Error compiling recording: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/compile/api-requests")
@@ -318,7 +319,7 @@ async def compile_api_requests(request: Request, body: dict):
     
     except Exception as e:
         logger.error(f"Error compiling API requests: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/compile/load-requests")
@@ -366,7 +367,7 @@ async def compile_load_requests(request: Request, body: dict):
     
     except Exception as e:
         logger.error(f"Error compiling load requests: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -411,7 +412,7 @@ async def create_draft(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error creating draft: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/drafts/{draft_id}")
@@ -427,7 +428,7 @@ async def get_draft(request: Request, draft_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting draft: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/drafts")
@@ -443,7 +444,7 @@ async def list_drafts(request: Request, limit: int = 50):
         }
     except Exception as e:
         logger.error(f"Error listing drafts: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.delete("/drafts/{draft_id}")
@@ -458,7 +459,7 @@ async def delete_draft(request: Request, draft_id: str):
         raise
     except Exception as e:
         logger.error(f"Error deleting draft: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -493,7 +494,7 @@ async def get_runner_status(request: Request):
     
     except Exception as e:
         logger.error(f"Error getting runner status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/runner/start-local")
@@ -520,7 +521,7 @@ async def start_local_runner(request: Request, body: dict):
     
     except Exception as e:
         logger.error(f"Error starting local runner: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/runner/register")
@@ -539,10 +540,18 @@ async def register_runner(request: Request, body: dict):
         port = body.get("port", 50051)
         max_vus = body.get("max_vus", 1000)
         agent_id = body.get("agent_id", f"{hostname}:{port}")
-        
+
+        # SSRF prevention — validate external runner hostnames
+        if hostname not in ("localhost", "127.0.0.1"):
+            from app.utils.url_validator import validate_url
+            try:
+                validate_url(f"http://{hostname}:{port}", allow_private=True)
+            except ValueError as url_err:
+                raise HTTPException(status_code=400, detail=f"Invalid runner hostname: {str(url_err)}")
+
         client = get_go_runner_client()
         await client.register_runner(agent_id, hostname, port, max_vus)
-        
+
         return {
             "status": "success",
             "message": f"Runner {agent_id} registered",
@@ -551,10 +560,12 @@ async def register_runner(request: Request, body: dict):
             "port": port,
             "max_vus": max_vus
         }
-    
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error registering runner: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/runner/discover")
@@ -590,7 +601,7 @@ async def discover_local_runner(request: Request):
     
     except Exception as e:
         logger.error(f"Error discovering runner: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/runner/stop-local")
@@ -607,7 +618,7 @@ async def stop_local_runner(request: Request):
     
     except Exception as e:
         logger.error(f"Error stopping local runner: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/runner/heartbeat")
@@ -638,7 +649,7 @@ async def runner_heartbeat(request: Request):
         }
     except Exception as e:
         logger.error(f"Runner heartbeat failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -652,12 +663,28 @@ async def run_test(request: Request, body: dict):
         scenario_id = body.get("scenario_id")
         if not scenario_id:
             raise HTTPException(status_code=400, detail="scenario_id is required")
-        
+
+        # Resource limits — cap VUs and duration
+        virtual_users = body.get("virtual_users", 10)
+        duration_seconds = body.get("duration_seconds", 300)
+        if virtual_users > 10000:
+            raise HTTPException(status_code=400, detail="virtual_users cannot exceed 10,000")
+        if duration_seconds > 3600:
+            raise HTTPException(status_code=400, detail="duration_seconds cannot exceed 3600 (1 hour)")
+
+        # SSRF prevention — validate webhook URL
+        if body.get("webhook_url"):
+            from app.utils.url_validator import validate_webhook_url
+            try:
+                validate_webhook_url(body["webhook_url"])
+            except ValueError as url_err:
+                raise HTTPException(status_code=400, detail=f"Invalid webhook URL: {str(url_err)}")
+
         test_id = await performance_engine.run_load_test(
             scenario_id=scenario_id,
-            virtual_users=body.get("virtual_users", 10),
+            virtual_users=virtual_users,
             ramp_up_seconds=body.get("ramp_up_seconds", 60),
-            duration_seconds=body.get("duration_seconds", 300),
+            duration_seconds=duration_seconds,
             ramp_down_seconds=body.get("ramp_down_seconds", 30),
             think_time_ms=body.get("think_time_ms", 2000),
             base_url=body.get("base_url"),
@@ -678,7 +705,7 @@ async def run_test(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error running test: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/tests/run-mix")
@@ -692,12 +719,20 @@ async def run_test_mix(request: Request, body: dict):
         scenario_mix = body.get("scenario_mix")
         if not scenario_mix or not isinstance(scenario_mix, list):
             raise HTTPException(status_code=400, detail="scenario_mix (list of { scenario_id, weight_pct }) is required")
-        
+
+        # Resource limits — cap VUs and duration
+        virtual_users = body.get("virtual_users", 100)
+        duration_seconds = body.get("duration_seconds", 300)
+        if virtual_users > 10000:
+            raise HTTPException(status_code=400, detail="virtual_users cannot exceed 10,000")
+        if duration_seconds > 3600:
+            raise HTTPException(status_code=400, detail="duration_seconds cannot exceed 3600 (1 hour)")
+
         parent_id = await performance_engine.run_load_test_mix(
             scenario_mix=scenario_mix,
-            virtual_users=body.get("virtual_users", 100),
+            virtual_users=virtual_users,
             ramp_up_seconds=body.get("ramp_up_seconds", 60),
-            duration_seconds=body.get("duration_seconds", 300),
+            duration_seconds=duration_seconds,
             ramp_down_seconds=body.get("ramp_down_seconds", 30),
             think_time_ms=body.get("think_time_ms", 2000),
             base_url=body.get("base_url"),
@@ -715,7 +750,7 @@ async def run_test_mix(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error running test mix: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/tests/{test_id}/stop")
@@ -732,7 +767,7 @@ async def stop_test(request: Request, test_id: str):
     
     except Exception as e:
         logger.error(f"Error stopping test: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/tests/{test_id}/status")
@@ -747,7 +782,7 @@ async def get_test_status(request: Request, test_id: str):
     
     except Exception as e:
         logger.error(f"Error getting test status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/tests/{test_id}/report")
@@ -762,7 +797,7 @@ async def get_test_report(request: Request, test_id: str):
     
     except Exception as e:
         logger.error(f"Error getting test report: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/metrics/realtime")
@@ -777,7 +812,7 @@ async def get_real_time_metrics(request: Request):
     
     except Exception as e:
         logger.error(f"Error getting real-time metrics: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/metrics/history")
@@ -805,7 +840,7 @@ async def get_metrics_history(
     
     except Exception as e:
         logger.error(f"Error getting metrics history: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/correlation/rules")
@@ -825,7 +860,7 @@ async def add_correlation_rule(request: Request, body: dict):
     
     except Exception as e:
         logger.error(f"Error adding correlation rule: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/scenarios/{scenario_id}/export")
@@ -840,7 +875,7 @@ async def export_scenario(request: Request, scenario_id: str):
     
     except Exception as e:
         logger.error(f"Error exporting scenario: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/scenarios/import")
@@ -862,7 +897,7 @@ async def import_scenario(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error importing scenario: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ========== Enterprise Features ==========
@@ -917,7 +952,7 @@ async def create_load_profile(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error creating load profile: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/data-pools/create")
@@ -962,7 +997,7 @@ async def create_data_pool(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error creating data pool: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/system-metrics")
@@ -977,7 +1012,7 @@ async def get_system_metrics(request: Request):
     
     except Exception as e:
         logger.error(f"Error getting system metrics: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/reports/generate")
@@ -1011,7 +1046,7 @@ async def generate_report(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error generating report: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/reports/baseline")
@@ -1040,7 +1075,7 @@ async def set_baseline(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error setting baseline: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/reports/trends/{scenario_id}")
@@ -1059,7 +1094,7 @@ async def get_trend_analysis(request: Request, scenario_id: str, days: int = 30)
     
     except Exception as e:
         logger.error(f"Error getting trend analysis: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/alerts/create")
@@ -1086,7 +1121,7 @@ async def create_alert(request: Request, body: dict):
     
     except Exception as e:
         logger.error(f"Error creating alert: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/schedules/create")
@@ -1115,7 +1150,7 @@ async def create_schedule(request: Request, body: dict):
     
     except Exception as e:
         logger.error(f"Error creating schedule: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/transactions/breakdown")
@@ -1133,7 +1168,7 @@ async def get_transaction_breakdown(request: Request, transaction_name: Optional
     
     except Exception as e:
         logger.error(f"Error getting transaction breakdown: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/errors/analysis")
@@ -1159,7 +1194,7 @@ async def get_error_analysis(request: Request):
     
     except Exception as e:
         logger.error(f"Error getting error analysis: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ========== Run Manager - Test Run State Machine & Pass/Fail Gates ==========
@@ -1203,7 +1238,7 @@ async def create_run(request: Request, body: dict):
     
     except Exception as e:
         logger.error(f"Error creating run: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/runs/{run_id}/start")
@@ -1232,7 +1267,7 @@ async def start_run(request: Request, run_id: str):
         raise
     except Exception as e:
         logger.error(f"Error starting run: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/runs/{run_id}/stop")
@@ -1264,7 +1299,7 @@ async def stop_run(request: Request, run_id: str):
         raise
     except Exception as e:
         logger.error(f"Error stopping run: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/runs/{run_id}/metrics")
@@ -1283,7 +1318,7 @@ async def update_run_metrics(request: Request, run_id: str, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error updating metrics: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/runs/{run_id}/evaluate")
@@ -1319,7 +1354,7 @@ async def evaluate_run_thresholds(request: Request, run_id: str):
         raise
     except Exception as e:
         logger.error(f"Error evaluating thresholds: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/runs/{run_id}")
@@ -1339,7 +1374,7 @@ async def get_run(request: Request, run_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting run: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/runs")
@@ -1368,7 +1403,7 @@ async def list_runs(
     
     except Exception as e:
         logger.error(f"Error listing runs: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/runs/history/{scenario_id}")
@@ -1386,7 +1421,7 @@ async def get_run_history(request: Request, scenario_id: str, days: int = 30):
     
     except Exception as e:
         logger.error(f"Error getting run history: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/runs/compare")
@@ -1408,7 +1443,7 @@ async def compare_runs(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error comparing runs: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/thresholds/defaults")
@@ -1463,7 +1498,7 @@ async def lighthouse_run(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Lighthouse run failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/lighthouse/run-hardened")
@@ -1500,7 +1535,7 @@ async def lighthouse_run_hardened(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Lighthouse hardened run failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/lighthouse/report/{run_id}")
@@ -1515,7 +1550,7 @@ async def lighthouse_report(request: Request, run_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting Lighthouse report: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/lighthouse/result/{run_id}")
@@ -1530,7 +1565,7 @@ async def lighthouse_result(request: Request, run_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting Lighthouse result: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/pwa/performance")
@@ -1567,7 +1602,7 @@ async def pwa_performance(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"PWA performance run failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -1643,7 +1678,7 @@ async def create_workload(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error creating workload: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/workload/types")
@@ -1746,7 +1781,7 @@ async def execute_checks(request: Request, body: dict):
     
     except Exception as e:
         logger.error(f"Error executing checks: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/checks/summary")
@@ -1760,7 +1795,7 @@ async def get_checks_summary():
         }
     except Exception as e:
         logger.error(f"Error getting checks summary: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/checks/reset")
@@ -1772,7 +1807,7 @@ async def reset_checks():
         return {"status": "success", "message": "Checks reset"}
     except Exception as e:
         logger.error(f"Error resetting checks: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -1830,7 +1865,7 @@ async def record_custom_metric(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error recording metric: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/metrics/summary")
@@ -1844,7 +1879,7 @@ async def get_metrics_summary():
         }
     except Exception as e:
         logger.error(f"Error getting metrics summary: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/metrics/prometheus")
@@ -1859,7 +1894,7 @@ async def export_metrics_prometheus():
         )
     except Exception as e:
         logger.error(f"Error exporting Prometheus metrics: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/metrics/reset")
@@ -1871,7 +1906,7 @@ async def reset_metrics():
         return {"status": "success", "message": "Metrics reset"}
     except Exception as e:
         logger.error(f"Error resetting metrics: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -1895,7 +1930,7 @@ async def start_group(request: Request, body: dict):
         return {"status": "success", "group": name, "message": "Group started"}
     except Exception as e:
         logger.error(f"Error starting group: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/groups/end")
@@ -1912,7 +1947,7 @@ async def end_group(request: Request, body: dict):
         return {"status": "success", "group": name, "message": "Group ended"}
     except Exception as e:
         logger.error(f"Error ending group: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/groups/summary")
@@ -1926,7 +1961,7 @@ async def get_groups_summary():
         }
     except Exception as e:
         logger.error(f"Error getting groups summary: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/tags/global")
@@ -1945,7 +1980,7 @@ async def set_global_tags(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Error setting global tags: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -1987,7 +2022,7 @@ async def create_boundary_rule(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Error creating boundary rule: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/correlation/advanced-rule")
@@ -2027,7 +2062,7 @@ async def create_advanced_rule(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Error creating advanced rule: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/correlation/extract")
@@ -2052,7 +2087,7 @@ async def extract_correlation_values(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Error extracting correlation values: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/correlation/detect-candidates")
@@ -2076,7 +2111,7 @@ async def detect_correlation_candidates(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Error detecting candidates: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/correlation/apply-suggestion")
@@ -2097,7 +2132,7 @@ async def apply_correlation_suggestion(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Error applying suggestion: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/correlation/load-prebuilt")
@@ -2129,7 +2164,7 @@ async def load_prebuilt_rules(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Error loading prebuilt rules: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/correlation/prebuilt-types")
@@ -2194,7 +2229,7 @@ async def register_script(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Error registering script: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/scripts/execute")
@@ -2235,7 +2270,7 @@ async def execute_script(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Error executing script: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/scripts/validate")
@@ -2257,7 +2292,7 @@ async def validate_script(request: Request, body: dict):
         }
     except Exception as e:
         logger.error(f"Error validating script: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/scripts/templates")
