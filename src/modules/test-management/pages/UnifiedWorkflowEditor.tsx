@@ -118,6 +118,9 @@ export default function UnifiedWorkflowEditor() {
       timeout: 30000,
       retries: 0,
       parallelizable: false,
+      retryCount: 0,
+      retryDelay: 1000,
+      continueOnFailure: false,
     },
     metadata: {
       createdAt: new Date().toISOString(),
@@ -4218,6 +4221,56 @@ export default function UnifiedWorkflowEditor() {
                       ...prev,
                       settings: { ...prev.settings, retries: parseInt(e.target.value) }
                     }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Step Retry Count</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={5}
+                    value={testCase.settings.retryCount ?? 0}
+                    onChange={(e) => setTestCase(prev => ({
+                      ...prev,
+                      settings: { ...prev.settings, retryCount: Math.min(5, Math.max(0, parseInt(e.target.value) || 0)) }
+                    }))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Number of times to retry a failed step before marking it as failed (0-5).
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Retry Delay (ms)</Label>
+                  <Input
+                    type="number"
+                    min={100}
+                    max={10000}
+                    step={100}
+                    value={testCase.settings.retryDelay ?? 1000}
+                    onChange={(e) => setTestCase(prev => ({
+                      ...prev,
+                      settings: { ...prev.settings, retryDelay: Math.min(10000, Math.max(100, parseInt(e.target.value) || 1000)) }
+                    }))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Delay in milliseconds between retry attempts.
+                  </p>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-medium">Continue on Failure</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Continue executing remaining steps when a step fails instead of stopping the test.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={testCase.settings.continueOnFailure ?? false}
+                    onChange={(e) => setTestCase(prev => ({
+                      ...prev,
+                      settings: { ...prev.settings, continueOnFailure: e.target.checked }
+                    }))}
+                    className="h-4 w-4 rounded border-gray-300"
                   />
                 </div>
                 <div className="space-y-2">

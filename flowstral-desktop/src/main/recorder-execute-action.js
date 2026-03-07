@@ -1673,7 +1673,8 @@ async function executeAction(recorder, action) {
           
           if (assertSOQLExpr.includes('count')) {
             try {
-              soqlAssertPassed = eval(assertSOQLExpr.replace(/count/g, soqlCount.toString()));
+              const { safeEvaluateAssertion } = require('./lib/safe-assertion-evaluator');
+              soqlAssertPassed = safeEvaluateAssertion(assertSOQLExpr, { count: soqlCount });
             } catch (e) {
               soqlAssertPassed = soqlCount > 0;
             }

@@ -54,7 +54,7 @@ class ParallelTestRunner extends EventEmitter {
     for (let i = 0; i < this.maxWorkers; i++) {
       const context = await browser.newContext({
         viewport: { width: 1280, height: 720 },
-        ignoreHTTPSErrors: true,
+        ignoreHTTPSErrors: false,
       });
       
       const page = await context.newPage();

@@ -58,6 +58,24 @@ const cssEscape = (value) => {
   return result;
 };
 
+/**
+ * Sanitize object for logging - masks sensitive fields
+ * @param {object} obj - Object to sanitize
+ * @returns {object} - Copy with sensitive values masked
+ */
+function sanitizeForLog(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  const sensitive = ['password', 'passwd', 'secret', 'token', 'securityToken', 'security_token',
+    'api_key', 'apikey', 'access_token', 'refresh_token', 'client_secret', 'private_key'];
+  const sanitized = { ...obj };
+  for (const key of Object.keys(sanitized)) {
+    if (sensitive.some(s => key.toLowerCase().includes(s.toLowerCase()))) {
+      sanitized[key] = '[MASKED]';
+    }
+  }
+  return sanitized;
+}
+
 // ============================================================
 // TEXT NORMALIZATION UTILITIES (Module-level for use everywhere)
 // Critical for matching recorded text against page text
@@ -430,12 +448,7 @@ class PlaywrightRecorder extends EventEmitter {
     const stealthArgs = [
       '--start-maximized',
       '--disable-blink-features=AutomationControlled',
-      '--disable-features=IsolateOrigins,site-per-process',
-      '--disable-site-isolation-trials',
-      '--disable-web-security',
       '--disable-features=BlockInsecurePrivateNetworkRequests',
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-accelerated-2d-canvas',
       '--disable-gpu',
@@ -475,8 +488,8 @@ class PlaywrightRecorder extends EventEmitter {
         ...(mobileOptions.geolocation && { geolocation: mobileOptions.geolocation }),
         ...(mobileOptions.permissions && { permissions: mobileOptions.permissions })
       }),
-      // Ignore HTTPS errors for dev environments
-      ignoreHTTPSErrors: true,
+      // HTTPS error handling — disabled for security hardening
+      ignoreHTTPSErrors: false,
     }, userDataDir, browserType);
     
     // ═══════════════════════════════════════════════════════════════════
@@ -534,7 +547,19 @@ class PlaywrightRecorder extends EventEmitter {
     // Get existing page or create new one
     const pages = this.context.pages();
     this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
-    
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SECURITY: Clear stored session data at the start of each trace
+    // Prevents auth token/cookie leakage between recording sessions
+    // ═══════════════════════════════════════════════════════════════════
+    try {
+      await this.context.clearCookies();
+      console.log('[PlaywrightRecorder] Cleared cookies for session isolation');
+    } catch (e) {
+      // clearCookies may not be available on persistent contexts
+      console.log('[PlaywrightRecorder] Cookie clearing skipped:', e.message);
+    }
+
     // ============================================================
     // CROSS-DOMAIN CLICK/INPUT REPORTING VIA CONSOLE LOGS
     // This approach is more reliable than exposeFunction because:
@@ -2252,9 +2277,9 @@ class PlaywrightRecorder extends EventEmitter {
         this.context = await launchBrowserWithFallback({
           headless: false,
           args: ['--start-maximized', '--disable-blink-features=AutomationControlled'],
-          ignoreHTTPSErrors: true,
+          ignoreHTTPSErrors: false,
         }, userDataDir);
-        
+
         const pages = this.context.pages();
         this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
       }
@@ -2309,7 +2334,7 @@ class PlaywrightRecorder extends EventEmitter {
     }
     
     console.log('[PlaywrightRecorder] Retrying failed step with updated action...');
-    console.log('[PlaywrightRecorder] Updated action:', JSON.stringify(updatedAction));
+    console.log('[PlaywrightRecorder] Updated action:', JSON.stringify(sanitizeForLog(updatedAction)));
     
     try {
       // Merge updated action with original step
@@ -2513,7 +2538,7 @@ class PlaywrightRecorder extends EventEmitter {
             isMobile: mobileOptions.isMobile,
             hasTouch: mobileOptions.hasTouch
           }),
-          ignoreHTTPSErrors: true,
+          ignoreHTTPSErrors: false,
         }, userDataDir);
         
         const pages = this.context.pages();

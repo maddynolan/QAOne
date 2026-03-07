@@ -56,6 +56,9 @@ class TestExecutor {
     this.enableAIFallback = options.enableAIFallback !== false; // Default: enabled
     this.aiCallsThisRun = 0;
     this.maxAICallsPerRun = options.maxAICallsPerRun || 3; // Budget per test run
+
+    // Playwright Trace capture support
+    this._tracingActive = false;
   }
   
   /**
@@ -554,11 +557,10 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       headless: this.headless,
       viewport: this.viewport,
       args: [
-        '--no-sandbox', 
         '--disable-gpu',
         '--disable-blink-features=AutomationControlled'
       ],
-      ignoreHTTPSErrors: true,
+      ignoreHTTPSErrors: false,
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     };
     
@@ -2284,9 +2286,9 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           
           if (assertionExpr.includes('count')) {
             // Evaluate expressions like "count > 0", "count == 5", etc.
-            const cleanExpr = assertionExpr.replace(/count/g, soqlRecordCount.toString());
             try {
-              assertionPassed = eval(cleanExpr);
+              const { safeEvaluateAssertion } = require('./lib/safe-assertion-evaluator');
+              assertionPassed = safeEvaluateAssertion(assertionExpr, { count: soqlRecordCount });
             } catch (e) {
               assertionPassed = soqlRecordCount > 0; // Default: check records exist
             }
@@ -2729,14 +2731,17 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
     } catch (error) {
       result.status = 'failed';
       result.error = error.message;
-      
+
       // Take failure screenshot and convert to base64 for display in UI
       try {
-        const screenshotBuffer = await this.page.screenshot({ type: 'png' });
-        result.screenshot = `data:image/png;base64,${screenshotBuffer.toString('base64')}`;
-        console.log('[Executor] Captured failure screenshot');
+        if (this.page) {
+          const screenshotBuffer = await this.page.screenshot({ type: 'png' });
+          result.screenshot = screenshotBuffer.toString('base64');
+          result.screenshotType = 'failure';
+          console.log(`[Executor] Captured failure screenshot for step "${step.name || step.id}"`);
+        }
       } catch (e) {
-        console.warn('[Executor] Could not capture screenshot:', e.message);
+        console.warn('[Executor] Could not capture failure screenshot:', e.message);
       }
     }
 
@@ -2861,25 +2866,56 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
     try {
       await this.initialize();
 
+      // Start Playwright trace capture if enabled
+      const captureTrace = testData?.settings?.captureTrace || false;
+      if (captureTrace && this.context) {
+        try {
+          await this.context.tracing.start({
+            screenshots: true,
+            snapshots: true,
+            sources: false  // Don't include source code
+          });
+          this._tracingActive = true;
+          console.log('[Executor] Playwright tracing started');
+        } catch (e) {
+          console.log('[Executor] Could not start tracing:', e.message);
+          this._tracingActive = false;
+        }
+      }
+
       // Get flagged steps from test settings (for re-run at flagged step)
       const flaggedStepIds = testData.settings?.flaggedSteps || [];
       const stopAtFlagged = testData.settings?.stopAtFlaggedStep || false;
-      
+
+      // Auto-retry settings: retry failed steps up to N times with a delay between attempts
+      const retryCount = testData.settings?.retryCount || 0;
+      const retryDelay = testData.settings?.retryDelay || 1000;
+
+      // Continue on failure: keep executing remaining steps even when a step fails
+      const continueOnFailure = testData.settings?.continueOnFailure || false;
+
+      if (retryCount > 0) {
+        console.log(`[Executor] Auto-retry enabled: ${retryCount} retries per step, ${retryDelay}ms delay`);
+      }
+      if (continueOnFailure) {
+        console.log(`[Executor] Continue-on-failure enabled: will execute all steps regardless of failures`);
+      }
+
       for (let i = 0; i < testData.steps.length; i++) {
         const step = testData.steps[i];
-        
+
         // Skip disabled steps
         if (step.enabled === false) {
           results.steps.push({ stepId: step.id, status: 'skipped' });
           continue;
         }
-        
+
         // Check if this step is flagged and we should stop
         const isStepFlagged = step.flagged || flaggedStepIds.includes(step.id);
         if (isStepFlagged && stopAtFlagged) {
           console.log(`[Executor] 🚩 STOPPING at flagged step ${i + 1}: "${step.name || step.label}"`);
           console.log(`[Executor] Browser is paused for user intervention. Step flagged for: ${step.flagReason || 'false positive / review'}`);
-          
+
           results.stoppedAtFlaggedStep = {
             stepIndex: i,
             stepId: step.id,
@@ -2888,68 +2924,120 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
             browserOpen: true
           };
           results.status = 'paused_at_flagged';
-          
+
           // Emit event so frontend knows we're paused
           this.onStepFlagged?.(i, step);
-          
+
           // Don't execute this step, just pause here
           break;
         }
 
         this.onStepStart(i, step);
-        
-        const stepResult = await this.executeStep(step, results.variables);
-        
-        // EXECUTE STEP ASSERTIONS if defined and step passed
-        // Support both single assertion and multiple assertions
-        const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
-        
-        if (stepResult.status === 'passed' && assertions.length > 0) {
-          console.log(`[Executor] Executing ${assertions.length} assertion(s) for step ${i + 1}`);
-          
-          // Normalize selector - could be string or object
-          const stepSelector = typeof step.selector === 'string' 
-            ? step.selector 
-            : (step.selector?.selector || step.selectorObj?.selector || '');
-          
-          for (let assertIdx = 0; assertIdx < assertions.length; assertIdx++) {
-            const assertion = assertions[assertIdx];
-            if (!assertion.enabled || !assertion.type) continue;
-            
-            console.log(`[Executor] Assertion ${assertIdx + 1}/${assertions.length}: ${assertion.type}`);
-            try {
-              await this.executeStepAssertion(assertion, stepSelector);
-              console.log(`[Executor] Assertion ${assertIdx + 1} passed`);
-            } catch (assertError) {
-              console.error(`[Executor] Assertion ${assertIdx + 1} failed:`, assertError.message);
+
+        // ============================================================
+        // AUTO-RETRY LOOP: Retry failed steps up to retryCount times
+        // ============================================================
+        let stepResult = null;
+        let lastStepError = null;
+
+        for (let attempt = 0; attempt <= retryCount; attempt++) {
+          try {
+            stepResult = await this.executeStep(step, results.variables);
+
+            // EXECUTE STEP ASSERTIONS if defined and step passed
+            // Support both single assertion and multiple assertions
+            const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+
+            if (stepResult.status === 'passed' && assertions.length > 0) {
+              console.log(`[Executor] Executing ${assertions.length} assertion(s) for step ${i + 1}`);
+
+              // Normalize selector - could be string or object
+              const stepSelector = typeof step.selector === 'string'
+                ? step.selector
+                : (step.selector?.selector || step.selectorObj?.selector || '');
+
+              for (let assertIdx = 0; assertIdx < assertions.length; assertIdx++) {
+                const assertion = assertions[assertIdx];
+                if (!assertion.enabled || !assertion.type) continue;
+
+                console.log(`[Executor] Assertion ${assertIdx + 1}/${assertions.length}: ${assertion.type}`);
+                try {
+                  await this.executeStepAssertion(assertion, stepSelector);
+                  console.log(`[Executor] Assertion ${assertIdx + 1} passed`);
+                } catch (assertError) {
+                  console.error(`[Executor] Assertion ${assertIdx + 1} failed:`, assertError.message);
+                  stepResult.status = 'failed';
+                  stepResult.error = `Assertion ${assertIdx + 1} failed: ${assertError.message}`;
+                  // Don't break - record which assertions failed but continue checking
+                  if (!step.softAssert) break;
+                }
+              }
+            }
+
+            // If step passed, exit retry loop
+            if (stepResult.status === 'passed') {
+              if (attempt > 0) {
+                console.log(`[Executor] ✓ Step ${i + 1} passed on retry attempt ${attempt + 1}/${retryCount + 1}`);
+                stepResult.retriedCount = attempt;
+              }
+              lastStepError = null;
+              break;
+            }
+
+            // Step failed — decide whether to retry
+            lastStepError = stepResult.error || 'Step failed';
+            if (attempt < retryCount) {
+              console.log(`[Executor] Step ${i + 1} failed (attempt ${attempt + 1}/${retryCount + 1}), retrying in ${retryDelay}ms...`);
+              await this.page.waitForTimeout(retryDelay);
+            }
+          } catch (execError) {
+            lastStepError = execError.message;
+            if (!stepResult) {
+              stepResult = {
+                stepId: step.id,
+                status: 'failed',
+                error: execError.message,
+                duration: 0
+              };
+            } else {
               stepResult.status = 'failed';
-              stepResult.error = `Assertion ${assertIdx + 1} failed: ${assertError.message}`;
-              // Don't break - record which assertions failed but continue checking
-              if (!step.softAssert) break;
+              stepResult.error = execError.message;
+            }
+            if (attempt < retryCount) {
+              console.log(`[Executor] Step ${i + 1} threw error (attempt ${attempt + 1}/${retryCount + 1}): ${execError.message}, retrying in ${retryDelay}ms...`);
+              await this.page.waitForTimeout(retryDelay);
             }
           }
         }
-        
+
+        // If all retries exhausted and step still failed, log it
+        if (lastStepError && retryCount > 0) {
+          console.log(`[Executor] Step ${i + 1} failed after ${retryCount + 1} attempts: ${lastStepError}`);
+          stepResult.retriedCount = retryCount;
+        }
+
         // Capture screenshot ONLY for failures (reduces flickering)
+        // Only capture if not already captured in executeStep catch block
         try {
-          if (stepResult.status === 'failed') {
+          if (stepResult.status === 'failed' && !stepResult.screenshot && this.page) {
             const screenshotBuffer = await this.page.screenshot({ type: 'png' });
-            stepResult.screenshot = `data:image/png;base64,${screenshotBuffer.toString('base64')}`;
-            console.log(`[Executor] Screenshot captured for failed step ${i + 1}`);
+            stepResult.screenshot = screenshotBuffer.toString('base64');
+            stepResult.screenshotType = 'failure';
+            console.log(`[Executor] Captured failure screenshot for step ${i + 1}`);
           }
         } catch (e) {
-          // Silent - screenshot is optional
+          console.log(`[Executor] Could not capture failure screenshot: ${e.message}`);
         }
-        
+
         results.steps.push(stepResult);
-        
+
         // Update variables if step extracted data
         if (stepResult.extractedValue) {
           results.variables[stepResult.extractedValue.name] = stepResult.extractedValue.value;
         }
 
         this.onStepComplete(i, step, stepResult);
-        
+
         // Add delay between steps to prevent skipping fast clicks
         // This gives the UI time to settle before the next action
         // OPTIMIZATION: Minimal delay when locked selector was used (element found instantly, UI settled from post-action wait)
@@ -2958,10 +3046,16 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           await this.page.waitForTimeout(delay);
         }
 
-        // Stop on failure (unless soft assert)
+        // Stop on failure (unless soft assert or continue-on-failure is enabled)
         if (stepResult.status === 'failed' && !step.softAssert) {
-          results.status = 'failed';
-          break;
+          if (continueOnFailure) {
+            console.log(`[Executor] Step ${i + 1} failed but continueOnFailure is enabled, continuing to next step...`);
+            // Mark test as failed but keep executing remaining steps
+            results.status = 'failed';
+          } else {
+            results.status = 'failed';
+            break;
+          }
         }
       }
 
@@ -2975,7 +3069,32 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
     } finally {
       results.duration = Date.now() - startTime;
       results.endTime = new Date().toISOString();
-      
+
+      // Stop trace capture and save file
+      if (this._tracingActive && this.context) {
+        try {
+          const { app } = require('electron');
+          const path = require('path');
+          const traceDir = path.join(app.getPath('userData'), 'traces');
+
+          // Ensure trace directory exists
+          const fs = require('fs');
+          if (!fs.existsSync(traceDir)) {
+            fs.mkdirSync(traceDir, { recursive: true });
+          }
+
+          const traceFile = path.join(traceDir, `trace-${Date.now()}.zip`);
+          await this.context.tracing.stop({ path: traceFile });
+          console.log(`[Executor] Trace saved: ${traceFile}`);
+
+          // Include trace path in results
+          results.tracePath = traceFile;
+        } catch (e) {
+          console.log('[Executor] Could not save trace:', e.message);
+        }
+        this._tracingActive = false;
+      }
+
       await this.cleanup();
     }
 
