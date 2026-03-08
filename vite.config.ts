@@ -31,13 +31,14 @@ export default defineConfig(({ mode }) => ({
       output: {
         manualChunks(id: string) {
           if (id.includes('node_modules')) {
-            // React core — loaded on every page
-            if (id.includes('react-dom') || id.includes('/react/') || id.includes('react-router')) {
+            // React core + UI primitives in ONE chunk (Radix uses React.forwardRef
+            // at module init time, so they MUST load together)
+            if (
+              id.includes('react-dom') || id.includes('/react/') || id.includes('react-router') ||
+              id.includes('@radix-ui') || id.includes('lucide-react') ||
+              id.includes('class-variance-authority') || id.includes('clsx') || id.includes('tailwind-merge')
+            ) {
               return 'vendor-react';
-            }
-            // UI primitives — Radix, icons, styling utilities
-            if (id.includes('@radix-ui') || id.includes('lucide-react') || id.includes('class-variance-authority') || id.includes('clsx') || id.includes('tailwind-merge')) {
-              return 'vendor-ui';
             }
             // Data fetching
             if (id.includes('@tanstack')) {
