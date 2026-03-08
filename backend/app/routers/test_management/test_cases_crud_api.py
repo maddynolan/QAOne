@@ -23,6 +23,70 @@ router = APIRouter(prefix="/test-cases", tags=["test-cases"])
 # In-memory storage fallback when PostgreSQL is not available
 _test_cases_store: Dict[str, Dict[str, Any]] = {}
 
+
+def _validate_json_fields(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    SEC-JSON-001: Validate and sanitize JSON fields in test case data.
+    Ensures steps, tags, preconditions, and testData are well-formed.
+    Prevents malformed JSON from corrupting the database.
+    """
+    # Validate steps: must be a list of dicts with action/expectedResult
+    steps = data.get("steps", [])
+    if isinstance(steps, str):
+        try:
+            steps = json.loads(steps)
+        except (json.JSONDecodeError, ValueError):
+            logger.warning("[SEC-JSON-001] Malformed steps JSON string, defaulting to empty list")
+            steps = []
+    if not isinstance(steps, list):
+        steps = []
+    # Ensure each step has required fields
+    validated_steps = []
+    for step in steps:
+        if isinstance(step, dict):
+            validated_steps.append({
+                "action": str(step.get("action", ""))[:5000],  # Cap at 5000 chars
+                "expectedResult": str(step.get("expectedResult", ""))[:5000],
+                **{k: v for k, v in step.items() if k not in ("action", "expectedResult")}
+            })
+    data["steps"] = validated_steps
+
+    # Validate tags: must be a list of strings
+    tags = data.get("tags", [])
+    if isinstance(tags, str):
+        try:
+            tags = json.loads(tags)
+        except (json.JSONDecodeError, ValueError):
+            tags = []
+    if not isinstance(tags, list):
+        tags = []
+    data["tags"] = [str(t)[:100] for t in tags if isinstance(t, (str, int, float))][:50]  # Max 50 tags, 100 chars each
+
+    # Validate preconditions: must be a list
+    preconditions = data.get("preconditions", [])
+    if isinstance(preconditions, str):
+        try:
+            preconditions = json.loads(preconditions)
+        except (json.JSONDecodeError, ValueError):
+            preconditions = []
+    if not isinstance(preconditions, list):
+        preconditions = []
+    data["preconditions"] = preconditions
+
+    # Validate testData: must be a dict
+    test_data = data.get("testData", data.get("test_data", {}))
+    if isinstance(test_data, str):
+        try:
+            test_data = json.loads(test_data)
+        except (json.JSONDecodeError, ValueError):
+            test_data = {}
+    if not isinstance(test_data, dict):
+        test_data = {}
+    data["testData"] = test_data
+    data["test_data"] = test_data
+
+    return data
+
 def _is_postgres_available() -> bool:
     """Check if PostgreSQL is available"""
     try:
@@ -708,8 +772,10 @@ async def create_test_case(request: Request):
     try:
         org_id, project_id = await ensure_default_org_project()
         data = await request.json()
+        # SEC-JSON-001: Validate all JSON fields before processing
+        data = _validate_json_fields(data)
         priority = map_priority_to_db(data.get("priority", "medium"))
-        
+
         # Convert steps if needed (for all test types that might have different structures)
         steps = data.get("steps", [])
         if not steps or len(steps) == 0:
@@ -856,6 +922,8 @@ async def update_test_case(case_id: str, request: Request):
     """Update a test case"""
     try:
         data = await request.json()
+        # SEC-JSON-001: Validate all JSON fields before processing
+        data = _validate_json_fields(data)
         priority = map_priority_to_db(data.get("priority", "medium"))
         now = datetime.now().isoformat()
         

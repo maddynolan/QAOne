@@ -51,7 +51,7 @@ async def get_test_plans(project_id: Optional[str] = None):
         
         return {"testPlans": test_plans}
     except Exception as e:
-        logger.error(f"Error getting test plans: {str(e)}")
+        logger.error(f"Error getting test plans: {type(e).__name__}")
         raise HTTPException(status_code=500, detail="Internal server error while retrieving test plans")
 
 
@@ -78,7 +78,7 @@ async def create_test_plan(request: Request):
         
         return {"id": plan_id or f"plan_{int(time.time())}"}
     except Exception as e:
-        logger.error(f"Error creating test plan: {str(e)}")
+        logger.error(f"Error creating test plan: {type(e).__name__}")
         raise HTTPException(status_code=500, detail="Internal server error while creating test plan")
 
 
@@ -119,7 +119,7 @@ async def update_test_plan(plan_id: str, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error updating test plan: {str(e)}")
+        logger.error(f"Error updating test plan: {type(e).__name__}")
         raise HTTPException(status_code=500, detail="Internal server error while updating test plan")
 
 
@@ -147,7 +147,7 @@ async def delete_test_plan(plan_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting test plan: {str(e)}")
+        logger.error(f"Error deleting test plan: {type(e).__name__}")
         raise HTTPException(status_code=500, detail="Internal server error while deleting test plan")
 
 

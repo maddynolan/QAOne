@@ -49,99 +49,103 @@ import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
 // AI Provider - Global AI settings
 import { AIProvider } from "./contexts/AIContext";
 
-// ── Recorder Module ──
-import PlaywrightRecorderPage from "./modules/recorder/pages/PlaywrightRecorderPage";
-import SelfHealing from "./modules/recorder/pages/SelfHealing";
-import ElementRepository from "./modules/recorder/pages/ElementRepository";
-
-// ── Test Management Module ──
-import UnifiedWorkflowEditor from "./modules/test-management/pages/UnifiedWorkflowEditor";
-import TestRepository from "./modules/test-management/pages/TestRepository";
-import EnterpriseTestRepository from "./modules/test-management/pages/EnterpriseTestRepository";
-import TestCases from "./modules/test-management/pages/TestCases";
-import CreateTestCase from "./modules/test-management/pages/CreateTestCase";
-import EditTestCase from "./modules/test-management/pages/EditTestCase";
-import TestCaseExecution from "./modules/test-management/pages/TestCaseExecution";
-import TestSuites from "./modules/test-management/pages/TestSuites";
-import TestRuns from "./modules/test-management/pages/TestRuns";
-import TestPlans from "./modules/test-management/pages/TestPlans";
-import CreateTestPlan from "./modules/test-management/pages/CreateTestPlan";
-import TestPlanDetail from "./modules/test-management/pages/TestPlanDetail";
-import TestPlayground from "./modules/test-management/pages/TestPlayground";
-import ScheduledRuns from "./modules/test-management/pages/ScheduledRuns";
-
-// ── API Testing Module ──
-// Lazy-load API Testing so a bug there cannot crash the whole site (e.g. flowstral.com)
-const EnhancedAPITesting = lazy(() => import("./modules/api-testing/pages/EnhancedAPITesting"));
-import APICoverageMap from "./modules/api-testing/pages/APICoverageMap";
-
-// ── Performance Module ──
-import VirtualUserGenerator from "./modules/performance/pages/VirtualUserGenerator";
-
-// ── Mobile Testing Module ──
-import MobileTestingPage from "./modules/mobile-testing/pages/MobileTestingPage";
-
-// ── Accessibility Module ──
-import Accessibility from "./modules/accessibility/pages/Accessibility";
-
-// ── Visual Testing Module ──
-import VisualTestingPage from "./modules/visual-testing/pages/VisualTestingPage";
-
-// ── Salesforce Module ──
-import SalesforceToolsPage from "./modules/salesforce/pages/SalesforceToolsPage";
-
-// ── AI Testing Module ──
-import FlowpilotPage from "./modules/ai-testing/pages/FlowpilotPage";
-import AITestingPage from "./modules/ai-testing/pages/AITestingPage";
-
-// ── Dashboard Module ──
-import Dashboard from "./modules/dashboard/pages/Dashboard";
-import Analytics from "./modules/dashboard/pages/Analytics";
-import Results from "./modules/dashboard/pages/Results";
-
-// ── Platform Module (cross-cutting) ──
-import Settings from "./modules/platform/pages/Settings";
-import Integrations from "./modules/platform/pages/Integrations";
-import Defects from "./modules/platform/pages/Defects";
-import CreateDefect from "./modules/platform/pages/CreateDefect";
-import Requirements from "./modules/platform/pages/Requirements";
-import CreateRequirement from "./modules/platform/pages/CreateRequirement";
-import Traceability from "./modules/platform/pages/Traceability";
-import CICDIntegration from "./modules/platform/pages/CICDIntegration";
-import SecretsVault from "./modules/platform/pages/SecretsVault";
-import ProjectManagement from "./modules/platform/pages/ProjectManagement";
-import AuditLogPage from "./modules/platform/pages/AuditLogPage";
-import FrameworkAnalyzer from "./modules/platform/pages/FrameworkAnalyzer";
-import CodeAlchemy from "./modules/platform/pages/CodeAlchemy";
-import DataDependencyGraph from "./modules/platform/pages/DataDependencyGraph";
-import APMConfig from "./modules/platform/pages/APMConfig";
-import LicenseAdminPage from "./modules/platform/pages/LicenseAdminPage";
-import NotFound from "./modules/platform/pages/NotFound";
-
-// Auth (keep for future)
+// ── Critical path: keep eager (auth, landing, sign-in/up) ──
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute, PublicRoute } from "./components/ProtectedRoute";
-import { AuthPage } from "./modules/platform/pages/AuthPage";
-
-// Landing Page & Marketing Pages
 import LandingPage from "./pages/LandingPage";
-import SmartRecorderPage from "./pages/marketing/SmartRecorderPage";
-import FeaturePage from "./pages/marketing/FeaturePage";
-import PricingPage from "./pages/marketing/PricingPage";
-import AboutPage from "./pages/marketing/AboutPage";
-import ContactPage from "./pages/marketing/ContactPage";
-import PlaceholderPage from "./pages/marketing/PlaceholderPage";
-import TermsPage from "./pages/marketing/TermsPage";
-import PrivacyPage from "./pages/marketing/PrivacyPage";
-import FAQPage from "./pages/marketing/FAQPage";
-import DemoPage from "./pages/marketing/DemoPage";
-import DownloadPage from "./pages/marketing/DownloadPage";
 import SignInPage from "./pages/marketing/SignInPage";
 import SignUpPage from "./pages/marketing/SignUpPage";
-import WelcomePage from "./pages/marketing/WelcomePage";
-import ComparePage from "./pages/marketing/ComparePage";
-import CostCalculatorPage from "./pages/marketing/CostCalculatorPage";
-import BlogPage from "./pages/marketing/BlogPage";
+import PageLoadingFallback from "./components/PageLoadingFallback";
+
+// ── Lazy-loaded pages: loaded on-demand per route ──
+
+// Auth
+const AuthPage = lazy(() => import("./modules/platform/pages/AuthPage").then(m => ({ default: m.AuthPage })));
+
+// Recorder Module
+const PlaywrightRecorderPage = lazy(() => import("./modules/recorder/pages/PlaywrightRecorderPage"));
+const SelfHealing = lazy(() => import("./modules/recorder/pages/SelfHealing"));
+const ElementRepository = lazy(() => import("./modules/recorder/pages/ElementRepository"));
+
+// Test Management Module
+const UnifiedWorkflowEditor = lazy(() => import("./modules/test-management/pages/UnifiedWorkflowEditor"));
+const TestRepository = lazy(() => import("./modules/test-management/pages/TestRepository"));
+const EnterpriseTestRepository = lazy(() => import("./modules/test-management/pages/EnterpriseTestRepository"));
+const TestCases = lazy(() => import("./modules/test-management/pages/TestCases"));
+const CreateTestCase = lazy(() => import("./modules/test-management/pages/CreateTestCase"));
+const EditTestCase = lazy(() => import("./modules/test-management/pages/EditTestCase"));
+const TestCaseExecution = lazy(() => import("./modules/test-management/pages/TestCaseExecution"));
+const TestSuites = lazy(() => import("./modules/test-management/pages/TestSuites"));
+const TestRuns = lazy(() => import("./modules/test-management/pages/TestRuns"));
+const TestPlans = lazy(() => import("./modules/test-management/pages/TestPlans"));
+const CreateTestPlan = lazy(() => import("./modules/test-management/pages/CreateTestPlan"));
+const TestPlanDetail = lazy(() => import("./modules/test-management/pages/TestPlanDetail"));
+const TestPlayground = lazy(() => import("./modules/test-management/pages/TestPlayground"));
+const ScheduledRuns = lazy(() => import("./modules/test-management/pages/ScheduledRuns"));
+
+// API Testing Module
+const EnhancedAPITesting = lazy(() => import("./modules/api-testing/pages/EnhancedAPITesting"));
+const APICoverageMap = lazy(() => import("./modules/api-testing/pages/APICoverageMap"));
+
+// Performance Module
+const VirtualUserGenerator = lazy(() => import("./modules/performance/pages/VirtualUserGenerator"));
+
+// Mobile Testing Module
+const MobileTestingPage = lazy(() => import("./modules/mobile-testing/pages/MobileTestingPage"));
+
+// Accessibility Module
+const Accessibility = lazy(() => import("./modules/accessibility/pages/Accessibility"));
+
+// Visual Testing Module
+const VisualTestingPage = lazy(() => import("./modules/visual-testing/pages/VisualTestingPage"));
+
+// Salesforce Module
+const SalesforceToolsPage = lazy(() => import("./modules/salesforce/pages/SalesforceToolsPage"));
+
+// AI Testing Module
+const FlowpilotPage = lazy(() => import("./modules/ai-testing/pages/FlowpilotPage"));
+const AITestingPage = lazy(() => import("./modules/ai-testing/pages/AITestingPage"));
+
+// Dashboard Module
+const Dashboard = lazy(() => import("./modules/dashboard/pages/Dashboard"));
+const Analytics = lazy(() => import("./modules/dashboard/pages/Analytics"));
+const Results = lazy(() => import("./modules/dashboard/pages/Results"));
+
+// Platform Module (cross-cutting)
+const Settings = lazy(() => import("./modules/platform/pages/Settings"));
+const Integrations = lazy(() => import("./modules/platform/pages/Integrations"));
+const Defects = lazy(() => import("./modules/platform/pages/Defects"));
+const CreateDefect = lazy(() => import("./modules/platform/pages/CreateDefect"));
+const Requirements = lazy(() => import("./modules/platform/pages/Requirements"));
+const CreateRequirement = lazy(() => import("./modules/platform/pages/CreateRequirement"));
+const Traceability = lazy(() => import("./modules/platform/pages/Traceability"));
+const CICDIntegration = lazy(() => import("./modules/platform/pages/CICDIntegration"));
+const SecretsVault = lazy(() => import("./modules/platform/pages/SecretsVault"));
+const ProjectManagement = lazy(() => import("./modules/platform/pages/ProjectManagement"));
+const AuditLogPage = lazy(() => import("./modules/platform/pages/AuditLogPage"));
+const FrameworkAnalyzer = lazy(() => import("./modules/platform/pages/FrameworkAnalyzer"));
+const CodeAlchemy = lazy(() => import("./modules/platform/pages/CodeAlchemy"));
+const DataDependencyGraph = lazy(() => import("./modules/platform/pages/DataDependencyGraph"));
+const APMConfig = lazy(() => import("./modules/platform/pages/APMConfig"));
+const LicenseAdminPage = lazy(() => import("./modules/platform/pages/LicenseAdminPage"));
+const NotFound = lazy(() => import("./modules/platform/pages/NotFound"));
+
+// Marketing Pages
+const SmartRecorderPage = lazy(() => import("./pages/marketing/SmartRecorderPage"));
+const FeaturePage = lazy(() => import("./pages/marketing/FeaturePage"));
+const PricingPage = lazy(() => import("./pages/marketing/PricingPage"));
+const AboutPage = lazy(() => import("./pages/marketing/AboutPage"));
+const ContactPage = lazy(() => import("./pages/marketing/ContactPage"));
+const PlaceholderPage = lazy(() => import("./pages/marketing/PlaceholderPage"));
+const TermsPage = lazy(() => import("./pages/marketing/TermsPage"));
+const PrivacyPage = lazy(() => import("./pages/marketing/PrivacyPage"));
+const FAQPage = lazy(() => import("./pages/marketing/FAQPage"));
+const DemoPage = lazy(() => import("./pages/marketing/DemoPage"));
+const DownloadPage = lazy(() => import("./pages/marketing/DownloadPage"));
+const WelcomePage = lazy(() => import("./pages/marketing/WelcomePage"));
+const ComparePage = lazy(() => import("./pages/marketing/ComparePage"));
+const CostCalculatorPage = lazy(() => import("./pages/marketing/CostCalculatorPage"));
+const BlogPage = lazy(() => import("./pages/marketing/BlogPage"));
 
 // Utilities
 import { dataStorageService } from "./lib/data-storage";
@@ -245,33 +249,33 @@ const App = () => {
                     - Electron: Redirects to Dashboard
                     ═══════════════════════════════════════════════════════════ */}
                 <Route path="/" element={<RootRoute />} />
-                <Route path="/auth" element={<PublicRoute><AuthPage /></PublicRoute>} />
-                
+                <Route path="/auth" element={<PublicRoute><Suspense fallback={<PageLoadingFallback />}><AuthPage /></Suspense></PublicRoute>} />
+
                 {/* Marketing Pages */}
                 <Route path="/landing" element={<LandingPage />} />
-                <Route path="/test-playground" element={<TestPlayground />} />
-                <Route path="/products/smart-recorder" element={<SmartRecorderPage />} />
-                <Route path="/products/:feature" element={<FeaturePage />} />
-                <Route path="/pricing" element={<PricingPage />} />
-                <Route path="/about" element={<AboutPage />} />
-                <Route path="/contact" element={<ContactPage />} />
-                <Route path="/terms" element={<TermsPage />} />
-                <Route path="/privacy" element={<PrivacyPage />} />
-                <Route path="/faq" element={<FAQPage />} />
-                <Route path="/demo" element={<DemoPage />} />
-                <Route path="/download" element={<DownloadPage />} />
+                <Route path="/test-playground" element={<Suspense fallback={<PageLoadingFallback />}><TestPlayground /></Suspense>} />
+                <Route path="/products/smart-recorder" element={<Suspense fallback={<PageLoadingFallback />}><SmartRecorderPage /></Suspense>} />
+                <Route path="/products/:feature" element={<Suspense fallback={<PageLoadingFallback />}><FeaturePage /></Suspense>} />
+                <Route path="/pricing" element={<Suspense fallback={<PageLoadingFallback />}><PricingPage /></Suspense>} />
+                <Route path="/about" element={<Suspense fallback={<PageLoadingFallback />}><AboutPage /></Suspense>} />
+                <Route path="/contact" element={<Suspense fallback={<PageLoadingFallback />}><ContactPage /></Suspense>} />
+                <Route path="/terms" element={<Suspense fallback={<PageLoadingFallback />}><TermsPage /></Suspense>} />
+                <Route path="/privacy" element={<Suspense fallback={<PageLoadingFallback />}><PrivacyPage /></Suspense>} />
+                <Route path="/faq" element={<Suspense fallback={<PageLoadingFallback />}><FAQPage /></Suspense>} />
+                <Route path="/demo" element={<Suspense fallback={<PageLoadingFallback />}><DemoPage /></Suspense>} />
+                <Route path="/download" element={<Suspense fallback={<PageLoadingFallback />}><DownloadPage /></Suspense>} />
                 <Route path="/signin" element={<SignInPage />} />
                 <Route path="/signup" element={<SignUpPage />} />
-                <Route path="/welcome" element={<WelcomePage />} />
-                <Route path="/compare/:competitor" element={<ComparePage />} />
-                <Route path="/tools/cost-calculator" element={<CostCalculatorPage />} />
-                <Route path="/blog" element={<BlogPage />} />
-                <Route path="/blog/:slug" element={<BlogPage />} />
-                <Route path="/resources/:page" element={<PlaceholderPage />} />
-                <Route path="/company/:page" element={<PlaceholderPage />} />
-                
+                <Route path="/welcome" element={<Suspense fallback={<PageLoadingFallback />}><WelcomePage /></Suspense>} />
+                <Route path="/compare/:competitor" element={<Suspense fallback={<PageLoadingFallback />}><ComparePage /></Suspense>} />
+                <Route path="/tools/cost-calculator" element={<Suspense fallback={<PageLoadingFallback />}><CostCalculatorPage /></Suspense>} />
+                <Route path="/blog" element={<Suspense fallback={<PageLoadingFallback />}><BlogPage /></Suspense>} />
+                <Route path="/blog/:slug" element={<Suspense fallback={<PageLoadingFallback />}><BlogPage /></Suspense>} />
+                <Route path="/resources/:page" element={<Suspense fallback={<PageLoadingFallback />}><PlaceholderPage /></Suspense>} />
+                <Route path="/company/:page" element={<Suspense fallback={<PageLoadingFallback />}><PlaceholderPage /></Suspense>} />
+
                 {/* License Admin Dashboard (restricted to admin emails) */}
-                <Route path="/admin/licenses" element={<LicenseAdminPage />} />
+                <Route path="/admin/licenses" element={<Suspense fallback={<PageLoadingFallback />}><LicenseAdminPage /></Suspense>} />
                 
                 {/* ═══════════════════════════════════════════════════════════
                     MAIN APPLICATION - Streamlined Layout
@@ -286,25 +290,25 @@ const App = () => {
                       1. SMART TRACE MODULE
                       Browser test tracing, playback, and automation
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/recorder" element={<PlaywrightRecorderPage />} />
+                  <Route path="/recorder" element={<Suspense fallback={<PageLoadingFallback />}><PlaywrightRecorderPage /></Suspense>} />
                   <Route path="/playwright-recorder" element={<Navigate to="/recorder" replace />} />
-                  
+
                   {/* ─────────────────────────────────────────────────────────
                       2. TEST CASES MODULE
                       Unified test case management (manual + automated)
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/test-cases" element={<TestRepository />} />
-                  <Route path="/test-cases/list" element={<TestCases />} />
-                  <Route path="/test-cases/create" element={<CreateTestCase />} />
-                  <Route path="/test-cases/edit/:id" element={<EditTestCase />} />
-                  <Route path="/test-cases/builder" element={<UnifiedWorkflowEditor />} />
-                  <Route path="/test-cases/builder/:id" element={<UnifiedWorkflowEditor />} />
+                  <Route path="/test-cases" element={<Suspense fallback={<PageLoadingFallback />}><TestRepository /></Suspense>} />
+                  <Route path="/test-cases/list" element={<Suspense fallback={<PageLoadingFallback />}><TestCases /></Suspense>} />
+                  <Route path="/test-cases/create" element={<Suspense fallback={<PageLoadingFallback />}><CreateTestCase /></Suspense>} />
+                  <Route path="/test-cases/edit/:id" element={<Suspense fallback={<PageLoadingFallback />}><EditTestCase /></Suspense>} />
+                  <Route path="/test-cases/builder" element={<Suspense fallback={<PageLoadingFallback />}><UnifiedWorkflowEditor /></Suspense>} />
+                  <Route path="/test-cases/builder/:id" element={<Suspense fallback={<PageLoadingFallback />}><UnifiedWorkflowEditor /></Suspense>} />
                   {/* Step-level manual execution with evidence/screenshots/defects */}
-                  <Route path="/test-cases/execute/:testCaseId" element={<TestCaseExecution />} />
-                  <Route path="/execution/run/:runId/:testCaseId" element={<TestCaseExecution />} />
-                  <Route path="/repository" element={<TestRepository />} />
-                  <Route path="/enterprise" element={<EnterpriseTestRepository />} />
-                  <Route path="/test-runs" element={<TestRuns />} />
+                  <Route path="/test-cases/execute/:testCaseId" element={<Suspense fallback={<PageLoadingFallback />}><TestCaseExecution /></Suspense>} />
+                  <Route path="/execution/run/:runId/:testCaseId" element={<Suspense fallback={<PageLoadingFallback />}><TestCaseExecution /></Suspense>} />
+                  <Route path="/repository" element={<Suspense fallback={<PageLoadingFallback />}><TestRepository /></Suspense>} />
+                  <Route path="/enterprise" element={<Suspense fallback={<PageLoadingFallback />}><EnterpriseTestRepository /></Suspense>} />
+                  <Route path="/test-runs" element={<Suspense fallback={<PageLoadingFallback />}><TestRuns /></Suspense>} />
                   
                   {/* Legacy routes - redirect to new paths */}
                   <Route path="/builder" element={<Navigate to="/test-cases/builder" replace />} />
@@ -316,10 +320,10 @@ const App = () => {
                       3. API TESTING MODULE
                       REST, GraphQL, and API endpoint testing
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/api" element={<Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><span className="text-muted-foreground">Loading API Testing...</span></div>}><EnhancedAPITesting /></Suspense>} />
-                  <Route path="/api/collections" element={<Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><span className="text-muted-foreground">Loading API Testing...</span></div>}><EnhancedAPITesting /></Suspense>} />
-                  <Route path="/api/history" element={<Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><span className="text-muted-foreground">Loading API Testing...</span></div>}><EnhancedAPITesting /></Suspense>} />
-                  <Route path="/api/environments" element={<Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><span className="text-muted-foreground">Loading API Testing...</span></div>}><EnhancedAPITesting /></Suspense>} />
+                  <Route path="/api" element={<Suspense fallback={<PageLoadingFallback />}><EnhancedAPITesting /></Suspense>} />
+                  <Route path="/api/collections" element={<Suspense fallback={<PageLoadingFallback />}><EnhancedAPITesting /></Suspense>} />
+                  <Route path="/api/history" element={<Suspense fallback={<PageLoadingFallback />}><EnhancedAPITesting /></Suspense>} />
+                  <Route path="/api/environments" element={<Suspense fallback={<PageLoadingFallback />}><EnhancedAPITesting /></Suspense>} />
                   
                   {/* Legacy routes */}
                   <Route path="/enhanced-api-testing" element={<Navigate to="/api" replace />} />
@@ -329,10 +333,10 @@ const App = () => {
                       4. PERFORMANCE MODULE
                       Load testing, stress testing, virtual users
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/performance" element={<VirtualUserGenerator />} />
-                  <Route path="/performance/load-test" element={<VirtualUserGenerator />} />
-                  <Route path="/performance/stress-test" element={<VirtualUserGenerator />} />
-                  <Route path="/performance/reports" element={<VirtualUserGenerator />} />
+                  <Route path="/performance" element={<Suspense fallback={<PageLoadingFallback />}><VirtualUserGenerator /></Suspense>} />
+                  <Route path="/performance/load-test" element={<Suspense fallback={<PageLoadingFallback />}><VirtualUserGenerator /></Suspense>} />
+                  <Route path="/performance/stress-test" element={<Suspense fallback={<PageLoadingFallback />}><VirtualUserGenerator /></Suspense>} />
+                  <Route path="/performance/reports" element={<Suspense fallback={<PageLoadingFallback />}><VirtualUserGenerator /></Suspense>} />
                   
                   {/* Legacy routes */}
                   <Route path="/virtual-users" element={<Navigate to="/performance" replace />} />
@@ -342,10 +346,10 @@ const App = () => {
                       5. SALESFORCE MODULE
                       Salesforce-specific testing tools
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/salesforce" element={<SalesforceToolsPage />} />
-                  <Route path="/salesforce/metadata" element={<SalesforceToolsPage />} />
-                  <Route path="/salesforce/apex" element={<SalesforceToolsPage />} />
-                  <Route path="/salesforce/validation" element={<SalesforceToolsPage />} />
+                  <Route path="/salesforce" element={<Suspense fallback={<PageLoadingFallback />}><SalesforceToolsPage /></Suspense>} />
+                  <Route path="/salesforce/metadata" element={<Suspense fallback={<PageLoadingFallback />}><SalesforceToolsPage /></Suspense>} />
+                  <Route path="/salesforce/apex" element={<Suspense fallback={<PageLoadingFallback />}><SalesforceToolsPage /></Suspense>} />
+                  <Route path="/salesforce/validation" element={<Suspense fallback={<PageLoadingFallback />}><SalesforceToolsPage /></Suspense>} />
                   
                   {/* Legacy routes */}
                   <Route path="/salesforce-tools" element={<Navigate to="/salesforce" replace />} />
@@ -354,24 +358,24 @@ const App = () => {
                       6. MOBILE TESTING MODULE
                       Mobile device emulation and native app testing
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/mobile" element={<MobileTestingPage />} />
-                  <Route path="/mobile/devices" element={<MobileTestingPage />} />
-                  <Route path="/mobile/native" element={<MobileTestingPage />} />
+                  <Route path="/mobile" element={<Suspense fallback={<PageLoadingFallback />}><MobileTestingPage /></Suspense>} />
+                  <Route path="/mobile/devices" element={<Suspense fallback={<PageLoadingFallback />}><MobileTestingPage /></Suspense>} />
+                  <Route path="/mobile/native" element={<Suspense fallback={<PageLoadingFallback />}><MobileTestingPage /></Suspense>} />
                   
                   {/* ─────────────────────────────────────────────────────────
                       7. FLOWPILOT MODULE
                       Goal-based agentic testing with AI
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/flowpilot" element={<FlowpilotPage />} />
-                  <Route path="/flowpilot/explorer" element={<FlowpilotPage />} />
-                  <Route path="/flowpilot/generator" element={<FlowpilotPage />} />
-                  <Route path="/flowpilot/self-healer" element={<FlowpilotPage />} />
+                  <Route path="/flowpilot" element={<Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense>} />
+                  <Route path="/flowpilot/explorer" element={<Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense>} />
+                  <Route path="/flowpilot/generator" element={<Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense>} />
+                  <Route path="/flowpilot/self-healer" element={<Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense>} />
 
                   {/* ─────────────────────────────────────────────────────────
                       8. AI TESTING MODULE - REVOLUTIONARY
                       Plain English → Comprehensive Tests (World's Simplest)
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/ai-testing" element={<AITestingPage />} />
+                  <Route path="/ai-testing" element={<Suspense fallback={<PageLoadingFallback />}><AITestingPage /></Suspense>} />
 
                   {/* ═══════════════════════════════════════════════════════════
                       WEB-ONLY ADDITIONAL FEATURES
@@ -379,62 +383,62 @@ const App = () => {
                       ═══════════════════════════════════════════════════════════ */}
                   
                   {/* Dashboard & Analytics */}
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/analytics" element={<Analytics />} />
-                  <Route path="/results" element={<Results />} />
-                  <Route path="/results-dashboard" element={<Results />} />
-                  
+                  <Route path="/dashboard" element={<Suspense fallback={<PageLoadingFallback />}><Dashboard /></Suspense>} />
+                  <Route path="/analytics" element={<Suspense fallback={<PageLoadingFallback />}><Analytics /></Suspense>} />
+                  <Route path="/results" element={<Suspense fallback={<PageLoadingFallback />}><Results /></Suspense>} />
+                  <Route path="/results-dashboard" element={<Suspense fallback={<PageLoadingFallback />}><Results /></Suspense>} />
+
                   {/* Test Suites & Plans (linked to Repository) */}
-                  <Route path="/suites" element={<TestSuites />} />
-                  <Route path="/test-suites" element={<TestSuites />} />
-                  <Route path="/plans" element={<TestPlans />} />
-                  <Route path="/plans/create" element={<CreateTestPlan />} />
-                  <Route path="/plans/:id" element={<TestPlanDetail />} />
-                  <Route path="/runs" element={<TestRuns />} />
-                  
+                  <Route path="/suites" element={<Suspense fallback={<PageLoadingFallback />}><TestSuites /></Suspense>} />
+                  <Route path="/test-suites" element={<Suspense fallback={<PageLoadingFallback />}><TestSuites /></Suspense>} />
+                  <Route path="/plans" element={<Suspense fallback={<PageLoadingFallback />}><TestPlans /></Suspense>} />
+                  <Route path="/plans/create" element={<Suspense fallback={<PageLoadingFallback />}><CreateTestPlan /></Suspense>} />
+                  <Route path="/plans/:id" element={<Suspense fallback={<PageLoadingFallback />}><TestPlanDetail /></Suspense>} />
+                  <Route path="/runs" element={<Suspense fallback={<PageLoadingFallback />}><TestRuns /></Suspense>} />
+
                   {/* Requirements & Traceability */}
-                  <Route path="/requirements" element={<Requirements />} />
-                  <Route path="/requirements/create" element={<CreateRequirement />} />
-                  <Route path="/traceability" element={<Traceability />} />
-                  
+                  <Route path="/requirements" element={<Suspense fallback={<PageLoadingFallback />}><Requirements /></Suspense>} />
+                  <Route path="/requirements/create" element={<Suspense fallback={<PageLoadingFallback />}><CreateRequirement /></Suspense>} />
+                  <Route path="/traceability" element={<Suspense fallback={<PageLoadingFallback />}><Traceability /></Suspense>} />
+
                   {/* Defects */}
-                  <Route path="/defects" element={<Defects />} />
-                  <Route path="/defects/create" element={<CreateDefect />} />
-                  
+                  <Route path="/defects" element={<Suspense fallback={<PageLoadingFallback />}><Defects /></Suspense>} />
+                  <Route path="/defects/create" element={<Suspense fallback={<PageLoadingFallback />}><CreateDefect /></Suspense>} />
+
                   {/* Tools & Utilities */}
-                  <Route path="/accessibility" element={<Accessibility />} />
-                  <Route path="/visual-testing" element={<VisualTestingPage />} />
-                  <Route path="/framework-analyzer" element={<FrameworkAnalyzer />} />
-                  <Route path="/code-alchemy" element={<CodeAlchemy />} />
-                  <Route path="/elements" element={<ElementRepository />} />
-                  <Route path="/self-healing" element={<SelfHealing />} />
-                  <Route path="/scheduled-runs" element={<ScheduledRuns />} />
-                  
+                  <Route path="/accessibility" element={<Suspense fallback={<PageLoadingFallback />}><Accessibility /></Suspense>} />
+                  <Route path="/visual-testing" element={<Suspense fallback={<PageLoadingFallback />}><VisualTestingPage /></Suspense>} />
+                  <Route path="/framework-analyzer" element={<Suspense fallback={<PageLoadingFallback />}><FrameworkAnalyzer /></Suspense>} />
+                  <Route path="/code-alchemy" element={<Suspense fallback={<PageLoadingFallback />}><CodeAlchemy /></Suspense>} />
+                  <Route path="/elements" element={<Suspense fallback={<PageLoadingFallback />}><ElementRepository /></Suspense>} />
+                  <Route path="/self-healing" element={<Suspense fallback={<PageLoadingFallback />}><SelfHealing /></Suspense>} />
+                  <Route path="/scheduled-runs" element={<Suspense fallback={<PageLoadingFallback />}><ScheduledRuns /></Suspense>} />
+
                   {/* Integrations */}
-                  <Route path="/integrations" element={<Integrations />} />
-                  <Route path="/cicd" element={<CICDIntegration />} />
-                  
+                  <Route path="/integrations" element={<Suspense fallback={<PageLoadingFallback />}><Integrations /></Suspense>} />
+                  <Route path="/cicd" element={<Suspense fallback={<PageLoadingFallback />}><CICDIntegration /></Suspense>} />
+
                   {/* Secrets Vault */}
-                  <Route path="/secrets" element={<SecretsVault />} />
-                  
+                  <Route path="/secrets" element={<Suspense fallback={<PageLoadingFallback />}><SecretsVault /></Suspense>} />
+
                   {/* API Coverage Map */}
-                  <Route path="/coverage" element={<APICoverageMap />} />
-                  
+                  <Route path="/coverage" element={<Suspense fallback={<PageLoadingFallback />}><APICoverageMap /></Suspense>} />
+
                   {/* Data Dependency Graph */}
-                  <Route path="/data-flow" element={<DataDependencyGraph />} />
-                  
+                  <Route path="/data-flow" element={<Suspense fallback={<PageLoadingFallback />}><DataDependencyGraph /></Suspense>} />
+
                   {/* APM Configuration */}
-                  <Route path="/apm" element={<APMConfig />} />
-                  
+                  <Route path="/apm" element={<Suspense fallback={<PageLoadingFallback />}><APMConfig /></Suspense>} />
+
                   {/* Project Management */}
-                  <Route path="/projects" element={<ProjectManagement />} />
-                  <Route path="/project-boards" element={<ProjectManagement />} />
-                  
+                  <Route path="/projects" element={<Suspense fallback={<PageLoadingFallback />}><ProjectManagement /></Suspense>} />
+                  <Route path="/project-boards" element={<Suspense fallback={<PageLoadingFallback />}><ProjectManagement /></Suspense>} />
+
                   {/* Audit Log — Enterprise compliance */}
-                  <Route path="/audit-log" element={<AuditLogPage />} />
+                  <Route path="/audit-log" element={<Suspense fallback={<PageLoadingFallback />}><AuditLogPage /></Suspense>} />
 
                   {/* Settings */}
-                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/settings" element={<Suspense fallback={<PageLoadingFallback />}><Settings /></Suspense>} />
                 </Route>
 
                 {/* ═══════════════════════════════════════════════════════════
@@ -459,7 +463,7 @@ const App = () => {
                 {/* ═══════════════════════════════════════════════════════════
                     404 - CATCH ALL
                     ═══════════════════════════════════════════════════════════ */}
-                <Route path="*" element={<NotFound />} />
+                <Route path="*" element={<Suspense fallback={<PageLoadingFallback />}><NotFound /></Suspense>} />
               </Routes>
               </Router>
             </AuthProvider>

@@ -11,11 +11,17 @@ Security:
 """
 
 import logging
+import os
 import re
 import uuid
 from contextvars import ContextVar
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
+
+# Production environment detection — suppress stack traces in prod logs
+_IS_PRODUCTION = os.getenv("APP_ENV", "development").lower() in ("production", "prod", "staging")
+
+logger = logging.getLogger(__name__)
 
 # Context var for current trace_id (used by TraceIdFilter)
 trace_id_ctx: ContextVar[str] = ContextVar("trace_id", default="")
@@ -83,10 +89,33 @@ class TraceIdFilter(logging.Filter):
         return True
 
 
+class ProductionSafeExceptionFilter(logging.Filter):
+    """
+    In production, suppresses full stack traces from log output.
+    Only logs exception type and message (e.g., 'ValueError: invalid input')
+    to prevent information leakage through log aggregators.
+
+    In development, full tracebacks are preserved for debugging.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if _IS_PRODUCTION and record.exc_info:
+            exc_type, exc_value, _ = record.exc_info
+            if exc_type and exc_value:
+                # Replace traceback with one-line summary
+                record.msg = f"{record.msg} — {exc_type.__name__}: {exc_value}"
+                record.exc_info = None
+                record.exc_text = None
+        return True
+
+
 class TraceLoggingMiddleware(BaseHTTPMiddleware):
     """
     Assigns trace_id to each request and sets it in context for structured logging.
     Response includes X-Trace-ID header so clients can report it when raising issues.
+
+    In production, unhandled exceptions are logged without stack traces to prevent
+    information leakage (SEC-LOG-001).
     """
 
     async def dispatch(self, request: Request, call_next):
@@ -97,5 +126,19 @@ class TraceLoggingMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             response.headers["X-Trace-ID"] = trace_id
             return response
+        except Exception as exc:
+            # Log with production-safe detail level
+            if _IS_PRODUCTION:
+                logger.error(
+                    f"Unhandled exception trace_id={trace_id} "
+                    f"method={request.method} path={request.url.path} "
+                    f"error={type(exc).__name__}: {exc}"
+                )
+            else:
+                logger.exception(
+                    f"Unhandled exception trace_id={trace_id} "
+                    f"method={request.method} path={request.url.path}"
+                )
+            raise
         finally:
             trace_id_ctx.reset(token)

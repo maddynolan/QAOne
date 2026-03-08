@@ -17,7 +17,7 @@ from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from app.services.auth.mfa_service import mfa_service
+from app.services.auth.mfa_service import mfa_service, is_mfa_required, get_enforcement_policy, set_enforcement_policy
 
 logger = logging.getLogger(__name__)
 
@@ -218,4 +218,73 @@ async def mfa_status(request: Request):
     return {
         "enabled": state.get("enabled", False),
         "recovery_codes_remaining": len(state.get("recovery_codes_hashed", [])),
+    }
+
+
+# ── MFA Enforcement Policy Endpoints ──
+
+
+class PolicyUpdateRequest(BaseModel):
+    enabled: Optional[bool] = None
+    required_roles: Optional[List[str]] = None
+    recommended_roles: Optional[List[str]] = None
+    grace_period_days: Optional[int] = None
+    allow_recovery_bypass: Optional[bool] = None
+
+
+@router.get("/policy")
+async def get_policy(request: Request):
+    """
+    Get MFA enforcement policy for the current organization.
+    Returns which roles require MFA, grace period, etc.
+    """
+    org_id = getattr(request.state, "org_id", None)
+    policy = get_enforcement_policy(org_id)
+    return {"policy": policy, "org_id": org_id}
+
+
+@router.put("/policy")
+async def update_policy(request: Request, body: PolicyUpdateRequest):
+    """
+    Update MFA enforcement policy for the organization.
+    Only org admins/owners should call this (enforced by RBAC middleware).
+
+    Controls which roles require MFA, grace period for new users, etc.
+    """
+    org_id = getattr(request.state, "org_id", None)
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Organization context required")
+
+    policy_updates = body.dict(exclude_none=True)
+    if not policy_updates:
+        raise HTTPException(status_code=400, detail="No policy fields provided")
+
+    # Validate roles
+    valid_roles = {"owner", "admin", "member", "viewer"}
+    if body.required_roles:
+        invalid = set(r.lower() for r in body.required_roles) - valid_roles
+        if invalid:
+            raise HTTPException(status_code=400, detail=f"Invalid roles: {', '.join(invalid)}")
+
+    updated = set_enforcement_policy(org_id, policy_updates)
+    return {"message": "MFA enforcement policy updated", "policy": updated}
+
+
+@router.get("/policy/check/{role}")
+async def check_role_requirement(role: str, request: Request):
+    """
+    Check if MFA is required for a specific role in the current organization.
+    Useful for frontend to show MFA enrollment prompts.
+    """
+    org_id = getattr(request.state, "org_id", None)
+    required = is_mfa_required(role, org_id)
+    policy = get_enforcement_policy(org_id)
+    recommended_roles = policy.get("recommended_roles", [])
+    is_recommended = role.lower() in [r.lower() for r in recommended_roles]
+
+    return {
+        "role": role,
+        "mfa_required": required,
+        "mfa_recommended": is_recommended,
+        "grace_period_days": policy.get("grace_period_days", 14),
     }

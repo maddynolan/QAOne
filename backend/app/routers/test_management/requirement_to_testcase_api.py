@@ -3,6 +3,7 @@ FastAPI router for requirement-to-test-case generation
 Implements the full flow: Jira → Requirement Context → Synthetic App Model → Scenario Skeletons → LLM Rewrite → Test Cases
 """
 
+import asyncio
 import logging
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, Depends
@@ -112,10 +113,18 @@ async def jira_to_testcases(
                 )
                 
                 # Rewrite with LLM - pass requirement context for better test case generation
-                rewritten = await rewrite_service.rewrite_test_case(
-                    rewrite_request,
-                    requirement_context=requirement_context.dict()
-                )
+                # SEC-TIMEOUT-001: 60-second timeout to prevent runaway LLM calls
+                try:
+                    rewritten = await asyncio.wait_for(
+                        rewrite_service.rewrite_test_case(
+                            rewrite_request,
+                            requirement_context=requirement_context.dict()
+                        ),
+                        timeout=60.0
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(f"[TIMEOUT] LLM rewrite timed out for scenario {skeleton.id} after 60s")
+                    continue  # Skip this scenario, continue with others
                 
                 # Convert to TestCase format
                 test_case = TestCase(
@@ -176,8 +185,14 @@ async def jira_to_testcases(
             }
         }
         
+    except asyncio.TimeoutError:
+        logger.error(f"[TIMEOUT] Full requirement-to-testcase pipeline timed out for {request.requirement_id}")
+        raise HTTPException(
+            status_code=504,
+            detail="Test case generation timed out. Please try with a simpler requirement or retry later."
+        )
     except Exception as e:
-        logger.error(f"Failed to generate test cases from Jira story: {e}", exc_info=True)
+        logger.error(f"Failed to generate test cases from Jira story: {type(e).__name__}")
         raise HTTPException(
             status_code=500,
             detail="Failed to generate test cases"
