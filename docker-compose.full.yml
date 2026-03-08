@@ -177,12 +177,114 @@ services:
     deploy:
       replicas: ${WORKER_REPLICAS:-2}
 
+  # ═══════════════════════════════════════════════════════════════════════════
+  # MONITORING STACK
+  # Prometheus + Grafana + Alertmanager + Node Exporter
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  # Prometheus — metrics collection and alerting
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: qaai-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    depends_on:
+      - backend
+    networks:
+      - qaai-network
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  # Grafana — dashboards and visualization
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: qaai-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
+    volumes:
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - qaai-network
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  # Alertmanager — alert routing and notification
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: qaai-alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    environment:
+      ALERTMANAGER_WEBHOOK_URL: ${ALERTMANAGER_WEBHOOK_URL:-http://localhost:9095/webhook}
+      SMTP_FROM: ${SMTP_FROM:-alerts@flowstral.com}
+      SMTP_SMARTHOST: ${SMTP_SMARTHOST:-smtp.gmail.com:587}
+      SMTP_AUTH_USERNAME: ${SMTP_AUTH_USERNAME:-}
+      SMTP_AUTH_PASSWORD: ${SMTP_AUTH_PASSWORD:-}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-ops@flowstral.com}
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+    depends_on:
+      - prometheus
+    networks:
+      - qaai-network
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  # Node Exporter — host system metrics (CPU, memory, disk, network)
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: qaai-node-exporter
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    ports:
+      - "${NODE_EXPORTER_PORT:-9100}:9100"
+    networks:
+      - qaai-network
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   minio_data:
   redis_data:
   # ollama_data:  # Uncomment if using ollama service
   backend_logs:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
 
 networks:
   qaai-network:

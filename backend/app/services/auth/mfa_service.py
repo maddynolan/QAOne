@@ -24,7 +24,7 @@ import os
 import secrets
 import struct
 import time
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +196,75 @@ class MFAService:
             if hmac.compare_digest(code_hash, stored_hash):
                 return i
         return None
+
+
+# ── MFA Enforcement Policy ──
+# In-memory policy store (should be PostgreSQL for production multi-instance)
+# Key: org_id -> enforcement settings
+_enforcement_policies: Dict[str, Dict[str, Any]] = {}
+
+# Default policy: MFA required for admin/owner roles
+DEFAULT_ENFORCEMENT_POLICY = {
+    "enabled": True,
+    "required_roles": ["owner", "admin"],  # Roles that MUST have MFA
+    "recommended_roles": ["member"],  # Roles where MFA is recommended but not enforced
+    "grace_period_days": 14,  # Days before enforcement kicks in for new users
+    "allow_recovery_bypass": True,  # Allow recovery codes to bypass MFA
+}
+
+
+def is_mfa_required(role: str, org_id: Optional[str] = None) -> bool:
+    """
+    Check if MFA is required for a given role in an organization.
+
+    Args:
+        role: User's role (owner, admin, member, viewer)
+        org_id: Organization ID (uses default policy if not found)
+
+    Returns:
+        True if MFA is required for this role
+    """
+    policy = _enforcement_policies.get(org_id, DEFAULT_ENFORCEMENT_POLICY) if org_id else DEFAULT_ENFORCEMENT_POLICY
+    if not policy.get("enabled", True):
+        return False
+    required_roles = policy.get("required_roles", ["owner", "admin"])
+    return role.lower() in [r.lower() for r in required_roles]
+
+
+def get_enforcement_policy(org_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Get the MFA enforcement policy for an organization.
+
+    Args:
+        org_id: Organization ID
+
+    Returns:
+        Policy dict with enabled, required_roles, recommended_roles, grace_period_days
+    """
+    if org_id and org_id in _enforcement_policies:
+        return _enforcement_policies[org_id]
+    return DEFAULT_ENFORCEMENT_POLICY.copy()
+
+
+def set_enforcement_policy(org_id: str, policy: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Set the MFA enforcement policy for an organization.
+
+    Args:
+        org_id: Organization ID
+        policy: Policy settings to merge with defaults
+
+    Returns:
+        Updated policy dict
+    """
+    current = _enforcement_policies.get(org_id, DEFAULT_ENFORCEMENT_POLICY.copy())
+    # Merge provided fields with current/default policy
+    for key in ["enabled", "required_roles", "recommended_roles", "grace_period_days", "allow_recovery_bypass"]:
+        if key in policy:
+            current[key] = policy[key]
+    _enforcement_policies[org_id] = current
+    logger.info(f"[MFA] Enforcement policy updated for org {org_id}: required_roles={current.get('required_roles')}")
+    return current
 
 
 # Global instance

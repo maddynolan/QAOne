@@ -71,6 +71,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "commander": "^11.1.0",
+    "es-toolkit": "^1.45.1",
     "immer": "^10.0.0",
     "lucide-react": "^0.556.0",
     "monaco-editor": "^0.55.1",
