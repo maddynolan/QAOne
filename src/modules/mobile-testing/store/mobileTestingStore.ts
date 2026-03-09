@@ -404,7 +404,13 @@ export const useMobileTestingStore = create<MobileTestingState & MobileTestingAc
           // Studio Actions
           setStudioRunning: (running) => set((state) => { state.isStudioRunning = running; }),
           setStartingStudio: (starting) => set((state) => { state.isStartingStudio = starting; }),
-          addStudioOutput: (line) => set((state) => { state.studioOutput.push(line); }),
+          addStudioOutput: (line) => set((state) => {
+            state.studioOutput.push(line);
+            // Cap at 5000 lines to prevent memory bloat
+            if (state.studioOutput.length > 5000) {
+              state.studioOutput = state.studioOutput.slice(-3000);
+            }
+          }),
           clearStudioOutput: () => set((state) => { state.studioOutput = []; }),
 
           // Device Actions
@@ -539,6 +545,17 @@ export const useMobileTestingStore = create<MobileTestingState & MobileTestingAc
             const id = generateId();
             set((state) => {
               state.testRuns.unshift({ ...run, id });
+              // Enforce keepTestHistory limit (default 30 days) + hard cap at 500 runs
+              const maxRuns = 500;
+              if (state.testRuns.length > maxRuns) {
+                state.testRuns = state.testRuns.slice(0, maxRuns);
+              }
+              // Purge runs older than keepTestHistory days
+              const cutoff = Date.now() - (state.keepTestHistory * 24 * 60 * 60 * 1000);
+              state.testRuns = state.testRuns.filter(r => {
+                const runTime = r.started_at ? new Date(r.started_at).getTime() : Date.now();
+                return runTime > cutoff;
+              });
             });
             return id;
           },

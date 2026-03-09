@@ -211,16 +211,35 @@ export default function MobileTestStudio() {
       toast.error('Please enter an App Bundle ID');
       return;
     }
+    // Basic YAML validation
+    const trimmedYaml = yamlFlow.trim();
+    if (!trimmedYaml) {
+      toast.error('YAML flow is empty — add test steps first');
+      return;
+    }
+    const steps = trimmedYaml.split('\n')
+      .filter(line => line.trim().startsWith('-'))
+      .map(line => ({ action: line.trim().substring(2) }));
+    if (steps.length === 0) {
+      toast.error('No valid test steps found — each step must start with "-"');
+      return;
+    }
+    // Check for common YAML issues
+    const lines = trimmedYaml.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.trim() && !line.trim().startsWith('-') && !line.trim().startsWith('#') && !line.trim().startsWith('appId') && !line.match(/^\s/) && i > 0) {
+        toast.error(`Line ${i + 1} may have invalid YAML formatting: "${line.trim().substring(0, 40)}"`);
+        return;
+      }
+    }
+
     setIsRunningTest(true);
     clearStudioOutput();
     addStudioOutput('Starting native app test...');
 
     const startTime = Date.now();
     try {
-      const steps = yamlFlow.split('\n')
-        .filter(line => line.trim().startsWith('-'))
-        .map(line => ({ action: line.trim().substring(2) }));
-
       addStudioOutput(`Running ${steps.length} test steps on ${selectedPlatform}...`);
 
       const result = await mobile.runNativeTest(steps, appBundleId, selectedPlatform, selectedDevice);
@@ -501,7 +520,14 @@ export default function MobileTestStudio() {
                 {isRunningTest ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Running...</> : <><Play className="w-4 h-4 mr-2" /> Run Test</>}
               </Button>
               {isRunningTest && (
-                <Button variant="destructive" onClick={() => setIsRunningTest(false)}><Square className="w-4 h-4" /></Button>
+                <Button variant="destructive" onClick={async () => {
+                  try {
+                    await mobile.stopStudio();
+                  } catch { /* ignore */ }
+                  setIsRunningTest(false);
+                  addStudioOutput('Test cancelled by user.');
+                  toast.info('Test execution stopped');
+                }}><Square className="w-4 h-4" /></Button>
               )}
             </div>
           </div>

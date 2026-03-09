@@ -59,11 +59,11 @@ export function PlansTabPanel({
         )}
         {plans.length === 0 ? (
           <div className="text-center py-16">
-            <Target className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+            <Target className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-lg font-semibold mb-2">
               {searchTerm.trim() ? 'No Matching Plans' : 'No Test Plans'}
             </h3>
-            <p className="text-gray-500 mb-4">
+            <p className="text-muted-foreground mb-4">
               {searchTerm.trim() ? `No plans found matching "${searchTerm}"` : 'Create plans to organize test execution for releases'}
             </p>
             <Button
@@ -99,7 +99,7 @@ export function PlansTabPanel({
                           </Badge>
                         </div>
                         {plan.description && (
-                          <p className="text-sm text-gray-500 mb-2">{plan.description}</p>
+                          <p className="text-sm text-muted-foreground mb-2">{plan.description}</p>
                         )}
                         <div className="flex flex-wrap items-center gap-3 text-xs">
                           <span className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
@@ -117,7 +117,7 @@ export function PlansTabPanel({
                             </span>
                           )}
                           {plan.lastRun && (
-                            <span className="text-gray-500">
+                            <span className="text-muted-foreground">
                               Last run: {new Date(plan.lastRun.date).toLocaleDateString()}
                               <span className="ml-2 text-green-400">{plan.lastRun.passed}&#10003;</span>
                               <span className="ml-1 text-red-400">{plan.lastRun.failed}&#10007;</span>

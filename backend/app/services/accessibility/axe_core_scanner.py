@@ -162,35 +162,75 @@ class AxeCoreScanner:
     ) -> Dict[str, Any]:
         """Sync version of Playwright scan for Windows compatibility"""
         from playwright.sync_api import sync_playwright
-        
+
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(
                 viewport={"width": 1920, "height": 1080},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Flowstral-Accessibility-Scanner/1.0"
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
             page = context.new_page()
-            
+
             try:
-                # Navigate to URL
-                page.goto(url, timeout=timeout_ms, wait_until="networkidle")
-                
+                # Navigate — use domcontentloaded to avoid hanging on slow/streaming pages
+                try:
+                    page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+                    page.wait_for_timeout(2000)  # Let JS frameworks render
+                except Exception:
+                    # Last resort: just wait for commit
+                    page.goto(url, timeout=timeout_ms, wait_until="commit")
+                    page.wait_for_timeout(3000)
+
                 # Wait for specific element if requested
                 if wait_for_selector:
                     if len(wait_for_selector) > 500:
                         raise ValueError("wait_for_selector is too long (max 500 characters)")
                     page.wait_for_selector(wait_for_selector, timeout=timeout_ms)
 
-                # Inject axe-core and run analysis
+                # Inject axe-core — try inline injection first (CSP-safe), then CDN fallback
                 wcag_tags = self._get_wcag_tags(wcag_level)
-                script = AXE_RUN_SCRIPT % (AXE_CORE_CDN, json.dumps(wcag_tags))
+                axe_injected = False
 
-                results = page.evaluate(script)
+                # Method 1: Use the AXE_RUN_SCRIPT which includes its own fallback injection
+                try:
+                    script = AXE_RUN_SCRIPT % (AXE_CORE_CDN, json.dumps(wcag_tags))
+                    results = page.evaluate(script)
+                    axe_injected = True
+                except Exception as eval_err:
+                    logger.warning(f"AXE_RUN_SCRIPT injection failed: {eval_err}")
+
+                # Method 2: Try fetching axe-core source and injecting inline
+                if not axe_injected:
+                    try:
+                        from app.services.accessibility.axe_scanner import _fetch_axe_core_script
+                        axe_source = _fetch_axe_core_script()
+                        if axe_source:
+                            page.evaluate(axe_source)
+                            is_loaded = page.evaluate("typeof axe !== 'undefined'")
+                            if is_loaded:
+                                axe_options = {
+                                    "runOnly": {"type": "tag", "values": wcag_tags},
+                                    "resultTypes": ["violations", "incomplete", "passes"]
+                                }
+                                results = page.evaluate("""
+                                    async (options) => { return await axe.run(document, options); }
+                                """, axe_options)
+                                axe_injected = True
+                    except Exception as inline_err:
+                        logger.warning(f"Inline axe injection failed: {inline_err}")
+
+                if not axe_injected:
+                    results = {
+                        "violations": [],
+                        "incomplete": [],
+                        "passes": [],
+                        "error": "Failed to inject axe-core (CSP may be blocking scripts)"
+                    }
 
                 # Get page title and meta
                 results['pageTitle'] = page.title()
                 results['pageUrl'] = page.url
-                
+
             except Exception as e:
                 logger.error(f"Playwright sync scan failed: {e}")
                 results = {
@@ -201,7 +241,7 @@ class AxeCoreScanner:
                 }
             finally:
                 browser.close()
-        
+
         return results
     
     async def _scan_with_playwright(
@@ -211,41 +251,83 @@ class AxeCoreScanner:
         wait_for_selector: Optional[str],
         timeout_ms: int
     ) -> Dict[str, Any]:
-        """Scan using Playwright + axe-core (production quality)"""
+        """Scan using Playwright + axe-core (production quality, non-Windows)"""
         from playwright.async_api import async_playwright
-        
+
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             context = await browser.new_context(
                 viewport={"width": 1920, "height": 1080},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Flowstral-Accessibility-Scanner/1.0"
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
             page = await context.new_page()
-            
+
             try:
-                # Navigate to URL
-                await page.goto(url, timeout=timeout_ms, wait_until="networkidle")
-                
+                # Navigate — use domcontentloaded to avoid hanging on slow/streaming pages
+                try:
+                    await page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+                    await page.wait_for_timeout(2000)  # Let JS frameworks render
+                except Exception:
+                    await page.goto(url, timeout=timeout_ms, wait_until="commit")
+                    await page.wait_for_timeout(3000)
+
                 # Wait for specific element if requested
                 if wait_for_selector:
                     if len(wait_for_selector) > 500:
                         raise ValueError("wait_for_selector is too long (max 500 characters)")
                     await page.wait_for_selector(wait_for_selector, timeout=timeout_ms)
-                
-                # Inject axe-core and run analysis
+
+                # Inject axe-core — try AXE_RUN_SCRIPT first, then inline fallback
                 wcag_tags = self._get_wcag_tags(wcag_level)
-                script = AXE_RUN_SCRIPT % (AXE_CORE_CDN, json.dumps(wcag_tags))
-                
-                results = await page.evaluate(script)
-                
+                axe_injected = False
+
+                # Method 1: AXE_RUN_SCRIPT with built-in script element injection
+                try:
+                    script = AXE_RUN_SCRIPT % (AXE_CORE_CDN, json.dumps(wcag_tags))
+                    results = await page.evaluate(script)
+                    axe_injected = True
+                except Exception as eval_err:
+                    logger.warning(f"AXE_RUN_SCRIPT injection failed: {eval_err}")
+
+                # Method 2: Fetch axe source and inject inline
+                if not axe_injected:
+                    try:
+                        from app.services.accessibility.axe_scanner import _fetch_axe_core_script
+                        axe_source = _fetch_axe_core_script()
+                        if axe_source:
+                            await page.evaluate(axe_source)
+                            is_loaded = await page.evaluate("typeof axe !== 'undefined'")
+                            if is_loaded:
+                                axe_options = {
+                                    "runOnly": {"type": "tag", "values": wcag_tags},
+                                    "resultTypes": ["violations", "incomplete", "passes"]
+                                }
+                                results = await page.evaluate("""
+                                    async (options) => { return await axe.run(document, options); }
+                                """, axe_options)
+                                axe_injected = True
+                    except Exception as inline_err:
+                        logger.warning(f"Inline axe injection failed: {inline_err}")
+
+                if not axe_injected:
+                    results = {
+                        "violations": [],
+                        "incomplete": [],
+                        "passes": [],
+                        "error": "Failed to inject axe-core (CSP may be blocking scripts)"
+                    }
+
                 # Take screenshot for reference
-                screenshot = await page.screenshot(full_page=True, type="png")
-                results['screenshot'] = screenshot
-                
+                try:
+                    screenshot = await page.screenshot(full_page=True, type="png")
+                    results['screenshot'] = screenshot
+                except Exception:
+                    pass  # Screenshot is optional
+
                 # Get page title and meta
                 results['pageTitle'] = await page.title()
                 results['pageUrl'] = page.url
-                
+
             except Exception as e:
                 logger.error(f"Playwright scan failed: {e}")
                 results = {
@@ -256,21 +338,25 @@ class AxeCoreScanner:
                 }
             finally:
                 await browser.close()
-        
+
         return results
     
     async def _scan_fallback(self, url: str, wcag_level: str) -> Dict[str, Any]:
-        """Fallback scanner when Playwright unavailable"""
-        import aiohttp
-        
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(url, timeout=30) as response:
-                    html = await response.text()
-                    return self._analyze_html(html, url, wcag_level)
-            except Exception as e:
-                logger.error(f"Fallback scan failed: {e}")
-                return {"violations": [], "error": str(e)}
+        """Fallback scanner when Playwright unavailable — uses httpx (already in deps)"""
+        try:
+            import httpx
+        except ImportError:
+            logger.error("httpx not installed — cannot perform fallback scan")
+            return {"violations": [], "error": "Neither Playwright nor httpx available for scanning"}
+
+        try:
+            async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+                response = await client.get(url)
+                html = response.text
+                return self._analyze_html(html, url, wcag_level)
+        except Exception as e:
+            logger.error(f"Fallback scan failed: {e}")
+            return {"violations": [], "error": str(e)}
     
     def _analyze_html(self, html: str, url: str, wcag_level: str) -> Dict[str, Any]:
         """Analyze HTML for common accessibility issues (fallback)"""

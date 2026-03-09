@@ -39,6 +39,13 @@ This document covers two related testing-output features that assess quality bey
 - **Ignore regions** for masking dynamic content
 - **Screenshot capture** via Playwright from URLs
 - **15 fully-implemented API endpoints** — zero stubs
+- **Windowed SSIM** computation with scipy for accurate structural comparison (v3.18.1+)
+- **Image safety validation** -- dimension limits (16K px), pixel count caps (100M px), auto-downscaling
+- **Path traversal protection** on all baseline and diff endpoints
+- **Slider diff viewer** with mouse drag interaction
+- **Accept/Reject workflow** with actual baseline promotion
+- **Batch URL testing** with correct form-encoded capture and compare-by-name flow
+- **CI/CD-friendly compare-by-name** -- returns `passed: false` when no baseline exists
 
 ---
 
@@ -84,7 +91,7 @@ VisualTestingPage.tsx (1,324 lines)
     │   visual_testing_api.py (700 lines)
     │       │
     │       ▼
-    │   VisualTestingEngine (1,083 lines)
+    │   VisualTestingEngine (1,200+ lines)
     │       ├── 6 comparison modes
     │       │       ├── Pixel Perfect (NumPy diff)
     │       │       ├── Anti-Aliased (Sobel edge + tolerance)
@@ -185,7 +192,7 @@ VisualTestingPage.tsx (1,324 lines)
 
 | File | Lines | Status | Role |
 |------|-------|--------|------|
-| `backend/app/services/automation/visual_testing_engine.py` | 1,083 | **Fully implemented** | Core engine: 6 comparison algorithms, perceptual hashing (aHash + dHash), SSIM calculator, baseline CRUD with history, diff image generation, ignore region masking, AI semantic comparison via Claude Vision |
+| `backend/app/services/automation/visual_testing_engine.py` | 1,200+ | **Fully implemented** | Core engine: 6 comparison algorithms, perceptual hashing (aHash + dHash), **windowed SSIM** (scipy-based with global fallback), baseline CRUD with history, diff image generation with pixel guard, ignore region masking, AI semantic comparison via Claude Vision (sync client), **image safety validation** (dimension/pixel limits, auto-downscaling), baseline listing cap |
 | `backend/app/services/automation/visual_regression_service.py` | 312 | **Fully implemented** | Generates Playwright test scripts with visual regression assertions. Uses separate storage path (`screenshots/`) from main engine (`visual_testing/`). |
 | `backend/app/services/engines/screenshot_analyzer.py` | 316 | **Mostly implemented** | OCR via Tesseract or Google Vision. Page title/button/label extraction. `detect_visual_changes()` is a **stub** (returns `{"changed": True, "confidence": 0.0}`). |
 
@@ -347,9 +354,9 @@ Three scanning strategies with automatic fallback:
 | **Pixel Perfect** | NumPy | Exact pixel-by-pixel diff | Strict regression checks |
 | **Anti-Aliased** | NumPy + Sobel | Edge detection + anti-aliasing tolerance (like pixelmatch) | **Recommended default** — ignores rendering differences |
 | **Perceptual Hash** | PIL | aHash + dHash with Hamming distance | Same image, different encoding |
-| **Structural (SSIM)** | NumPy | Structural Similarity Index (luminance, contrast, structure) | Human perception alignment |
+| **Structural (SSIM)** | NumPy + scipy | **Windowed** Structural Similarity Index (11x11 window, with scipy.ndimage fallback to global for small images, auto-downscale for >2MP) | Human perception alignment |
 | **Layout Only** | PIL | `ImageFilter.FIND_EDGES` + comparison | Checking layout without styling |
-| **AI Semantic** | Anthropic Claude Vision | Sends both images to Claude with structured JSON prompt | Understanding what changed semantically |
+| **AI Semantic** | Anthropic Claude Vision (sync client) | Sends both images to Claude with structured JSON prompt; no async wrapping needed | Understanding what changed semantically |
 
 ### Baseline Storage Format
 
@@ -426,10 +433,28 @@ AI-powered features are **OFF by default**:
 |---------|-------------|--------|
 | PIL/Pillow | All visual modes | Required |
 | NumPy | Anti-aliased, SSIM | Required for advanced modes |
+| scipy | Windowed SSIM | Optional (falls back to global SSIM) |
 | Playwright | Screenshot capture, axe-core scanning | Required for full scanning |
 | Tesseract | OCR text extraction | Optional (falls back to regex) |
 | anthropic | AI Semantic comparison | Optional |
 | msal | MS 365 accessibility scanning auth | Optional |
+
+### Security & Robustness (v3.18.1+)
+
+| Protection | Details |
+|-----------|---------|
+| **Image dimension limit** | `MAX_IMAGE_DIMENSION = 16384` px per axis; oversized images auto-downscaled |
+| **Pixel count limit** | `MAX_IMAGE_PIXELS = 100,000,000` (100 MP); PIL decompression bomb limit also set |
+| **Baseline listing cap** | `MAX_BASELINES_LIST = 1000` prevents OOM on huge baseline directories |
+| **Diff generation guard** | `MAX_DIFF_GENERATION_PIXELS = 50,000,000`; skips diff for very large images |
+| **Path traversal prevention** | `_validate_test_name()` applied to all baseline GET/POST/PUT/DELETE + diff filename endpoint |
+| **Diff filename validation** | Regex pattern + resolved path check ensures diff files stay within `diffs_dir` |
+| **Error sanitization** | Engine `compare()` returns generic error message instead of `str(e)` (v3.17.0 compliance) |
+| **SSRF prevention** | `/capture` endpoint validates URL via `url_validator.validate_url()` |
+| **Base64 size validation** | All base64 image inputs validated against 50MB limit |
+| **CI/CD correctness** | `compare-by-name` returns `passed: false` (not `true`) when no baseline exists |
+| **Layout mode fix** | `_compare_layout` now correctly reports `mode: LAYOUT` instead of `ANTI_ALIASED` |
+| **AI comparison fix** | Removed problematic async wrapping; uses sync Anthropic client directly |
 
 ---
 
@@ -469,5 +494,5 @@ AI-powered features are **OFF by default**:
 
 ---
 
-*Last updated: 2026-02-20*
+*Last updated: 2026-03-08*
 *Generated by code audit of the Flowstral accessibility and visual testing features.*

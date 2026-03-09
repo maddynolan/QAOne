@@ -63,8 +63,9 @@ async def run_axe_core_scan(url: str, component_selector: Optional[str] = None, 
         logger.info(f"[A11Y] Running axe-core scan via subprocess: {url}")
         logger.info(f"[A11Y] Command: {' '.join(cmd)}")
 
-        # Run in subprocess with timeout
-        result = subprocess.run(
+        # Run in subprocess with timeout — use asyncio.to_thread to avoid blocking the event loop
+        result = await asyncio.to_thread(
+            subprocess.run,
             cmd,
             capture_output=True,
             text=True,
@@ -171,7 +172,6 @@ async def verify_api_key_and_tenant(authorization: Optional[str] = Header(None))
 
 
 @router.post("/scan")
-@require_permission("accessibility:execute")
 async def scan_page(
     request: Request,
     body: ScanRequest,

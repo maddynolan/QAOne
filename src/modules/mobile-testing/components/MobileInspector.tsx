@@ -75,6 +75,69 @@ function parseXmlHierarchy(xmlString: string): ElementNode {
   return parseNode(root);
 }
 
+/** Parse iOS xcrun simctl text output into an ElementNode tree */
+function parseIosTextHierarchy(text: string): ElementNode {
+  const lines = text.split('\n').filter(l => l.trim());
+  let nodeIdx = 0;
+
+  const rootNode: ElementNode = {
+    id: 'ios_root',
+    type: 'Application',
+    text: '',
+    resource_id: '',
+    content_desc: '',
+    bounds: { x: 0, y: 0, width: 0, height: 0 },
+    clickable: false,
+    visible: true,
+    attributes: {},
+    children: [],
+  };
+
+  // Parse indentation-based iOS hierarchy output
+  // Format: "  Type: label, frame: {{x, y}, {w, h}}"
+  const stack: { node: ElementNode; indent: number }[] = [{ node: rootNode, indent: -1 }];
+
+  for (const line of lines) {
+    const indent = line.search(/\S/);
+    if (indent < 0) continue;
+    const trimmed = line.trim();
+
+    nodeIdx++;
+    // Extract type (first word or until colon/comma)
+    const typeMatch = trimmed.match(/^(\w[\w.]*)/);
+    const type = typeMatch ? typeMatch[1] : 'Unknown';
+    // Extract label after colon or quotes
+    const labelMatch = trimmed.match(/["']([^"']+)["']/);
+    const label = labelMatch ? labelMatch[1] : '';
+    // Extract frame {{x, y}, {w, h}}
+    const frameMatch = trimmed.match(/\{\{([\d.]+),\s*([\d.]+)\},\s*\{([\d.]+),\s*([\d.]+)\}\}/);
+
+    const node: ElementNode = {
+      id: `ios_node_${nodeIdx}`,
+      type: type.split('.').pop() || type,
+      text: label,
+      resource_id: '',
+      content_desc: label,
+      bounds: frameMatch
+        ? { x: +frameMatch[1], y: +frameMatch[2], width: +frameMatch[3], height: +frameMatch[4] }
+        : { x: 0, y: 0, width: 0, height: 0 },
+      clickable: /Button|Link|Cell|Tab/.test(type),
+      visible: !/Hidden/.test(trimmed),
+      attributes: { raw: trimmed },
+      children: [],
+    };
+
+    // Walk back the stack to find the parent
+    while (stack.length > 1 && stack[stack.length - 1].indent >= indent) {
+      stack.pop();
+    }
+    stack[stack.length - 1].node.children.push(node);
+    stack.push({ node, indent });
+  }
+
+  return rootNode;
+}
+
 // Sample element tree for demo
 const SAMPLE_TREE: ElementNode = {
   id: 'root',
@@ -205,8 +268,9 @@ export default function MobileInspector() {
           const parsed = parseXmlHierarchy(result.data);
           setElementTree(parsed);
         } else {
-          // Non-XML format (iOS text) — fall back to sample
-          setElementTree(SAMPLE_TREE);
+          // Non-XML format (iOS text) — parse into basic tree
+          const parsed = parseIosTextHierarchy(result.data);
+          setElementTree(parsed);
         }
         toast.success('Element tree refreshed from device');
       } else {
@@ -259,21 +323,27 @@ export default function MobileInspector() {
     toast.success('Selector copied!');
   };
 
+  const nodeMatchesQuery = (node: ElementNode, query: string): boolean => {
+    const q = query.toLowerCase();
+    return (
+      node.type.toLowerCase().includes(q) ||
+      node.text.toLowerCase().includes(q) ||
+      node.resource_id.toLowerCase().includes(q)
+    );
+  };
+
+  const subtreeMatchesQuery = (node: ElementNode, query: string): boolean => {
+    if (nodeMatchesQuery(node, query)) return true;
+    return node.children.some(c => subtreeMatchesQuery(c, query));
+  };
+
   const renderTree = (node: ElementNode, depth: number = 0) => {
     const isExpanded = expandedNodes.has(node.id);
     const isSelected = selectedElementId === node.id;
     const hasChildren = node.children.length > 0;
-    const matchesSearch = searchQuery && (
-      node.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      node.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      node.resource_id.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const matchesSearch = searchQuery && nodeMatchesQuery(node, searchQuery);
 
-    if (searchQuery && !matchesSearch && !node.children.some(c => 
-      c.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.resource_id.toLowerCase().includes(searchQuery.toLowerCase())
-    )) {
+    if (searchQuery && !subtreeMatchesQuery(node, searchQuery)) {
       return null;
     }
 

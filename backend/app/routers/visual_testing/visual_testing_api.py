@@ -186,6 +186,9 @@ async def compare_by_baseline_name(request: CompareByNameRequest) -> Dict[str, A
 
     This is the recommended approach for CI/CD pipelines.
     """
+    # Path traversal prevention
+    _validate_test_name(request.test_name)
+
     # Base64 image size validation
     _validate_base64_image_size(request.actual, "actual")
 
@@ -203,12 +206,15 @@ async def compare_by_baseline_name(request: CompareByNameRequest) -> Dict[str, A
         baseline_path = engine.get_baseline(request.test_name)
         
         if not baseline_path:
+            # Return passed=False with is_new_baseline flag so CI pipelines
+            # fail explicitly rather than silently passing with no comparison
             return {
                 "success": True,
                 "result": {
-                    "passed": True,
+                    "passed": False,
                     "is_new_baseline": True,
-                    "message": f"No baseline exists for '{request.test_name}'. Consider saving this as the baseline."
+                    "diff_percentage": 0.0,
+                    "message": f"No baseline exists for '{request.test_name}'. Save a baseline first, then re-run."
                 }
             }
         
@@ -315,6 +321,9 @@ async def list_baselines() -> Dict[str, Any]:
 @router.get("/baselines/{test_name}")
 async def get_baseline(test_name: str) -> Dict[str, Any]:
     """Get baseline info and image for a specific test"""
+    # Path traversal prevention
+    _validate_test_name(test_name)
+
     try:
         from app.services.automation.visual_testing_engine import VisualTestingEngine
         from PIL import Image
@@ -351,6 +360,9 @@ async def get_baseline(test_name: str) -> Dict[str, Any]:
 @router.get("/baselines/{test_name}/image")
 async def get_baseline_image(test_name: str):
     """Get baseline image file directly"""
+    # Path traversal prevention
+    _validate_test_name(test_name)
+
     try:
         from app.services.automation.visual_testing_engine import VisualTestingEngine
         
@@ -421,6 +433,9 @@ async def save_baseline(request: SaveBaselineRequest) -> Dict[str, Any]:
 @router.put("/baselines/{test_name}")
 async def update_baseline(test_name: str, request: UpdateBaselineRequest) -> Dict[str, Any]:
     """Update an existing baseline (with history tracking)"""
+    # Path traversal prevention
+    _validate_test_name(test_name)
+
     # Base64 image size validation
     _validate_base64_image_size(request.image)
 
@@ -454,6 +469,9 @@ async def update_baseline(test_name: str, request: UpdateBaselineRequest) -> Dic
 @router.delete("/baselines/{test_name}")
 async def delete_baseline(test_name: str) -> Dict[str, Any]:
     """Delete a baseline"""
+    # Path traversal prevention
+    _validate_test_name(test_name)
+
     try:
         from app.services.automation.visual_testing_engine import VisualTestingEngine
         
@@ -514,17 +532,33 @@ async def list_diffs(
         raise HTTPException(status_code=500, detail="Internal server error while listing diffs")
 
 
+_DIFF_FILENAME_PATTERN = re.compile(r'^[a-zA-Z0-9_\-\.]+\.png$')
+
+
 @router.get("/diffs/{filename}")
 async def get_diff_image(filename: str):
     """Get a specific diff image"""
+    # Path traversal prevention on diff filenames
+    if not _DIFF_FILENAME_PATTERN.match(filename):
+        raise HTTPException(
+            status_code=400,
+            detail="filename must contain only alphanumeric characters, underscores, hyphens, dots, and must end with .png"
+        )
+
     try:
         from app.services.automation.visual_testing_engine import VisualTestingEngine
-        
+
         engine = VisualTestingEngine()
         diff_path = engine.diffs_dir / filename
-        
+
+        # Ensure resolved path is still within diffs_dir (defense in depth)
+        try:
+            diff_path.resolve().relative_to(engine.diffs_dir.resolve())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+
         if not diff_path.exists():
-            raise HTTPException(status_code=404, detail=f"Diff '{filename}' not found")
+            raise HTTPException(status_code=404, detail="Diff image not found")
         
         return FileResponse(
             diff_path,

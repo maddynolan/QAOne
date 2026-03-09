@@ -105,7 +105,7 @@ export default function TestPlayground() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid grid-cols-5 lg:grid-cols-10 gap-1 h-auto p-1 bg-white dark:bg-slate-800 shadow-sm">
+          <TabsList className="grid grid-cols-5 lg:grid-cols-10 gap-1 h-auto p-1 bg-secondary shadow-sm">
             <TabsTrigger value="products" data-testid="tab-products" className="text-xs px-2 py-1.5">Products</TabsTrigger>
             {/* Cart tab with badge OUTSIDE the trigger to prevent text capture issues */}
             <div className="relative">
@@ -589,11 +589,11 @@ function TablesSection() {
   ).sort((a, b) => sortBy === 'date' ? b.date.localeCompare(a.date) : b.total - a.total);
 
   const statusColors: Record<string, string> = {
-    'Delivered': 'bg-green-100 text-green-800',
-    'Shipped': 'bg-blue-100 text-blue-800',
-    'Processing': 'bg-yellow-100 text-yellow-800',
-    'Pending': 'bg-orange-100 text-orange-800',
-    'Cancelled': 'bg-red-100 text-red-800',
+    'Delivered': 'bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-400',
+    'Shipped': 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-400',
+    'Processing': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-400',
+    'Pending': 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-400',
+    'Cancelled': 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-400',
   };
 
   return (

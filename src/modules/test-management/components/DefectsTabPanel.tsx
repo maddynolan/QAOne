@@ -43,7 +43,7 @@ export function DefectsTabPanel({
       <div className="max-w-6xl mx-auto">
         {defects.length === 0 ? (
           <div className="text-center py-16">
-            <Bug className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+            <Bug className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
             <h2 className="text-xl font-semibold mb-2">No Defects Found</h2>
             <p className="text-gray-500 dark:text-gray-400 mb-6">Track bugs and issues linked to your test runs</p>
             <Button
@@ -59,16 +59,16 @@ export function DefectsTabPanel({
             {/* Defect Stats */}
             <div className="grid grid-cols-5 gap-4 mb-6">
               {[
-                { label: 'Total', count: defects.length, color: 'gray' },
-                { label: 'Open', count: defects.filter(d => ['new', 'open', 'reopened'].includes(d.status)).length, color: 'red' },
-                { label: 'In Progress', count: defects.filter(d => d.status === 'in-progress').length, color: 'amber' },
-                { label: 'Fixed', count: defects.filter(d => ['fixed', 'verified'].includes(d.status)).length, color: 'blue' },
-                { label: 'Closed', count: defects.filter(d => d.status === 'closed').length, color: 'green' },
+                { label: 'Total', count: defects.length, countClass: 'text-foreground', borderClass: 'border-border' },
+                { label: 'Open', count: defects.filter(d => ['new', 'open', 'reopened'].includes(d.status)).length, countClass: 'text-red-600 dark:text-red-400', borderClass: 'border-red-500/30' },
+                { label: 'In Progress', count: defects.filter(d => d.status === 'in-progress').length, countClass: 'text-amber-600 dark:text-amber-400', borderClass: 'border-amber-500/30' },
+                { label: 'Fixed', count: defects.filter(d => ['fixed', 'verified'].includes(d.status)).length, countClass: 'text-blue-600 dark:text-blue-400', borderClass: 'border-blue-500/30' },
+                { label: 'Closed', count: defects.filter(d => d.status === 'closed').length, countClass: 'text-green-600 dark:text-green-400', borderClass: 'border-green-500/30' },
               ].map(stat => (
-                <Card key={stat.label} className={`bg-gray-900 border-${stat.color}-500/30`}>
+                <Card key={stat.label} className={cn("bg-secondary", stat.borderClass)}>
                   <CardContent className="p-4 text-center">
-                    <div className={`text-2xl font-bold text-${stat.color}-400`}>{stat.count}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">{stat.label}</div>
+                    <div className={cn("text-2xl font-bold", stat.countClass)}>{stat.count}</div>
+                    <div className="text-xs text-muted-foreground">{stat.label}</div>
                   </CardContent>
                 </Card>
               ))}
@@ -104,13 +104,13 @@ export function DefectsTabPanel({
                           )}>
                             {defect.status}
                           </Badge>
-                          <span className="text-xs text-gray-500">{defect.id}</span>
+                          <span className="text-xs text-muted-foreground">{defect.id}</span>
                         </div>
-                        <h3 className="font-medium text-white mb-1">{defect.title}</h3>
+                        <h3 className="font-medium text-foreground mb-1">{defect.title}</h3>
                         {defect.description && (
                           <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">{defect.description}</p>
                         )}
-                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                        <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                           {defect.assignedTo && (
                             <span className="flex items-center gap-1">
                               <Users className="w-3 h-3" />
