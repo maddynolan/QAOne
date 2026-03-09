@@ -31,30 +31,15 @@ export default defineConfig(({ mode }) => ({
       output: {
         manualChunks(id: string) {
           if (id.includes('node_modules')) {
-            // React core — loaded on every page
-            if (id.includes('react-dom') || id.includes('/react/') || id.includes('react-router')) {
-              return 'vendor-react';
-            }
-            // UI primitives — Radix, icons, styling utilities
-            if (id.includes('@radix-ui') || id.includes('lucide-react') || id.includes('class-variance-authority') || id.includes('clsx') || id.includes('tailwind-merge')) {
-              return 'vendor-ui';
-            }
-            // Data fetching
-            if (id.includes('@tanstack')) {
-              return 'vendor-query';
-            }
-            // Monaco editor — large, only used in API Testing + Salesforce
+            // Monaco editor — large (~2MB), pure JS, no React dependency at init.
+            // Only used in API Testing + Salesforce, safe to isolate.
             if (id.includes('monaco')) {
               return 'vendor-monaco';
             }
-            // Charts — only used in Performance + Dashboard
-            if (id.includes('recharts') || id.includes('d3-')) {
-              return 'vendor-charts';
-            }
-            // State management + HTTP + utilities
-            if (id.includes('zustand') || id.includes('axios') || id.includes('date-fns') || id.includes('immer') || id.includes('uuid')) {
-              return 'vendor-misc';
-            }
+            // Everything else (React, Radix, recharts, tanstack, zustand, etc.)
+            // stays in one vendor chunk. Many libraries call React.forwardRef at
+            // module init time, so splitting them from React causes runtime errors.
+            return 'vendor';
           }
         },
       },
