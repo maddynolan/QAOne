@@ -19,7 +19,7 @@
  * - SLA threshold evaluation with PASS/FAIL verdicts
  * - Correlation rule management (JSONPath, regex, boundary, header, cookie, xpath, html_form)
  * - Persistent test history (max 50 entries)
- * - Server-side execution via Go runner (up to 10,000 VUs)
+ * - Server-side execution via Server execution (up to 10,000 VUs)
  *
  * @api /performance/* - Load testing engine (80 endpoints)
  * @api /api/protocol-recording/* - HTTP traffic capture (13 endpoints)
@@ -968,7 +968,7 @@ export default function VirtualUserGenerator() {
             {/* Server Runner toggle */}
             <div className="flex items-center gap-3 mb-4">
               <Switch checked={store.useServerRunner} onCheckedChange={store.setUseServerRunner} />
-              <Label>Run on Server (Go Runner -- up to 10,000 VUs)</Label>
+              <Label>Run on Server (Server Execution -- up to 10,000 VUs)</Label>
               {store.useServerRunner && <Badge variant="secondary">Server Mode</Badge>}
               {!store.useServerRunner && store.virtualUsers > 20 && (
                 <Badge variant="destructive">Browser limited to 20 VUs</Badge>
@@ -993,9 +993,11 @@ export default function VirtualUserGenerator() {
                           <SelectValue placeholder="Presets" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="http://localhost:8002">E-commerce Demo</SelectItem>
-                          <SelectItem value="http://localhost:3000">Test Website</SelectItem>
                           <SelectItem value={API_BASE_URL}>Backend API</SelectItem>
+                          <SelectItem value="https://jsonplaceholder.typicode.com">JSONPlaceholder (Public)</SelectItem>
+                          <SelectItem value="https://httpbin.org">HTTPBin (Public)</SelectItem>
+                          <SelectItem value="http://localhost:3000">localhost:3000</SelectItem>
+                          <SelectItem value="http://localhost:8000">localhost:8000</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1311,10 +1313,10 @@ export default function VirtualUserGenerator() {
               results={store.thresholdResults}
             />
 
-            {/* Go Runner Status */}
+            {/* Server Execution Status */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Server className="h-4 w-4" /> Go Runner Status</CardTitle>
+                <CardTitle className="flex items-center gap-2"><Server className="h-4 w-4" /> Server Execution Status</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center gap-3">
@@ -1324,7 +1326,7 @@ export default function VirtualUserGenerator() {
                 </div>
                 {store.useServerRunner && (
                   <p className="text-sm text-muted-foreground mt-2">
-                    Go runner supports up to 10,000 concurrent virtual users with HTTP/1.1, HTTP/2, WebSocket, and gRPC protocols.
+                    Server execution supports up to 10,000 concurrent virtual users with HTTP/1.1, HTTP/2, WebSocket, and gRPC protocols.
                   </p>
                 )}
               </CardContent>

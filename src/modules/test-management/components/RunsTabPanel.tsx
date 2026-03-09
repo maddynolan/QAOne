@@ -49,9 +49,9 @@ export function RunsTabPanel({
       <div className="max-w-5xl mx-auto">
         {testRuns.length === 0 ? (
           <div className="text-center py-16">
-            <PlayCircle className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+            <PlayCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-lg font-semibold mb-2">No Test Runs</h3>
-            <p className="text-gray-500 mb-4">Create a test run to execute your test cases</p>
+            <p className="text-muted-foreground mb-4">Create a test run to execute your test cases</p>
             <Button
               onClick={onCreateRun}
               className="bg-primary hover:bg-primary/90"
@@ -80,8 +80,8 @@ export function RunsTabPanel({
               return (
                 <div className="grid grid-cols-5 gap-3 mb-4">
                   <div className="bg-secondary rounded-lg p-3 text-center">
-                    <div className="text-2xl font-bold text-white">{totalRuns}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">Total Runs</div>
+                    <div className="text-2xl font-bold text-foreground">{totalRuns}</div>
+                    <div className="text-xs text-muted-foreground">Total Runs</div>
                   </div>
                   <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-center">
                     <div className="text-2xl font-bold text-emerald-400">{passedRuns}</div>
@@ -108,7 +108,7 @@ export function RunsTabPanel({
             {testRuns.slice(0, 50).map((run) => (
               <div
                 key={run.id}
-                className="flex items-center justify-between p-3 bg-white dark:bg-white dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-primary/30 group"
+                className="flex items-center justify-between p-3 bg-card rounded-lg border border-border hover:border-primary/30 group"
               >
                 <div className="flex items-center gap-3">
                   {run.status === 'passed' && <CheckCircle className="w-5 h-5 text-green-500" />}
@@ -125,7 +125,7 @@ export function RunsTabPanel({
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-muted-foreground">
                       {new Date(run.startTime).toLocaleString()} &bull; {run.mode}
                       {run.executionMode && run.testCaseIds && run.testCaseIds.length > 1 &&
                         ` \u2022 ${run.executionMode}`}

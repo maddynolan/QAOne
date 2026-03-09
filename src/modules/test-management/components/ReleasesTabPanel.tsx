@@ -45,11 +45,11 @@ export function ReleasesTabPanel({
         )}
         {releases.length === 0 ? (
           <div className="text-center py-16">
-            <Rocket className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+            <Rocket className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-lg font-semibold mb-2">
               {searchTerm.trim() ? 'No Matching Releases' : 'No Releases'}
             </h3>
-            <p className="text-gray-500 mb-4">
+            <p className="text-muted-foreground mb-4">
               {searchTerm.trim() ? `No releases found matching "${searchTerm}"` : 'Create releases to track testing across sprints'}
             </p>
           </div>
@@ -72,10 +72,10 @@ export function ReleasesTabPanel({
                         </Badge>
                       </div>
                       {release.description && (
-                        <p className="text-sm text-gray-500 mt-1">{release.description}</p>
+                        <p className="text-sm text-muted-foreground mt-1">{release.description}</p>
                       )}
                       <div className="flex items-center gap-4 mt-3">
-                        <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
                           {new Date(release.startDate).toLocaleDateString()}
                           {release.endDate && ` - ${new Date(release.endDate).toLocaleDateString()}`}

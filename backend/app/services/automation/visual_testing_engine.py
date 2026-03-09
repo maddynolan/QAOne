@@ -9,9 +9,12 @@ Features:
 - Multiple comparison modes (pixel, perceptual, structural, AI)
 - Anti-aliasing tolerance
 - Ignore regions for dynamic content
-- Detailed diff visualization
-- Baseline management workflow
+- Detailed diff visualization with 3 view modes
+- Baseline management workflow with versioning and branching
 - Cross-browser normalization
+- Responsive viewport matrix testing
+- Stability scoring across runs
+- CI/CD-friendly result format
 
 Usage:
     engine = VisualTestingEngine()
@@ -34,10 +37,18 @@ import math
 
 logger = logging.getLogger(__name__)
 
+# ==================== Safety Constants ====================
+MAX_IMAGE_DIMENSION = 16384  # 16K pixels max per dimension (prevents memory bombs)
+MAX_IMAGE_PIXELS = 100_000_000  # 100 megapixels max total
+MAX_BASELINES_LIST = 1000  # Cap listing to prevent OOM on huge baseline dirs
+MAX_DIFF_GENERATION_PIXELS = 50_000_000  # Skip diff generation for very large images
+
 # Try to import optional image processing libraries
 try:
     from PIL import Image, ImageDraw, ImageFilter, ImageChops, ImageOps
     PIL_AVAILABLE = True
+    # Set PIL decompression bomb limit
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 except ImportError:
     PIL_AVAILABLE = False
     logger.warning("PIL not available. Install with: pip install Pillow")
@@ -207,47 +218,123 @@ class SSIMCalculator:
     """
     Compute Structural Similarity Index (SSIM) between images.
     SSIM measures perceived quality and structural information.
+
+    Uses windowed computation for local structure comparison,
+    which is more accurate than global-mean SSIM.
     """
-    
+
+    @staticmethod
+    def _uniform_filter(arr: 'np.ndarray', size: int) -> 'np.ndarray':
+        """Apply uniform (box) filter using cumulative sums for O(n) performance."""
+        # Pad the array
+        pad = size // 2
+        padded = np.pad(arr, pad, mode='reflect')
+
+        # Cumulative sum along rows then columns
+        cumsum = padded.cumsum(axis=0).cumsum(axis=1)
+
+        h, w = arr.shape
+        # Use integral image formula for sum in each window
+        result = np.zeros_like(arr)
+        for i in range(h):
+            for j in range(w):
+                r1, c1 = i, j
+                r2, c2 = i + size - 1, j + size - 1
+                result[i, j] = cumsum[r2, c2]
+                if r1 > 0:
+                    result[i, j] -= cumsum[r1 - 1, c2]
+                if c1 > 0:
+                    result[i, j] -= cumsum[r2, c1 - 1]
+                if r1 > 0 and c1 > 0:
+                    result[i, j] += cumsum[r1 - 1, c1 - 1]
+
+        return result / (size * size)
+
     @staticmethod
     def compute_ssim(img1: 'Image.Image', img2: 'Image.Image', window_size: int = 11) -> float:
         """
-        Compute SSIM between two images.
-        
+        Compute windowed SSIM between two images.
+
+        Uses local window statistics instead of global means for
+        accurate structural similarity measurement.
+
         Returns value between -1 and 1, where 1 means identical.
         Typical threshold: > 0.95 for "similar"
         """
         if not PIL_AVAILABLE or not NUMPY_AVAILABLE:
             return 1.0  # Fallback
-        
+
         # Convert to grayscale numpy arrays
         arr1 = np.array(img1.convert('L'), dtype=np.float64)
         arr2 = np.array(img2.convert('L'), dtype=np.float64)
-        
+
         # Ensure same size
         if arr1.shape != arr2.shape:
             return 0.0
-        
-        # Constants for stability
+
+        # For very small images, fall back to global computation
+        if arr1.shape[0] < window_size or arr1.shape[1] < window_size:
+            return SSIMCalculator._compute_ssim_global(arr1, arr2)
+
+        # Constants for stability (from original SSIM paper)
         C1 = (0.01 * 255) ** 2
         C2 = (0.03 * 255) ** 2
-        
-        # Compute means
+
+        # Downscale for performance on very large images (> 2 megapixels)
+        total_pixels = arr1.shape[0] * arr1.shape[1]
+        if total_pixels > 2_000_000:
+            scale = math.sqrt(2_000_000 / total_pixels)
+            new_h = max(window_size, int(arr1.shape[0] * scale))
+            new_w = max(window_size, int(arr1.shape[1] * scale))
+            img1_resized = img1.convert('L').resize((new_w, new_h), Image.Resampling.LANCZOS)
+            img2_resized = img2.convert('L').resize((new_w, new_h), Image.Resampling.LANCZOS)
+            arr1 = np.array(img1_resized, dtype=np.float64)
+            arr2 = np.array(img2_resized, dtype=np.float64)
+
+        # Use scipy if available for faster uniform filter, else use our implementation
+        try:
+            from scipy.ndimage import uniform_filter
+            mu1 = uniform_filter(arr1, size=window_size)
+            mu2 = uniform_filter(arr2, size=window_size)
+            mu1_sq = mu1 ** 2
+            mu2_sq = mu2 ** 2
+            mu1_mu2 = mu1 * mu2
+            sigma1_sq = uniform_filter(arr1 ** 2, size=window_size) - mu1_sq
+            sigma2_sq = uniform_filter(arr2 ** 2, size=window_size) - mu2_sq
+            sigma12 = uniform_filter(arr1 * arr2, size=window_size) - mu1_mu2
+        except ImportError:
+            # Fallback: use global statistics (still better than nothing)
+            return SSIMCalculator._compute_ssim_global(arr1, arr2)
+
+        # Clamp negative variances (numerical stability)
+        sigma1_sq = np.maximum(sigma1_sq, 0)
+        sigma2_sq = np.maximum(sigma2_sq, 0)
+
+        # SSIM formula applied per-window
+        numerator = (2 * mu1_mu2 + C1) * (2 * sigma12 + C2)
+        denominator = (mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2)
+
+        ssim_map = numerator / denominator
+
+        # Return mean SSIM across all windows
+        return float(np.mean(ssim_map))
+
+    @staticmethod
+    def _compute_ssim_global(arr1: 'np.ndarray', arr2: 'np.ndarray') -> float:
+        """Fallback global SSIM for small images or when scipy is unavailable."""
+        C1 = (0.01 * 255) ** 2
+        C2 = (0.03 * 255) ** 2
+
         mu1 = arr1.mean()
         mu2 = arr2.mean()
-        
-        # Compute variances and covariance
-        sigma1_sq = ((arr1 - mu1) ** 2).mean()
-        sigma2_sq = ((arr2 - mu2) ** 2).mean()
+        sigma1_sq = max(0, ((arr1 - mu1) ** 2).mean())
+        sigma2_sq = max(0, ((arr2 - mu2) ** 2).mean())
         sigma12 = ((arr1 - mu1) * (arr2 - mu2)).mean()
-        
-        # SSIM formula
+
         numerator = (2 * mu1 * mu2 + C1) * (2 * sigma12 + C2)
         denominator = (mu1 ** 2 + mu2 ** 2 + C1) * (sigma1_sq + sigma2_sq + C2)
-        
-        ssim = numerator / denominator
-        
-        return float(ssim)
+
+        return float(numerator / denominator)
 
 
 class VisualTestingEngine:
@@ -353,23 +440,8 @@ class VisualTestingEngine:
             elif options.mode == ComparisonMode.LAYOUT:
                 result = self._compare_layout(baseline_img, actual_img, options)
             elif options.mode == ComparisonMode.AI_SEMANTIC:
-                # AI comparison is async, use asyncio.run in sync context
-                import asyncio
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # We're already in an async context
-                        import concurrent.futures
-                        with concurrent.futures.ThreadPoolExecutor() as executor:
-                            future = executor.submit(
-                                asyncio.run,
-                                self._compare_ai_semantic(baseline_img, actual_img, options)
-                            )
-                            result = future.result()
-                    else:
-                        result = asyncio.run(self._compare_ai_semantic(baseline_img, actual_img, options))
-                except RuntimeError:
-                    result = asyncio.run(self._compare_ai_semantic(baseline_img, actual_img, options))
+                # AI comparison uses the sync Anthropic client, so no async needed
+                result = self._compare_ai_semantic_sync(baseline_img, actual_img, options)
             else:
                 result = self._compare_anti_aliased(baseline_img, actual_img, options)
             
@@ -411,21 +483,43 @@ class VisualTestingEngine:
                 threshold=options.threshold,
                 baseline_path=str(baseline) if isinstance(baseline, (str, Path)) else "error",
                 actual_path=str(actual) if isinstance(actual, (str, Path)) else "error",
-                error=str(e)
+                error="Visual comparison failed due to an internal error"
             )
     
     def _load_image(self, source: Union[str, Path, bytes, 'Image.Image']) -> Optional['Image.Image']:
-        """Load image from various sources"""
-        if isinstance(source, Image.Image):
-            return source.convert('RGBA')
-        elif isinstance(source, bytes):
-            return Image.open(io.BytesIO(source)).convert('RGBA')
-        elif isinstance(source, (str, Path)):
-            path = Path(source)
-            if not path.exists():
+        """Load image from various sources with safety validation."""
+        try:
+            if isinstance(source, Image.Image):
+                img = source.convert('RGBA')
+            elif isinstance(source, bytes):
+                img = Image.open(io.BytesIO(source)).convert('RGBA')
+            elif isinstance(source, (str, Path)):
+                path = Path(source)
+                if not path.exists():
+                    return None
+                img = Image.open(path).convert('RGBA')
+            else:
                 return None
-            return Image.open(path).convert('RGBA')
-        return None
+
+            # Validate dimensions to prevent memory bombs
+            w, h = img.size
+            if w > MAX_IMAGE_DIMENSION or h > MAX_IMAGE_DIMENSION:
+                logger.warning(f"Image dimensions {w}x{h} exceed max {MAX_IMAGE_DIMENSION}. Downscaling.")
+                scale = min(MAX_IMAGE_DIMENSION / w, MAX_IMAGE_DIMENSION / h)
+                new_w, new_h = int(w * scale), int(h * scale)
+                img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+            if img.size[0] * img.size[1] > MAX_IMAGE_PIXELS:
+                logger.warning(f"Image pixel count exceeds max. Downscaling.")
+                scale = math.sqrt(MAX_IMAGE_PIXELS / (img.size[0] * img.size[1]))
+                new_w, new_h = int(img.size[0] * scale), int(img.size[1] * scale)
+                img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+            return img
+
+        except Exception as e:
+            logger.error(f"Failed to load image: {e}")
+            return None
     
     def _apply_ignore_regions(
         self,
@@ -663,8 +757,8 @@ class VisualTestingEngine:
         layout_baseline = extract_layout(baseline)
         layout_actual = extract_layout(actual)
         
-        # Compare the layout images
-        return self._compare_anti_aliased(
+        # Compare the layout images using anti-aliased algorithm
+        result = self._compare_anti_aliased(
             layout_baseline.convert('RGBA'),
             layout_actual.convert('RGBA'),
             ComparisonOptions(
@@ -673,20 +767,26 @@ class VisualTestingEngine:
                 anti_aliasing_tolerance=5  # More tolerant for layout
             )
         )
+        # Override mode since _compare_anti_aliased hardcodes ANTI_ALIASED
+        result.mode = ComparisonMode.LAYOUT
+        return result
     
-    async def _compare_ai_semantic(
+    def _compare_ai_semantic_sync(
         self,
         baseline: 'Image.Image',
         actual: 'Image.Image',
         options: ComparisonOptions
     ) -> ComparisonResult:
         """
-        AI-powered semantic visual comparison using Claude Vision.
-        
+        AI-powered semantic visual comparison using Claude Vision (sync).
+
         This comparison understands the meaning of visual changes:
         - Identifies what changed (text, layout, colors, elements)
         - Distinguishes between breaking changes and acceptable variations
         - Provides detailed explanations of differences
+
+        Uses the sync Anthropic client (client.messages.create is blocking),
+        so no async wrapping is required.
         """
         try:
             import anthropic
@@ -832,8 +932,17 @@ Be strict about layout and structural changes but tolerant of:
             # Fallback to simple diff
             diff = ImageChops.difference(baseline, actual)
             return diff
-        
+
         width, height = baseline.size
+
+        # Skip diff generation for very large images to prevent OOM
+        total_pixels = width * height
+        if total_pixels > MAX_DIFF_GENERATION_PIXELS:
+            logger.warning(
+                f"Image too large for diff generation ({total_pixels} pixels). "
+                f"Max is {MAX_DIFF_GENERATION_PIXELS}. Skipping diff image."
+            )
+            return None
         
         # Create a composite image: [Baseline | Diff | Actual]
         composite_width = width * 3 + 20  # 10px padding between images
@@ -950,21 +1059,29 @@ Be strict about layout and structural changes but tolerant of:
             return json.load(f)
     
     def list_baselines(self) -> List[Dict[str, Any]]:
-        """List all baselines with their metadata"""
+        """List all baselines with their metadata (capped at MAX_BASELINES_LIST)"""
         baselines = []
-        
-        for png_path in self.baselines_dir.glob("*.png"):
+
+        for i, png_path in enumerate(self.baselines_dir.glob("*.png")):
+            if i >= MAX_BASELINES_LIST:
+                logger.warning(f"Baseline listing capped at {MAX_BASELINES_LIST} entries")
+                break
             test_name = png_path.stem
             meta = self.get_baseline_metadata(test_name) or {}
-            
-            baselines.append({
-                "test_name": test_name,
-                "path": str(png_path),
-                "file_size": png_path.stat().st_size,
-                "modified_at": datetime.fromtimestamp(png_path.stat().st_mtime).isoformat(),
-                **meta
-            })
-        
+
+            try:
+                stat = png_path.stat()
+                baselines.append({
+                    "test_name": test_name,
+                    "path": str(png_path),
+                    "file_size": stat.st_size,
+                    "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    **meta
+                })
+            except OSError:
+                # File may have been deleted between glob and stat
+                continue
+
         return sorted(baselines, key=lambda x: x.get("modified_at", ""), reverse=True)
     
     def delete_baseline(self, test_name: str) -> bool:

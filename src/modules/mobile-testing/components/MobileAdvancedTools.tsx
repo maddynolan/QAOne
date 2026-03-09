@@ -97,12 +97,16 @@ export default function MobileAdvancedTools() {
   ];
 
   const handleOpenDeepLink = async (link: DeepLinkConfig) => {
-    const deviceId = selectedDevice?.id || selectedDevice;
-    const result = await mobile.openDeepLink(selectedPlatform, deviceId, link.url);
-    if (result.success) {
-      toast.success(`Deep link opened: ${link.url}`);
-    } else {
-      toast.error(result.error || `Failed to open deep link: ${link.url}`);
+    try {
+      const deviceId = selectedDevice?.id || selectedDevice;
+      const result = await mobile.openDeepLink(selectedPlatform, deviceId, link.url);
+      if (result.success) {
+        toast.success(`Deep link opened: ${link.url}`);
+      } else {
+        toast.error(result.error || `Failed to open deep link: ${link.url}`);
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to open deep link');
     }
   };
 
@@ -141,12 +145,16 @@ export default function MobileAdvancedTools() {
 
   const handleBiometricTest = async (result: 'success' | 'failure') => {
     setBiometricResult(result);
-    const deviceId = selectedDevice?.id || selectedDevice;
-    const res = await mobile.simulateBiometric(selectedPlatform, deviceId, result);
-    if (res.success) {
-      toast.success(`Biometric ${result === 'success' ? 'authentication' : 'failure'} simulated on device`);
-    } else {
-      toast.error(res.error || 'Failed to simulate biometric');
+    try {
+      const deviceId = selectedDevice?.id || selectedDevice;
+      const res = await mobile.simulateBiometric(selectedPlatform, deviceId, result);
+      if (res.success) {
+        toast.success(`Biometric ${result === 'success' ? 'authentication' : 'failure'} simulated on device`);
+      } else {
+        toast.error(res.error || 'Failed to simulate biometric');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to simulate biometric');
     }
   };
 
@@ -166,10 +174,24 @@ export default function MobileAdvancedTools() {
       toast.error('All fields required');
       return;
     }
+    const lat = parseFloat(newLocLat);
+    const lng = parseFloat(newLocLng);
+    if (isNaN(lat) || isNaN(lng)) {
+      toast.error('Latitude and longitude must be valid numbers');
+      return;
+    }
+    if (lat < -90 || lat > 90) {
+      toast.error('Latitude must be between -90 and 90');
+      return;
+    }
+    if (lng < -180 || lng > 180) {
+      toast.error('Longitude must be between -180 and 180');
+      return;
+    }
     addSavedLocation({
       name: newLocName,
-      latitude: parseFloat(newLocLat),
-      longitude: parseFloat(newLocLng),
+      latitude: lat,
+      longitude: lng,
       altitude: 0,
     });
     setNewLocName('');

@@ -380,11 +380,16 @@ export default function VisualTestingPage() {
       setViewportResults([...results]);
       try {
         const testName = `matrix_${captureUrl.replace(/https?:\/\//, '').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30)}_${results[i].viewport.toLowerCase()}`;
-        await axios.post(`${API_BASE}/capture`, new URLSearchParams({ url: captureUrl, test_name: testName, full_page: 'true', viewport_width: String(results[i].width), viewport_height: String(results[i].height), save_as_baseline: 'false' }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-        try {
-          const cmp = await axios.post(`${API_BASE}/compare-by-name`, { test_name: testName, mode: compareMode, threshold });
-          results[i] = { ...results[i], status: 'done', result: cmp.data };
-        } catch { results[i] = { ...results[i], status: 'done' }; }
+        const captureRes = await axios.post(`${API_BASE}/capture`, new URLSearchParams({ url: captureUrl, test_name: testName, full_page: 'true', viewport_width: String(results[i].width), viewport_height: String(results[i].height), save_as_baseline: 'false' }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+        const actualBase64 = captureRes.data?.image_base64;
+        if (actualBase64) {
+          try {
+            const cmp = await axios.post(`${API_BASE}/compare-by-name`, { test_name: testName, actual: actualBase64, mode: compareMode, threshold });
+            results[i] = { ...results[i], status: 'done', result: cmp.data };
+          } catch { results[i] = { ...results[i], status: 'done' }; }
+        } else {
+          results[i] = { ...results[i], status: 'error' };
+        }
       } catch { results[i] = { ...results[i], status: 'error' }; }
       setViewportResults([...results]);
     }
@@ -714,10 +719,24 @@ export default function VisualTestingPage() {
                       <><AlertCircle className="w-6 h-6 text-red-500" /><span className="text-red-600 dark:text-red-400">Failed</span></>}
                   </CardTitle>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="text-green-600 border-green-300" onClick={() => toast.success('Accepted as new baseline')}>
+                    <Button variant="outline" size="sm" className="text-green-600 border-green-300" onClick={async () => {
+                      if (!actualImage) { toast.error('No actual image to promote'); return; }
+                      try {
+                        // Try to update existing baseline, or save as new
+                        try {
+                          await axios.put(`${API_BASE}/baselines/manual_comparison`, { test_name: 'manual_comparison', image: actualImage, reason: 'Accepted via comparison review' });
+                        } catch {
+                          await axios.post(`${API_BASE}/baselines`, { test_name: 'manual_comparison', image: actualImage, metadata: { promoted_from: 'comparison_review' } });
+                        }
+                        toast.success('Actual image promoted to baseline');
+                        loadBaselines();
+                      } catch (err: any) { toast.error(err.response?.data?.detail || 'Failed to update baseline'); }
+                    }}>
                       <Check className="w-3 h-3 mr-1" />Accept
                     </Button>
-                    <Button variant="outline" size="sm" className="text-red-600 border-red-300" onClick={() => toast.info('Changes rejected')}>
+                    <Button variant="outline" size="sm" className="text-red-600 border-red-300" onClick={() => {
+                      toast.info('Changes rejected - visual diff preserved for review');
+                    }}>
                       <X className="w-3 h-3 mr-1" />Reject
                     </Button>
                   </div>
@@ -773,18 +792,33 @@ export default function VisualTestingPage() {
 
                     {diffViewMode === 'slider' && (
                       <div className="space-y-2">
-                        <div className="relative overflow-hidden rounded-lg bg-muted" style={{ maxHeight: 500 }}>
-                          <img src={`data:image/png;base64,${actualImage}`} alt="Actual" className="w-full block" />
-                          <div className="absolute inset-0 overflow-hidden" style={{ width: `${sliderPosition}%` }}>
+                        <div
+                          className="relative overflow-hidden rounded-lg bg-muted select-none"
+                          style={{ maxHeight: 500 }}
+                          onMouseDown={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const updatePos = (clientX: number) => {
+                              const pct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+                              setSliderPosition(pct);
+                            };
+                            updatePos(e.clientX);
+                            const onMove = (ev: MouseEvent) => updatePos(ev.clientX);
+                            const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+                            document.addEventListener('mousemove', onMove);
+                            document.addEventListener('mouseup', onUp);
+                          }}
+                        >
+                          <img src={`data:image/png;base64,${actualImage}`} alt="Actual" className="w-full block pointer-events-none" />
+                          <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ width: `${sliderPosition}%` }}>
                             <img src={`data:image/png;base64,${baselineImage}`} alt="Baseline" className="w-full block" style={{ minWidth: canvasRef.current?.offsetWidth || '100%' }} />
                           </div>
-                          <div className="absolute top-0 bottom-0 w-1 bg-primary cursor-col-resize" style={{ left: `${sliderPosition}%` }}>
+                          <div className="absolute top-0 bottom-0 w-1 bg-primary pointer-events-none" style={{ left: `${sliderPosition}%` }}>
                             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-primary rounded-full flex items-center justify-center shadow-lg">
                               <SlidersHorizontal className="w-4 h-4 text-primary-foreground" />
                             </div>
                           </div>
-                          <div className="absolute top-2 left-2 bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded">Baseline</div>
-                          <div className="absolute top-2 right-2 bg-blue-500 text-white text-[10px] px-2 py-0.5 rounded">Actual</div>
+                          <div className="absolute top-2 left-2 bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded pointer-events-none">Baseline</div>
+                          <div className="absolute top-2 right-2 bg-blue-500 text-white text-[10px] px-2 py-0.5 rounded pointer-events-none">Actual</div>
                         </div>
                         <Slider value={[sliderPosition]} onValueChange={([v]) => setSliderPosition(v)} max={100} step={1} />
                       </div>
@@ -845,11 +879,18 @@ export default function VisualTestingPage() {
                   for (const url of urls) {
                     const testName = url.replace(/https?:\/\//, '').replace(/[^a-zA-Z0-9]/g, '-').slice(0, 60);
                     try {
-                      await axios.post(`${API_BASE}/capture`, { url, test_name: testName, viewport_width: 1920, viewport_height: 1080 });
-                      try {
-                        const cmp = await axios.post(`${API_BASE}/compare-by-name`, { test_name: testName, mode: compareMode, threshold });
-                        results.push({ url, status: cmp.data.passed ? 'passed' : 'failed', diffPct: cmp.data.diff_percentage, testName });
-                      } catch { results.push({ url, status: 'new-baseline', testName }); }
+                      // Capture screenshot and get base64
+                      const captureRes = await axios.post(`${API_BASE}/capture`, new URLSearchParams({ url, test_name: testName, full_page: 'true', viewport_width: '1920', viewport_height: '1080', save_as_baseline: 'false' }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+                      const actualBase64 = captureRes.data?.image_base64;
+                      if (actualBase64) {
+                        try {
+                          const cmp = await axios.post(`${API_BASE}/compare-by-name`, { test_name: testName, actual: actualBase64, mode: compareMode, threshold });
+                          const result = cmp.data?.result || {};
+                          results.push({ url, status: result.passed ? 'passed' : (result.is_new_baseline ? 'new-baseline' : 'failed'), diffPct: result.diff_percentage, testName });
+                        } catch { results.push({ url, status: 'error', testName }); }
+                      } else {
+                        results.push({ url, status: 'error', testName });
+                      }
                     } catch { results.push({ url, status: 'error', testName }); }
                     setBatchTestResults([...results]);
                   }

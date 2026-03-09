@@ -420,7 +420,7 @@ export default function MobileTestFlows() {
                   onClick={() => handleSelectFlow(flow)}
                   onRun={() => handleRunFlow(flow)}
                   onDuplicate={() => duplicateFlow(flow.id)}
-                  onDelete={() => deleteFlow(flow.id)}
+                  onDelete={() => { if (window.confirm(`Delete flow "${flow.name}"? This cannot be undone.`)) deleteFlow(flow.id); }}
                   onExport={() => handleExport(flow)}
                   indent
                 />
@@ -438,7 +438,7 @@ export default function MobileTestFlows() {
               onClick={() => handleSelectFlow(flow)}
               onRun={() => handleRunFlow(flow)}
               onDuplicate={() => duplicateFlow(flow.id)}
-              onDelete={() => deleteFlow(flow.id)}
+              onDelete={() => { if (window.confirm(`Delete flow "${flow.name}"? This cannot be undone.`)) deleteFlow(flow.id); }}
               onExport={() => handleExport(flow)}
             />
           ))}
@@ -630,8 +630,6 @@ interface FlowItemProps {
 }
 
 function FlowItem({ flow, isActive, isDark, onClick, onRun, onDuplicate, onDelete, onExport, indent }: FlowItemProps) {
-  const [showMenu, setShowMenu] = useState(false);
-
   return (
     <div
       className={cn(

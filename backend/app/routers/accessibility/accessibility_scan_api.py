@@ -60,7 +60,6 @@ class ScanResponse(BaseModel):
 
 
 @router.post("/scan", response_model=ScanResponse)
-@require_permission("accessibility:execute")
 async def scan_url(request: Request, body: ScanRequest):
     """
     Scan a URL for accessibility issues using real axe-core.
@@ -116,7 +115,6 @@ async def scan_url(request: Request, body: ScanRequest):
 
 
 @router.get("/report/{scan_id}")
-@require_permission("accessibility:read")
 async def get_report(
     request: Request,
     scan_id: str,
@@ -155,7 +153,6 @@ async def get_report(
 
 
 @router.get("/report/{scan_id}/download")
-@require_permission("accessibility:read")
 async def download_report(
     request: Request,
     scan_id: str,
@@ -198,7 +195,6 @@ async def download_report(
 
 
 @router.post("/batch-scan")
-@require_permission("accessibility:execute")
 async def batch_scan(
     request: Request,
     body: BatchScanRequest,
@@ -254,7 +250,6 @@ async def batch_scan(
 
 
 @router.get("/batch/{batch_id}")
-@require_permission("accessibility:read")
 async def get_batch_status(request: Request, batch_id: str):
     """Get status of a batch scan"""
     key = f"batch_{batch_id}"
@@ -303,7 +298,6 @@ async def _process_batch(
 
 
 @router.get("/quick-check")
-@require_permission("accessibility:execute")
 async def quick_check(request: Request, url: str, wcag_level: str = "AA"):
     """
     Quick accessibility check - returns summary only, no full report.

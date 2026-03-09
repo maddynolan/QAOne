@@ -69,6 +69,7 @@ export default function MobileTestRuns() {
   const clearTestRuns = useMobileTestingStore(s => s.clearTestRuns);
   const deleteTestRun = useMobileTestingStore(s => s.deleteTestRun);
   const addTestRun = useMobileTestingStore(s => s.addTestRun);
+  const selectedDevice = useMobileTestingStore(s => s.selectedDevice);
   const stats = useMemo(() => computeTestRunStats(testRuns), [testRuns]);
 
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -232,7 +233,7 @@ export default function MobileTestRuns() {
                     key={run.id}
                     onClick={() => setSelectedRunId(run.id)}
                     className={cn(
-                      "flex items-center gap-3 p-3 border-b border-inherit cursor-pointer transition-colors",
+                      "group flex items-center gap-3 p-3 border-b border-inherit cursor-pointer transition-colors",
                       selectedRunId === run.id
                         ? isDark ? 'bg-primary/10' : 'bg-primary/5'
                         : isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
@@ -269,23 +270,28 @@ export default function MobileTestRuns() {
                           if (!flow) { toast.error('Flow not found — cannot re-run'); return; }
                           toast.info(`Re-running: ${flow.name}`);
                           try {
-                            const result = await mobile.runNativeTest({
-                              yaml: flow.yaml,
-                              platform: flow.platform,
-                              appBundleId: flow.app_bundle_id,
-                              flowName: flow.name,
-                            });
+                            const steps = flow.yaml.split('\n')
+                              .filter((line: string) => line.trim().startsWith('-'))
+                              .map((line: string) => ({ action: line.trim().substring(2) }));
+                            const deviceId = selectedDevice?.id || selectedDevice || run.device;
+                            const result = await mobile.runNativeTest(steps, flow.app_bundle_id, flow.platform, deviceId);
+                            const startTime = new Date().toISOString();
                             addTestRun({
                               flow_id: flow.id,
                               flow_name: flow.name,
                               platform: flow.platform,
                               device: run.device,
+                              app_bundle_id: flow.app_bundle_id,
                               status: result?.success ? 'passed' : 'failed',
                               duration_ms: result?.duration_ms || 0,
                               steps_total: result?.steps_total || 0,
                               steps_passed: result?.steps_passed || 0,
                               steps_failed: result?.steps_failed || 0,
-                              output: result?.output || '',
+                              output: result?.output || [],
+                              screenshots: [],
+                              error_message: result?.success ? null : (result?.error || 'Test failed'),
+                              started_at: startTime,
+                              completed_at: new Date().toISOString(),
                             });
                           } catch (err: any) {
                             toast.error(err.message || 'Re-run failed');

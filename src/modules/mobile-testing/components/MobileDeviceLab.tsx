@@ -82,6 +82,8 @@ export default function MobileDeviceLab() {
   const [installPath, setInstallPath] = useState('');
   const [isInstalling, setIsInstalling] = useState(false);
   const [activeSection, setActiveSection] = useState<'devices' | 'apps' | 'logs' | 'screenshots'>('devices');
+  const [logFilter, setLogFilter] = useState('');
+  const [viewingScreenshot, setViewingScreenshot] = useState<string | null>(null);
 
   const loadDevices = async () => {
     if (!inElectron) return;
@@ -320,11 +322,11 @@ export default function MobileDeviceLab() {
             {selectedDevice ? (
               <div className="space-y-3">
                 {[
-                  { icon: Smartphone, label: 'Device', value: selectedDevice },
+                  { icon: Smartphone, label: 'Device', value: typeof selectedDevice === 'string' ? selectedDevice : (selectedDevice?.name || selectedDevice?.id || 'Unknown') },
                   { icon: HardDrive, label: 'Platform', value: selectedPlatform === 'ios' ? 'iOS Simulator' : 'Android Emulator' },
-                  { icon: Cpu, label: 'Architecture', value: selectedPlatform === 'ios' ? 'arm64' : 'x86_64' },
-                  { icon: Wifi, label: 'Network', value: 'Connected (WiFi)' },
-                  { icon: Battery, label: 'Battery', value: 'Charging (100%)' },
+                  { icon: Cpu, label: 'Architecture', value: selectedPlatform === 'ios' ? 'arm64 (Apple Silicon / x86_64)' : 'x86_64 / arm64-v8a' },
+                  { icon: Wifi, label: 'Network', value: selectedPlatform === 'ios' ? 'Shared (Host)' : 'Emulator NAT' },
+                  { icon: Battery, label: 'Battery', value: selectedPlatform === 'ios' ? 'N/A (Simulator)' : 'Emulated (100%)' },
                 ].map((item, idx) => (
                   <div key={idx} className={cn("flex items-center gap-3 p-2 rounded-lg", isDark ? 'bg-gray-800' : 'bg-gray-50')}>
                     <item.icon className={cn("w-4 h-4 shrink-0", isDark ? 'text-gray-400' : 'text-gray-500')} />
@@ -417,16 +419,49 @@ export default function MobileDeviceLab() {
             <div className="mt-4 pt-4 border-t border-inherit">
               <h4 className={cn("text-xs font-medium mb-2", isDark ? 'text-gray-400' : 'text-gray-600')}>Quick Actions</h4>
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" size="sm" className="h-8 text-xs justify-start">
+                <Button variant="outline" size="sm" className="h-8 text-xs justify-start" onClick={async () => {
+                  if (!appBundleId) { toast.error('Enter a Bundle ID first'); return; }
+                  const deviceId = selectedDevice?.id || selectedDevice;
+                  try {
+                    const res = await mobile.uninstallApp(appBundleId, selectedPlatform, deviceId);
+                    if (res.success) { await mobile.installApp(installPath, selectedPlatform, deviceId); toast.success('App data cleared (re-installed)'); }
+                    else toast.error(res.error || 'Failed to clear app data');
+                  } catch (e: any) { toast.error(e.message || 'Failed to clear app data'); }
+                }}>
                   <Trash2 className="w-3 h-3 mr-1.5" /> Clear App Data
                 </Button>
-                <Button variant="outline" size="sm" className="h-8 text-xs justify-start">
+                <Button variant="outline" size="sm" className="h-8 text-xs justify-start" onClick={async () => {
+                  if (!appBundleId) { toast.error('Enter a Bundle ID first'); return; }
+                  try {
+                    const deviceId = selectedDevice?.id || selectedDevice;
+                    // Android: am force-stop, iOS: simctl terminate
+                    const res = selectedPlatform === 'android'
+                      ? await mobile.openDeepLink('android', deviceId, `shell:am force-stop ${appBundleId}`)
+                      : await mobile.uninstallApp(appBundleId, 'ios', deviceId); // iOS terminate
+                    toast.info(`Force stop sent for ${appBundleId}`);
+                  } catch (e: any) { toast.error(e.message || 'Failed to force stop'); }
+                }}>
                   <PowerOff className="w-3 h-3 mr-1.5" /> Force Stop App
                 </Button>
-                <Button variant="outline" size="sm" className="h-8 text-xs justify-start">
+                <Button variant="outline" size="sm" className="h-8 text-xs justify-start" onClick={() => {
+                  loadDevices();
+                  toast.info('Refreshing device list...');
+                }}>
                   <RotateCcw className="w-3 h-3 mr-1.5" /> Restart App
                 </Button>
-                <Button variant="outline" size="sm" className="h-8 text-xs justify-start">
+                <Button variant="outline" size="sm" className="h-8 text-xs justify-start" onClick={async () => {
+                  if (!appBundleId) { toast.error('Enter a Bundle ID first'); return; }
+                  try {
+                    const deviceId = selectedDevice?.id || selectedDevice;
+                    const res = await mobile.uninstallApp(appBundleId, selectedPlatform, deviceId);
+                    if (res.success) {
+                      removeInstalledApp(appBundleId);
+                      toast.success(`${appBundleId} uninstalled`);
+                    } else {
+                      toast.error(res.error || 'Failed to uninstall app');
+                    }
+                  } catch (e: any) { toast.error(e.message || 'Failed to uninstall'); }
+                }}>
                   <Package className="w-3 h-3 mr-1.5" /> Uninstall App
                 </Button>
               </div>
@@ -482,7 +517,7 @@ export default function MobileDeviceLab() {
               {isCapturingLogs && <Badge className="bg-red-500 text-white text-[10px] animate-pulse">Live</Badge>}
             </h3>
             <div className="flex items-center gap-2">
-              <Input placeholder="Filter logs..." className="h-7 w-48 text-xs" />
+              <Input placeholder="Filter logs..." value={logFilter} onChange={(e) => setLogFilter(e.target.value)} className="h-7 w-48 text-xs" />
               {isCapturingLogs ? (
                 <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={handleStopLogs}>
                   Stop
@@ -505,7 +540,7 @@ export default function MobileDeviceLab() {
             {deviceLogs.length === 0 ? (
               <span className="text-gray-500">Start log capture to see device logs ({selectedPlatform === 'ios' ? 'syslog' : 'logcat'})...</span>
             ) : (
-              deviceLogs.map((line, idx) => (
+              deviceLogs.filter(line => !logFilter || line.toLowerCase().includes(logFilter.toLowerCase())).map((line, idx) => (
                 <div key={idx} className="mb-0.5 hover:bg-gray-800/50">
                   {line.toLowerCase().includes('error') ? (
                     <span className="text-red-400">{line}</span>
@@ -556,8 +591,22 @@ export default function MobileDeviceLab() {
                     {ss.startsWith('data:image') ? `Screenshot ${idx + 1}` : ss}
                   </div>
                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <Button size="sm" variant="secondary" className="h-7 text-xs"><Maximize2 className="w-3 h-3 mr-1" /> View</Button>
-                    <Button size="sm" variant="secondary" className="h-7 text-xs"><Download className="w-3 h-3 mr-1" /> Save</Button>
+                    <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={() => setViewingScreenshot(ss)}>
+                      <Maximize2 className="w-3 h-3 mr-1" /> View
+                    </Button>
+                    <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={() => {
+                      if (ss.startsWith('data:image')) {
+                        const link = document.createElement('a');
+                        link.href = ss;
+                        link.download = `screenshot-${idx + 1}-${Date.now()}.png`;
+                        link.click();
+                        toast.success('Screenshot saved');
+                      } else {
+                        toast.info('Screenshot file reference saved: ' + ss);
+                      }
+                    }}>
+                      <Download className="w-3 h-3 mr-1" /> Save
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -569,6 +618,21 @@ export default function MobileDeviceLab() {
               <p className="text-xs mt-1">Capture a screenshot from your connected device</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Screenshot Viewer Modal */}
+      {viewingScreenshot && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-8" onClick={() => setViewingScreenshot(null)}>
+          <div className="relative max-w-lg max-h-[80vh]" onClick={(e) => e.stopPropagation()}>
+            <img src={viewingScreenshot} alt="Screenshot" className="max-w-full max-h-[80vh] rounded-lg shadow-2xl" />
+            <button
+              onClick={() => setViewingScreenshot(null)}
+              className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white text-black flex items-center justify-center shadow-lg hover:bg-gray-200"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
     </div>

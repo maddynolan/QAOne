@@ -36,12 +36,52 @@ def _build_wcag_tags(wcag_level: str = "AA", wcag_version: str = "2.1") -> list:
     return tags
 
 
+def _fetch_axe_core_script():
+    """Fetch axe-core JS source and cache it for inline injection.
+    This avoids CSP issues that block CDN script tags on many websites."""
+    import urllib.request
+    import os
+
+    cache_path = os.path.join(os.path.dirname(__file__), ".axe_core_cache.js")
+
+    # Use cached version if it exists and is non-empty
+    if os.path.exists(cache_path) and os.path.getsize(cache_path) > 1000:
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception:
+            pass
+
+    # Download from CDN
+    cdn_urls = [
+        "https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.4/axe.min.js",
+        "https://unpkg.com/axe-core@4.8.4/axe.min.js",
+    ]
+    for cdn_url in cdn_urls:
+        try:
+            req = urllib.request.Request(cdn_url, headers={"User-Agent": "Flowstral-Scanner/1.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                script_content = resp.read().decode("utf-8")
+                if len(script_content) > 1000:
+                    # Cache for future use
+                    try:
+                        with open(cache_path, "w", encoding="utf-8") as f:
+                            f.write(script_content)
+                    except Exception:
+                        pass
+                    return script_content
+        except Exception:
+            continue
+
+    return None
+
+
 def run_axe_scan(url: str, component_selector: str = None, wcag_level: str = "AA", wcag_version: str = "2.1"):
     """Run axe-core scan using Playwright sync API"""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        return {"violations": [], "html": "", "error": "Playwright not installed"}
+        return {"violations": [], "html": "", "error": "Playwright not installed. Install with: pip install playwright && python -m playwright install chromium"}
 
     violations = []
     html_content = ""
@@ -49,20 +89,56 @@ def run_axe_scan(url: str, component_selector: str = None, wcag_level: str = "AA
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
-            context = browser.new_context()
+            context = browser.new_context(
+                viewport={"width": 1920, "height": 1080},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
             page = context.new_page()
 
-            # Navigate to URL with timeout
-            page.goto(url, timeout=30000, wait_until="networkidle")
+            # Navigate to URL — use domcontentloaded instead of networkidle to avoid
+            # hanging on pages with long-polling, SSE, or slow third-party scripts.
+            # Then wait a short additional time for JS rendering.
+            try:
+                page.goto(url, timeout=30000, wait_until="domcontentloaded")
+                # Give JS frameworks a moment to render
+                page.wait_for_timeout(2000)
+            except Exception as nav_err:
+                # If domcontentloaded also fails, try with commit (bare minimum)
+                try:
+                    page.goto(url, timeout=30000, wait_until="commit")
+                    page.wait_for_timeout(3000)
+                except Exception:
+                    return {"violations": [], "html": "", "error": f"Failed to navigate to URL: {str(nav_err)[:200]}"}
 
             # Get HTML content
             html_content = page.content()
 
-            # Inject and run axe-core
-            page.add_script_tag(url="https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.4/axe.min.js")
+            # Inject axe-core — try inline injection first (bypasses CSP), then CDN fallback
+            axe_injected = False
 
-            # Wait for axe to load
-            page.wait_for_function("typeof axe !== 'undefined'", timeout=10000)
+            # Method 1: Inline injection (CSP-safe — uses page.evaluate to inject script content directly)
+            axe_source = _fetch_axe_core_script()
+            if axe_source:
+                try:
+                    page.evaluate(axe_source)
+                    # Verify it loaded
+                    is_loaded = page.evaluate("typeof axe !== 'undefined'")
+                    if is_loaded:
+                        axe_injected = True
+                except Exception as inline_err:
+                    pass  # Fall through to CDN method
+
+            # Method 2: CDN script tag (works when CSP allows it)
+            if not axe_injected:
+                try:
+                    page.add_script_tag(url="https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.4/axe.min.js")
+                    page.wait_for_function("typeof axe !== 'undefined'", timeout=10000)
+                    axe_injected = True
+                except Exception as cdn_err:
+                    pass  # Fall through to error
+
+            if not axe_injected:
+                return {"violations": [], "html": html_content, "error": "Failed to inject axe-core (CSP may be blocking scripts). HTML content was captured for basic analysis."}
 
             # Build WCAG tag list based on level and version
             wcag_tags = _build_wcag_tags(wcag_level, wcag_version)
@@ -74,7 +150,7 @@ def run_axe_scan(url: str, component_selector: str = None, wcag_level: str = "AA
                     "values": wcag_tags
                 }
             }
-            
+
             # Run axe-core scan
             if component_selector:
                 axe_result = page.evaluate("""
@@ -90,14 +166,14 @@ def run_axe_scan(url: str, component_selector: str = None, wcag_level: str = "AA
                         return await axe.run(document, options);
                     }
                 """, axe_options)
-            
+
             violations = axe_result.get("violations", [])
-            
+
             browser.close()
-            
+
     except Exception as e:
         return {"violations": [], "html": html_content, "error": str(e)}
-    
+
     return {"violations": violations, "html": html_content}
 
 

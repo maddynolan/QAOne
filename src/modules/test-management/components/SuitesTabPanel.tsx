@@ -46,11 +46,11 @@ export function SuitesTabPanel({
         )}
         {suites.length === 0 ? (
           <div className="text-center py-16">
-            <Layers className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+            <Layers className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-lg font-semibold mb-2">
               {searchTerm.trim() ? 'No Matching Suites' : 'No Test Suites'}
             </h3>
-            <p className="text-gray-500 mb-4">
+            <p className="text-muted-foreground mb-4">
               {searchTerm.trim() ? `No suites found matching "${searchTerm}"` : 'Create suites to group related tests for execution'}
             </p>
           </div>
@@ -63,7 +63,7 @@ export function SuitesTabPanel({
                     <div className="flex-1">
                       <h3 className="font-semibold text-gray-900 dark:text-white">{suite.name}</h3>
                       {suite.description && (
-                        <p className="text-sm text-gray-500 mt-1">{suite.description}</p>
+                        <p className="text-sm text-muted-foreground mt-1">{suite.description}</p>
                       )}
                       <div className="flex items-center gap-4 mt-3">
                         <Badge className="bg-secondary text-foreground">
@@ -76,7 +76,7 @@ export function SuitesTabPanel({
                           </Badge>
                         )}
                         {suite.lastRun && (
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-muted-foreground">
                             Last run: {new Date(suite.lastRun.date).toLocaleDateString()}
                             <span className="ml-2 text-green-400">{suite.lastRun.passed}✓</span>
                             <span className="ml-1 text-red-400">{suite.lastRun.failed}✗</span>

@@ -84,6 +84,8 @@ interface ScenarioBuilderProps {
   steps: ScenarioStep[];
   onStepsChange: (steps: ScenarioStep[]) => void;
   targetUrl: string;
+  onImportHar?: () => void;
+  onImportRecording?: () => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -138,6 +140,8 @@ const ScenarioBuilder: React.FC<ScenarioBuilderProps> = ({
   steps,
   onStepsChange,
   targetUrl,
+  onImportHar,
+  onImportRecording,
 }) => {
   const [showPreview, setShowPreview] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
@@ -374,11 +378,11 @@ const ScenarioBuilder: React.FC<ScenarioBuilderProps> = ({
             <Separator orientation="vertical" className="h-6 mx-1" />
 
             {/* Import actions */}
-            <Button size="sm" variant="outline">
+            <Button size="sm" variant="outline" onClick={onImportHar}>
               <Upload className="h-4 w-4 mr-1" />
               Import from HAR
             </Button>
-            <Button size="sm" variant="outline">
+            <Button size="sm" variant="outline" onClick={onImportRecording}>
               <FileInput className="h-4 w-4 mr-1" />
               Import from Recording
             </Button>
@@ -458,11 +462,11 @@ const ScenarioBuilder: React.FC<ScenarioBuilderProps> = ({
                 <Plus className="h-4 w-4 mr-1" />
                 Add HTTP Request
               </Button>
-              <Button variant="outline">
+              <Button variant="outline" onClick={onImportHar}>
                 <Upload className="h-4 w-4 mr-1" />
                 Import from HAR
               </Button>
-              <Button variant="outline">
+              <Button variant="outline" onClick={onImportRecording}>
                 <FileInput className="h-4 w-4 mr-1" />
                 Import from Recording
               </Button>
