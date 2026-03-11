@@ -68,42 +68,45 @@ class IgnoreRegionModel(BaseModel):
     reason: str = Field("", max_length=500, description="Reason for ignoring (e.g., 'timestamp', 'ad')")
 
 
+VALID_COMPARISON_MODES = {"pixel_perfect", "anti_aliased", "perceptual", "structural", "layout", "ai_semantic", "dynamic"}
+
+
 class CompareRequest(BaseModel):
     """Request to compare two images"""
     baseline: str = Field(..., description="Baseline image (path or base64)")
     actual: str = Field(..., description="Actual image (path or base64)")
     mode: str = Field("anti_aliased", description="Comparison mode")
-    threshold: float = Field(0.1, description="Allowed difference (0.0-1.0)")
+    threshold: float = Field(0.1, ge=0.0, le=1.0, description="Allowed difference (0.0-1.0)")
     ignore_regions: List[IgnoreRegionModel] = Field(default_factory=list)
-    test_name: str = Field("visual_test", description="Test name for reporting")
+    test_name: str = Field("visual_test", max_length=200, description="Test name for reporting")
 
 
 class CompareByNameRequest(BaseModel):
     """Request to compare actual image against stored baseline"""
-    test_name: str = Field(..., description="Test name to match baseline")
+    test_name: str = Field(..., max_length=200, description="Test name to match baseline")
     actual: str = Field(..., description="Actual image (base64)")
     mode: str = Field("anti_aliased", description="Comparison mode")
-    threshold: float = Field(0.1, description="Allowed difference (0.0-1.0)")
+    threshold: float = Field(0.1, ge=0.0, le=1.0, description="Allowed difference (0.0-1.0)")
     ignore_regions: List[IgnoreRegionModel] = Field(default_factory=list)
 
 
 class SaveBaselineRequest(BaseModel):
     """Request to save a new baseline"""
-    test_name: str = Field(..., description="Unique test name")
+    test_name: str = Field(..., max_length=200, description="Unique test name")
     image: str = Field(..., description="Image as base64")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Optional metadata")
 
 
 class UpdateBaselineRequest(BaseModel):
     """Request to update an existing baseline"""
-    test_name: str = Field(..., description="Test name")
+    test_name: str = Field(..., max_length=200, description="Test name")
     image: str = Field(..., description="New baseline image as base64")
-    reason: str = Field("", description="Reason for update")
+    reason: str = Field("", max_length=500, description="Reason for update")
 
 
 class BatchCompareRequest(BaseModel):
     """Request to compare multiple images"""
-    comparisons: List[CompareByNameRequest] = Field(..., description="List of comparisons")
+    comparisons: List[CompareByNameRequest] = Field(..., max_length=50, description="List of comparisons (max 50)")
 
 
 # ==================== API Endpoints ====================
@@ -444,15 +447,23 @@ async def update_baseline(test_name: str, request: UpdateBaselineRequest) -> Dic
 
         engine = VisualTestingEngine()
 
+        # Check if baseline exists
+        existing = engine.get_baseline(test_name)
+        if not existing:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Baseline '{test_name}' not found. Use POST to create a new baseline."
+            )
+
         # Decode image
         image_bytes = base64.b64decode(request.image)
-        
+
         path = engine.update_baseline(
             test_name,
             image_bytes,
             request.reason
         )
-        
+
         return {
             "success": True,
             "message": f"Baseline updated successfully",
@@ -460,7 +471,9 @@ async def update_baseline(test_name: str, request: UpdateBaselineRequest) -> Dic
             "path": path,
             "update_reason": request.reason
         }
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error updating baseline: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error while updating baseline")
@@ -616,9 +629,16 @@ async def upload_and_compare(
 ) -> Dict[str, Any]:
     """
     Upload two images and compare them.
-    
+
     Useful for manual testing through Swagger UI or forms.
     """
+    # Validate test_name for path traversal
+    _validate_test_name(test_name)
+
+    # Validate threshold bounds
+    if not (0.0 <= threshold <= 1.0):
+        raise HTTPException(status_code=400, detail="threshold must be between 0.0 and 1.0")
+
     try:
         from app.services.automation.visual_testing_engine import (
             VisualTestingEngine, 
@@ -628,10 +648,15 @@ async def upload_and_compare(
         
         engine = VisualTestingEngine()
         
-        # Read uploaded files
+        # Read uploaded files with size validation
         baseline_bytes = await baseline.read()
         actual_bytes = await actual.read()
-        
+
+        if len(baseline_bytes) > MAX_IMAGE_SIZE:
+            raise HTTPException(status_code=400, detail=f"Baseline image exceeds maximum allowed size of {MAX_IMAGE_SIZE // (1024 * 1024)}MB")
+        if len(actual_bytes) > MAX_IMAGE_SIZE:
+            raise HTTPException(status_code=400, detail=f"Actual image exceeds maximum allowed size of {MAX_IMAGE_SIZE // (1024 * 1024)}MB")
+
         # Parse mode
         try:
             comparison_mode = CM(mode)

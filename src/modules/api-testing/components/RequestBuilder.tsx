@@ -710,7 +710,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
             ? responseBody
             : JSON.stringify(responseBody ?? data, null, 2),
           time: Math.round(testResult.response_time_ms || elapsed),
-          size: typeof responseBody === "string" ? responseBody.length : JSON.stringify(responseBody || "").length,
+          size: (() => { const s = typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody || ""); try { return new Blob([s]).size; } catch { return s.length; } })(),
         });
         setLastRequest({ method: request.method, url, headers: sentHeaders, body: sentBody });
         pushHistory(request.method, url);
@@ -1260,6 +1260,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 onClick={handleSend}
                 disabled={!request.url.trim()}
                 className="bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 min-w-[100px] h-10"
+                title="Send request (Enter in URL bar, Ctrl+Enter in body editor)"
               >
                 <Send className="w-4 h-4 mr-2" />
                 Send
@@ -2257,6 +2258,15 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   <Clock className="w-3.5 h-3.5" />
                   {response.time}ms
                 </span>
+                {response.size > 0 && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {response.size < 1024
+                      ? `${response.size} B`
+                      : response.size < 1048576
+                        ? `${(response.size / 1024).toFixed(1)} KB`
+                        : `${(response.size / 1048576).toFixed(2)} MB`}
+                  </span>
+                )}
               </CardTitle>
               <div className="flex items-center gap-2">
                 <Button

@@ -264,9 +264,9 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
   };
 
   const priorityColors = {
-    high: 'bg-red-500/20 text-red-400 border-red-500/30',
-    medium: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-    low: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    high: 'bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/30',
+    medium: 'bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/30',
+    low: 'bg-blue-500/20 text-blue-700 dark:text-blue-400 border-blue-500/30',
   };
 
   return (
@@ -275,7 +275,7 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/30">
-              <Bot className="h-5 w-5 text-violet-400" />
+              <Bot className="h-5 w-5 text-violet-600 dark:text-violet-400" />
             </div>
             AI Test Generator
           </DialogTitle>
@@ -286,14 +286,14 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
 
         {/* AI Status Warning */}
         {!config.enabled && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm">
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-sm">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span>AI features are disabled. Enable them in Settings to use this feature.</span>
           </div>
         )}
 
         {!config.hasApiKey && config.enabled && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm">
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-sm">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span>OpenAI API key not configured. Add it in Settings.</span>
           </div>
@@ -349,7 +349,7 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
           {analysis && (
             <div className="p-4 rounded-lg bg-card border border-border">
               <div className="flex items-center gap-2 mb-3">
-                <Brain className="h-4 w-4 text-violet-400" />
+                <Brain className="h-4 w-4 text-violet-600 dark:text-violet-400" />
                 <span className="font-medium">Page Analysis</span>
                 <Badge variant="outline" className="ml-auto">
                   {analysis.pageType}
@@ -364,7 +364,7 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
                     variant="secondary" 
                     className={cn(
                       "text-xs",
-                      el.testable ? "bg-emerald-500/20 text-emerald-400" : "bg-gray-500/20 text-gray-400"
+                      el.testable ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400" : "bg-gray-500/20 text-gray-700 dark:text-gray-400"
                     )}
                   >
                     {el.type}: {el.name}
@@ -466,7 +466,7 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
                                   key={step.id}
                                   className="flex items-center gap-2 text-xs p-2 rounded bg-background/50"
                                 >
-                                  <span className="w-5 h-5 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-[10px] font-medium">
+                                  <span className="w-5 h-5 rounded-full bg-violet-500/20 text-violet-700 dark:text-violet-400 flex items-center justify-center text-[10px] font-medium">
                                     {i + 1}
                                   </span>
                                   <Badge variant="outline" className="text-[10px] font-mono">
@@ -492,7 +492,7 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
           {!isGenerating && !analysis && generatedTests.length === 0 && (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
               <div className="p-4 rounded-full bg-violet-500/10 mb-4">
-                <Sparkles className="h-8 w-8 text-violet-400" />
+                <Sparkles className="h-8 w-8 text-violet-600 dark:text-violet-400" />
               </div>
               <h3 className="font-semibold mb-2">AI-Powered Test Generation</h3>
               <p className="text-sm text-muted-foreground max-w-md mb-4">
@@ -518,7 +518,7 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
 
           {/* Error Display */}
           {error && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400 text-sm">
               <XCircle className="h-4 w-4 shrink-0" />
               <span>{error}</span>
             </div>

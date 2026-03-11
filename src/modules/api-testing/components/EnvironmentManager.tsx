@@ -146,7 +146,9 @@ export default function EnvironmentManager({
           },
         }),
       });
-    } catch {}
+    } catch (err) {
+      console.warn('[EnvironmentManager] Failed to save environment to backend:', err);
+    }
 
     const updated = [...environments, env];
     onEnvironmentsChange(updated);

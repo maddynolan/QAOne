@@ -1,3 +1,6 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Blaze Explorer is unused. Frontend FlowpilotPage.tsx references /api/blaze
+# endpoints but the feature is non-functional/unused in production.
 """
 Blaze Explorer - Real Autonomous Exploratory Testing Engine
 Finds actual defects on any website without AI dependencies

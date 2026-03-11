@@ -565,15 +565,15 @@ export default function MobileDeviceMatrix() {
             {resultStats && (
               <div className="grid grid-cols-5 gap-3">
                 {[
-                  { label: 'Total', value: resultStats.total, color: 'sky' },
-                  { label: 'Passed', value: resultStats.passed, color: 'emerald' },
-                  { label: 'Failed', value: resultStats.failed, color: 'red' },
-                  { label: 'Running', value: resultStats.running, color: 'amber' },
-                  { label: 'Avg Duration', value: `${(resultStats.avgDuration / 1000).toFixed(1)}s`, color: 'purple' },
+                  { label: 'Total', value: resultStats.total, textClass: 'text-sky-500' },
+                  { label: 'Passed', value: resultStats.passed, textClass: 'text-emerald-500' },
+                  { label: 'Failed', value: resultStats.failed, textClass: 'text-red-500' },
+                  { label: 'Running', value: resultStats.running, textClass: 'text-amber-500' },
+                  { label: 'Avg Duration', value: `${(resultStats.avgDuration / 1000).toFixed(1)}s`, textClass: 'text-purple-500' },
                 ].map(s => (
                   <div key={s.label} className={cn("p-3 rounded-lg border text-center", isDark ? 'bg-gray-900/50 border-gray-800' : 'bg-white border-gray-200')}>
                     <p className="text-xs text-muted-foreground">{s.label}</p>
-                    <p className={cn("text-xl font-bold mt-0.5", `text-${s.color}-500`)}>{s.value}</p>
+                    <p className={cn("text-xl font-bold mt-0.5", s.textClass)}>{s.value}</p>
                   </div>
                 ))}
               </div>

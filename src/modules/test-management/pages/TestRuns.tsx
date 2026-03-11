@@ -235,7 +235,7 @@ export default function TestRuns() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold gradient-text">Test Runs</h1>
+          <h1 className="text-3xl font-bold text-foreground">Test Runs</h1>
           <p className="text-muted-foreground mt-1">Execute and monitor test runs - data persists across all users</p>
         </div>
         <div className="flex gap-2">
@@ -306,19 +306,19 @@ export default function TestRuns() {
                   {summary.total && (
                     <div className="grid grid-cols-4 gap-4 text-sm">
                       <div className="text-center">
-                        <div className="text-2xl font-bold text-green-600">{summary.passed || 0}</div>
+                        <div className="text-2xl font-bold text-green-600 dark:text-green-400">{summary.passed || 0}</div>
                         <div className="text-muted-foreground">Passed</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-2xl font-bold text-red-600">{summary.failed || 0}</div>
+                        <div className="text-2xl font-bold text-red-600 dark:text-red-400">{summary.failed || 0}</div>
                         <div className="text-muted-foreground">Failed</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-2xl font-bold text-blue-600">{summary.total || 0}</div>
+                        <div className="text-2xl font-bold text-foreground">{summary.total || 0}</div>
                         <div className="text-muted-foreground">Total</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-2xl font-bold text-purple-600">
+                        <div className="text-2xl font-bold text-primary">
                           {summary.total > 0 ? Math.round((summary.passed / summary.total) * 100) : 0}%
                         </div>
                         <div className="text-muted-foreground">Pass Rate</div>
@@ -367,7 +367,7 @@ export default function TestRuns() {
                       variant="ghost"
                       size="sm"
                       onClick={() => deleteTestRun(run.id)}
-                      className="text-red-500 hover:text-red-700"
+                      className="text-destructive hover:text-destructive/80"
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>

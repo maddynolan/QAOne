@@ -18,7 +18,6 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { useMobileTestingStore, computeTestRunStats } from '@/modules/mobile-testing/store/mobileTestingStore';
-import { shallow } from 'zustand/shallow';
 import type { MobileTab } from '@/modules/mobile-testing/store/mobileTestingStore';
 import {
   MobileTestStudio,

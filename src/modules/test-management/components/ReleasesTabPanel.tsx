@@ -56,17 +56,17 @@ export function ReleasesTabPanel({
         ) : (
           <div className="grid gap-4">
             {releases.map((release) => (
-              <Card key={release.id} className="bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 hover:border-blue-500/50 dark:hover:border-amber-500/30 transition-all">
+              <Card key={release.id} className="bg-secondary/50 border-border hover:border-blue-500/50 dark:hover:border-amber-500/30 transition-all">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-gray-900 dark:text-white">{release.name}</h3>
+                        <h3 className="font-semibold text-foreground">{release.name}</h3>
                         <Badge className={cn(
                           "text-xs",
                           release.status === 'planning' && "bg-blue-500/10 text-blue-400",
                           release.status === 'active' && "bg-green-500/10 text-green-400",
-                          release.status === 'completed' && "bg-gray-500/10 text-gray-500 dark:text-gray-400"
+                          release.status === 'completed' && "bg-gray-500/10 text-muted-foreground"
                         )}>
                           {release.status}
                         </Badge>
@@ -96,11 +96,11 @@ export function ReleasesTabPanel({
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 dark:text-gray-400">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
                             <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border">
+                        <DropdownMenuContent align="end" className="bg-popover border-border">
                           <DropdownMenuItem
                             className="text-foreground focus:bg-secondary"
                             onClick={() => onEditRelease(release)}

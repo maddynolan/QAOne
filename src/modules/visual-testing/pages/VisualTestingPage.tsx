@@ -21,13 +21,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Eye, Upload, Download, Trash2, Check, X, RefreshCw,
   Image as ImageIcon, Settings, Layers, GitCompare,
-  AlertCircle, CheckCircle, Clock, Maximize2, ZoomIn,
-  Plus, Search, Filter, MoreVertical, ChevronDown, ChevronRight,
-  FileImage, Target, Box, Palette, Activity, Lightbulb,
-  SlidersHorizontal, Blend, Split, Columns, Copy,
-  Smartphone, Tablet, Monitor, Tv, Grid3X3, Move,
-  ShieldCheck, MousePointer, LayoutGrid, Crosshair,
-  TrendingUp, BarChart3, Percent, Timer
+  AlertCircle, CheckCircle, Clock,
+  Plus, Search, MoreVertical,
+  FileImage, Target, Box, Palette, Activity,
+  SlidersHorizontal, Blend, Columns,
+  Smartphone, Tablet, Monitor, Tv, Grid3X3,
+  MousePointer, LayoutGrid, Crosshair,
+  TrendingUp, BarChart3, Percent, Timer, Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -231,6 +231,9 @@ export default function VisualTestingPage() {
     try { return JSON.parse(localStorage.getItem('flowstral-visual-history') || '[]'); } catch { return []; }
   });
 
+  // Diff review filter
+  const [diffFilter, setDiffFilter] = useState<'all' | 'unreviewed' | 'accepted' | 'rejected'>('all');
+
   // Persist states
   useEffect(() => { try { localStorage.setItem('flowstral-visual-approvals', JSON.stringify(approvedDiffs)); } catch {} }, [approvedDiffs]);
   useEffect(() => { try { localStorage.setItem('flowstral-visual-history', JSON.stringify(comparisonHistory.slice(0, 100))); } catch {} }, [comparisonHistory]);
@@ -287,16 +290,20 @@ export default function VisualTestingPage() {
   const handleUploadBaseline = async () => {
     if (!uploadTestName || !uploadImage) { toast.error('Provide test name and image'); return; }
     try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64 = (e.target?.result as string)?.split(',')[1];
-        await axios.post(`${API_BASE}/baselines`, { test_name: uploadTestName, image: base64, metadata: {} });
-        toast.success('Baseline uploaded');
-        setShowUploadDialog(false);
-        setUploadTestName(''); setUploadImage(null); setUploadPreview(null);
-        loadBaselines();
-      };
-      reader.readAsDataURL(uploadImage);
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const result = (e.target?.result as string)?.split(',')[1];
+          if (result) resolve(result); else reject(new Error('Failed to read file'));
+        };
+        reader.onerror = () => reject(new Error('File reading failed'));
+        reader.readAsDataURL(uploadImage);
+      });
+      await axios.post(`${API_BASE}/baselines`, { test_name: uploadTestName, image: base64, metadata: {} });
+      toast.success('Baseline uploaded');
+      setShowUploadDialog(false);
+      setUploadTestName(''); setUploadImage(null); setUploadPreview(null);
+      loadBaselines();
     } catch (error: any) { toast.error(error.response?.data?.detail || 'Upload failed'); }
   };
 
@@ -305,14 +312,19 @@ export default function VisualTestingPage() {
     try { await axios.delete(`${API_BASE}/baselines/${testName}`); toast.success('Deleted'); loadBaselines(); } catch { toast.error('Delete failed'); }
   };
 
+  const [isLoadingBaselineImage, setIsLoadingBaselineImage] = useState(false);
+
   const handleViewBaseline = async (baseline: Baseline) => {
     const isSample = SAMPLE_BASELINES.some(s => s.test_name === baseline.test_name);
     if (isSample) { setSelectedBaseline(baseline); setSelectedBaselineImage(SAMPLE_IMAGE_PLACEHOLDER); return; }
+    setSelectedBaseline(baseline);
+    setSelectedBaselineImage(null);
+    setIsLoadingBaselineImage(true);
     try {
       const response = await axios.get(`${API_BASE}/baselines/${baseline.test_name}`);
-      setSelectedBaseline(baseline);
       setSelectedBaselineImage(response.data.image_base64);
-    } catch { setSelectedBaseline(baseline); setSelectedBaselineImage(SAMPLE_IMAGE_PLACEHOLDER); }
+    } catch { setSelectedBaselineImage(SAMPLE_IMAGE_PLACEHOLDER); }
+    finally { setIsLoadingBaselineImage(false); }
   };
 
   const handleCaptureScreenshot = async () => {
@@ -817,8 +829,8 @@ export default function VisualTestingPage() {
                               <SlidersHorizontal className="w-4 h-4 text-primary-foreground" />
                             </div>
                           </div>
-                          <div className="absolute top-2 left-2 bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded pointer-events-none">Baseline</div>
-                          <div className="absolute top-2 right-2 bg-blue-500 text-white text-[10px] px-2 py-0.5 rounded pointer-events-none">Actual</div>
+                          <div className="absolute top-2 left-2 bg-emerald-600 text-emerald-50 text-[10px] px-2 py-0.5 rounded pointer-events-none font-medium">Baseline</div>
+                          <div className="absolute top-2 right-2 bg-blue-600 text-blue-50 text-[10px] px-2 py-0.5 rounded pointer-events-none font-medium">Actual</div>
                         </div>
                         <Slider value={[sliderPosition]} onValueChange={([v]) => setSliderPosition(v)} max={100} step={1} />
                       </div>
@@ -829,8 +841,8 @@ export default function VisualTestingPage() {
                         <div className="relative overflow-hidden rounded-lg bg-muted" style={{ maxHeight: 500 }}>
                           <img src={`data:image/png;base64,${baselineImage}`} alt="Baseline" className="w-full block" />
                           <img src={`data:image/png;base64,${actualImage}`} alt="Actual" className="absolute inset-0 w-full block" style={{ opacity: onionOpacity / 100 }} />
-                          <div className="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded">
-                            Baseline ← → Actual ({onionOpacity}%)
+                          <div className="absolute top-2 left-2 bg-black/70 text-neutral-100 text-[10px] px-2 py-0.5 rounded font-medium">
+                            Baseline &larr; &rarr; Actual ({onionOpacity}%)
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -982,7 +994,7 @@ export default function VisualTestingPage() {
                             try { const res = await axios.get(`${API_BASE}/baselines/${b.test_name}`); if (res.data.image_base64) { const a = document.createElement('a'); a.href = `data:image/png;base64,${res.data.image_base64}`; a.download = `${b.test_name}.png`; a.click(); toast.success('Downloaded'); } } catch { toast.error('Download failed'); }
                           }}><Download className="w-4 h-4 mr-2" />Download</DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem className="text-red-500" onClick={e => { e.stopPropagation(); handleDeleteBaseline(b.test_name); }}><Trash2 className="w-4 h-4 mr-2" />Delete</DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={e => { e.stopPropagation(); handleDeleteBaseline(b.test_name); }}><Trash2 className="w-4 h-4 mr-2" />Delete</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -1199,13 +1211,18 @@ export default function VisualTestingPage() {
                 <div className="space-y-3">
                   {/* Filter bar */}
                   <div className="flex items-center gap-2 mb-3">
-                    <Badge variant="outline" className="cursor-pointer" onClick={() => {/* show all */}}>All ({diffs.length})</Badge>
-                    <Badge variant="outline" className="cursor-pointer text-amber-600">Unreviewed ({diffs.filter(d => !approvedDiffs[d.filename]).length})</Badge>
-                    <Badge variant="outline" className="cursor-pointer text-green-600">Accepted ({diffs.filter(d => approvedDiffs[d.filename] === 'accepted').length})</Badge>
-                    <Badge variant="outline" className="cursor-pointer text-red-600">Rejected ({diffs.filter(d => approvedDiffs[d.filename] === 'rejected').length})</Badge>
+                    <Badge variant={diffFilter === 'all' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setDiffFilter('all')}>All ({diffs.length})</Badge>
+                    <Badge variant={diffFilter === 'unreviewed' ? 'default' : 'outline'} className="cursor-pointer text-amber-600 dark:text-amber-400" onClick={() => setDiffFilter('unreviewed')}>Unreviewed ({diffs.filter(d => !approvedDiffs[d.filename]).length})</Badge>
+                    <Badge variant={diffFilter === 'accepted' ? 'default' : 'outline'} className="cursor-pointer text-emerald-600 dark:text-emerald-400" onClick={() => setDiffFilter('accepted')}>Accepted ({diffs.filter(d => approvedDiffs[d.filename] === 'accepted').length})</Badge>
+                    <Badge variant={diffFilter === 'rejected' ? 'default' : 'outline'} className="cursor-pointer text-red-600 dark:text-red-400" onClick={() => setDiffFilter('rejected')}>Rejected ({diffs.filter(d => approvedDiffs[d.filename] === 'rejected').length})</Badge>
                   </div>
 
-                  {diffs.map(diff => {
+                  {diffs.filter(d => {
+                    if (diffFilter === 'unreviewed') return !approvedDiffs[d.filename];
+                    if (diffFilter === 'accepted') return approvedDiffs[d.filename] === 'accepted';
+                    if (diffFilter === 'rejected') return approvedDiffs[d.filename] === 'rejected';
+                    return true;
+                  }).map(diff => {
                     const approval = approvedDiffs[diff.filename];
                     return (
                       <div key={diff.filename} className={`flex items-center justify-between p-4 rounded-lg border transition-all ${approval === 'accepted' ? 'border-green-500/30 bg-green-500/5' : approval === 'rejected' ? 'border-red-500/30 bg-red-500/5' : 'border-border bg-card hover:border-primary/30'}`}>
@@ -1318,11 +1335,18 @@ export default function VisualTestingPage() {
             <DialogDescription>Baseline details and management</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {selectedBaselineImage && (
+            {isLoadingBaselineImage ? (
+              <div className="bg-muted rounded-lg p-4 flex items-center justify-center min-h-[200px]">
+                <div className="text-center text-muted-foreground">
+                  <Loader2 className="w-8 h-8 mx-auto mb-2 animate-spin" />
+                  <p className="text-sm">Loading baseline image...</p>
+                </div>
+              </div>
+            ) : selectedBaselineImage ? (
               <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[60vh]">
                 <img src={`data:image/png;base64,${selectedBaselineImage}`} alt={selectedBaseline?.test_name} className="max-w-full" />
               </div>
-            )}
+            ) : null}
             {selectedBaseline && (
               <div className="grid grid-cols-4 gap-3">
                 <div className="p-3 bg-muted rounded-lg"><p className="text-xs text-muted-foreground">Size</p><p className="font-medium text-sm">{formatFileSize(selectedBaseline.file_size)}</p></div>
@@ -1333,7 +1357,7 @@ export default function VisualTestingPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" className="text-red-500 border-red-300" onClick={() => handleDeleteBaseline(selectedBaseline?.test_name || '')}><Trash2 className="w-4 h-4 mr-2" />Delete</Button>
+            <Button variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => handleDeleteBaseline(selectedBaseline?.test_name || '')}><Trash2 className="w-4 h-4 mr-2" />Delete</Button>
             <Button variant="outline" onClick={() => { if (selectedBaselineImage) { setBaselineImage(selectedBaselineImage); setActiveTab('compare'); setSelectedBaseline(null); setSelectedBaselineImage(null); } }}>
               <GitCompare className="w-4 h-4 mr-2" />Use for Comparison
             </Button>

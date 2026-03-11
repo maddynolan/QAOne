@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the Autonomous Explorer / Flowmap system which is unused.
 """
 Synchronous Defect Detection (for Windows/Playwright sync)
 Detects functional defects during exploration by analyzing pages and screenshots.

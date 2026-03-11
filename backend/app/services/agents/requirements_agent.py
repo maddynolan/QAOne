@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the old 8-agent registry system. Unused in production.
 """
 Requirements Intelligence Agent
 Phase 2.1: Core Agents

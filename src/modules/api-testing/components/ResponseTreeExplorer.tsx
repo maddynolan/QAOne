@@ -104,7 +104,7 @@ function getTypeColor(type: JsonNodeType): string {
     case "string": return "text-green-600 dark:text-green-400";
     case "number": return "text-blue-600 dark:text-blue-400";
     case "boolean": return "text-amber-600 dark:text-amber-400";
-    case "null": return "text-gray-400";
+    case "null": return "text-gray-500 dark:text-gray-400";
     case "object": return "text-purple-600 dark:text-purple-400";
     case "array": return "text-orange-600 dark:text-orange-400";
     default: return "text-foreground";
@@ -600,8 +600,8 @@ export default function ResponseTreeExplorer({
                                       <span className="text-muted-foreground/40 italic">—</span>
                                     ) : (
                                       <span className={`${getTypeColor(type)} truncate inline-block max-w-[300px]`}>
-                                        {val === null ? <span className="text-gray-400">null</span>
-                                          : val === undefined ? <span className="text-gray-400">undefined</span>
+                                        {val === null ? <span className="text-gray-500 dark:text-gray-400">null</span>
+                                          : val === undefined ? <span className="text-gray-500 dark:text-gray-400">undefined</span>
                                           : typeof val === "object" ? (Array.isArray(val) ? `[${val.length}]` : `{${Object.keys(val).length}}`)
                                           : typeof val === "string" ? (val.length > 60 ? `"${val.slice(0, 60)}..."` : `"${val}"`)
                                           : String(val)}

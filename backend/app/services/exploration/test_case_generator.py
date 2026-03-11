@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the Autonomous Explorer / Flowmap system which is unused.
 """
 Test Case Generator from Capability Map
 Automatically generates comprehensive test cases from discovered capabilities.

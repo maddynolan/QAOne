@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Autonomous Explorer / Flowmap is unused. Router registration commented out in main.py.
 """
 Autonomous App Explorer
 Systematically navigates through an application to build a comprehensive capability map.

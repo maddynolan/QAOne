@@ -31,7 +31,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/a11y", tags=["accessibility-v2"])
 
 # In-memory store for scan results (in production, use Redis or DB)
+# Bounded: auto-evicts oldest entries when exceeding MAX_SCAN_RESULTS
 _scan_results: Dict[str, Dict[str, Any]] = {}
+_scan_timestamps: Dict[str, float] = {}  # track insertion time for TTL eviction
+MAX_SCAN_RESULTS = 500
+SCAN_TTL_SECONDS = 3600  # 1 hour
+
+
+def _store_scan_result(key: str, result: Dict[str, Any]):
+    """Store a scan result with TTL tracking and bounded size."""
+    import time
+    now = time.time()
+
+    # Evict expired entries first
+    expired_keys = [k for k, ts in _scan_timestamps.items() if now - ts > SCAN_TTL_SECONDS]
+    for k in expired_keys:
+        _scan_results.pop(k, None)
+        _scan_timestamps.pop(k, None)
+
+    # If still over limit, evict oldest
+    while len(_scan_results) >= MAX_SCAN_RESULTS and _scan_timestamps:
+        oldest_key = min(_scan_timestamps, key=_scan_timestamps.get)
+        _scan_results.pop(oldest_key, None)
+        _scan_timestamps.pop(oldest_key, None)
+
+    _scan_results[key] = result
+    _scan_timestamps[key] = now
 
 
 class ScanRequest(BaseModel):
@@ -93,8 +118,8 @@ async def scan_url(request: Request, body: ScanRequest):
             wait_for_selector=body.wait_for_selector
         )
 
-        # Store result for later retrieval
-        _scan_results[scan_id] = result
+        # Store result for later retrieval (bounded + TTL)
+        _store_scan_result(scan_id, result)
 
         logger.info(f"Scan {scan_id} complete: {result['summary']['total_violations']} issues found")
 
@@ -143,9 +168,10 @@ async def get_report(
     
     elif format == "markdown" or format == "md":
         md_content = generator.generate_markdown_report(result)
-        return HTMLResponse(
-            content=f"<pre style='font-family: monospace; white-space: pre-wrap;'>{md_content}</pre>",
-            media_type="text/html"
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(
+            content=md_content,
+            media_type="text/markdown"
         )
     
     else:
@@ -222,16 +248,16 @@ async def batch_scan(
 
     batch_id = secrets.token_urlsafe(12)
 
-    # Store batch info
-    _scan_results[f"batch_{batch_id}"] = {
+    # Store batch info (bounded + TTL)
+    _store_scan_result(f"batch_{batch_id}", {
         "status": "in_progress",
         "urls": body.urls,
         "completed": [],
         "failed": [],
         "total": len(body.urls),
         "started_at": datetime.utcnow().isoformat()
-    }
-    
+    })
+
     # Start batch processing in background
     background_tasks.add_task(
         _process_batch,
@@ -276,7 +302,7 @@ async def _process_batch(
             try:
                 result = await scanner.scan_url(url, wcag_level=wcag_level)
                 scan_id = secrets.token_urlsafe(12)
-                _scan_results[scan_id] = result
+                _store_scan_result(scan_id, result)
 
                 _scan_results[key]["completed"].append({
                     "url": url,

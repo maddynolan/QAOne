@@ -6,7 +6,6 @@
  */
 
 import {
-  ECOMMERCE_TEST_URL,
   FLOWSTRAL_WEBSITE_URL,
   FLOWSTRAL_API_URL,
   MAX_BROWSER_VUS,
@@ -19,17 +18,14 @@ describe('Performance Constants', () => {
   // Base URLs
   // ===========================================================================
   describe('Base URLs', () => {
-    it('ECOMMERCE_TEST_URL points to localhost', () => {
-      expect(ECOMMERCE_TEST_URL).toBe('http://localhost:8002');
-    });
-
     it('FLOWSTRAL_WEBSITE_URL is HTTPS', () => {
       expect(FLOWSTRAL_WEBSITE_URL).toMatch(/^https:\/\//);
       expect(FLOWSTRAL_WEBSITE_URL).toBe('https://flowstral.com');
     });
 
-    it('FLOWSTRAL_API_URL is HTTPS', () => {
-      expect(FLOWSTRAL_API_URL).toMatch(/^https:\/\//);
+    it('FLOWSTRAL_API_URL uses centralized API_BASE_URL', () => {
+      expect(typeof FLOWSTRAL_API_URL).toBe('string');
+      expect(FLOWSTRAL_API_URL.length).toBeGreaterThan(0);
     });
 
     it('MAX_BROWSER_VUS is reasonable for in-browser testing', () => {

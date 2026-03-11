@@ -1985,7 +1985,7 @@ export default function EnhancedAPITesting() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">API Testing</h1>
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-muted-foreground">
                 Multi-protocol support • Database connectivity • Comprehensive reporting
               </p>
             </div>
@@ -3566,7 +3566,9 @@ export default function EnhancedAPITesting() {
                               await fetch(`${API_BASE_URL}/api/v2/testing/database/${conn.connection_id}`, { method: "DELETE" });
                               loadDbConnections();
                               toast({ title: "Disconnected", description: `Disconnected from ${conn.connection_id}` });
-                            } catch {}
+                            } catch (err: any) {
+                              toast({ title: "Disconnect failed", description: err.message || "Could not disconnect from database", variant: "destructive" });
+                            }
                           }}
                           className="ml-1 text-muted-foreground hover:text-red-500 transition-colors"
                           title="Disconnect"

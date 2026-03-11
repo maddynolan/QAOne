@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the old 8-agent registry system. Unused in production.
 """
 Accessibility Agent - Wrapper around accessibility compliance with reporting
 Phase 3.2: Specialized Agents

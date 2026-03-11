@@ -80,7 +80,7 @@ export default function TestPickerDialog({
         <DialogHeader>
           <DialogTitle className="text-foreground flex items-center justify-between">
             <span>Select Test Case to Automate</span>
-            <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">
+            <Badge className="bg-purple-500/20 text-purple-700 dark:text-purple-400 border-purple-500/30">
               {filteredTestCases.length} of {allTestCases.length} tests
             </Badge>
           </DialogTitle>
@@ -213,7 +213,7 @@ export default function TestPickerDialog({
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-sm text-foreground truncate">{tc.name || tc.title}</span>
                             {status === 'full' && (
-                              <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px] px-1.5">Automated</Badge>
+                              <Badge className="bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-[10px] px-1.5">Automated</Badge>
                             )}
                             {status === 'partial' && (
                               <Badge className="bg-amber-500/20 text-primary text-[10px] px-1.5">Partial</Badge>
@@ -222,7 +222,7 @@ export default function TestPickerDialog({
                           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                             <span>{tc.steps?.length || 0} steps</span>
                             {status !== 'none' && (
-                              <span className="text-emerald-400/70">{automatedCount} automated</span>
+                              <span className="text-emerald-700/70 dark:text-emerald-400/70">{automatedCount} automated</span>
                             )}
                             {tc.folderId && allFolders.find(f => f.id === tc.folderId) && (
                               <span className="flex items-center gap-1">

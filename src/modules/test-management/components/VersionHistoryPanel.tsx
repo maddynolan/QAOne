@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import { API_BASE_URL } from '@/lib/api-config';
 import axios from 'axios';
+import { toast } from 'sonner';
 
 interface Version {
   id: string;
@@ -112,6 +113,7 @@ export function VersionHistoryPanel({
     } catch (err) {
       console.error('[VersionHistory] Failed to fetch versions:', err);
       setVersions([]);
+      toast.error('Failed to load version history');
     } finally {
       setLoading(false);
     }
@@ -123,15 +125,18 @@ export function VersionHistoryPanel({
     }
   }, [testCaseId, fetchVersions]);
 
-  const handleViewSnapshot = async (version: Version) => {
+  const handleViewSnapshot = async (version: Version): Promise<boolean> => {
     try {
       setPreviewLoading(true);
       const response = await axios.get(
         `${API_BASE_URL}/test-cases/${testCaseId}/versions/${version.id}`
       );
       setSnapshotPreview(response.data);
+      return true;
     } catch (err) {
       console.error('[VersionHistory] Failed to load snapshot:', err);
+      toast.error('Failed to load version snapshot');
+      return false;
     } finally {
       setPreviewLoading(false);
     }
@@ -139,6 +144,14 @@ export function VersionHistoryPanel({
 
   const handleRevert = async () => {
     if (!selectedRevertVersion) return;
+
+    // Guard: ensure snapshot is loaded before reverting
+    if (!snapshotPreview?.snapshot) {
+      toast.error('Cannot revert: version snapshot not loaded. Please try again.');
+      setRevertDialogOpen(false);
+      return;
+    }
+
     try {
       setReverting(true);
       const response = await axios.post(
@@ -154,11 +167,13 @@ export function VersionHistoryPanel({
         if (onRevert && snapshotPreview?.snapshot) {
           onRevert(snapshotPreview.snapshot);
         }
+        toast.success(`Reverted to version ${selectedRevertVersion.version}`);
       }
       setRevertDialogOpen(false);
       setSelectedRevertVersion(null);
     } catch (err) {
       console.error('[VersionHistory] Revert failed:', err);
+      toast.error('Failed to revert to this version. Please try again.');
     } finally {
       setReverting(false);
     }
@@ -357,8 +372,10 @@ export function VersionHistoryPanel({
                           className="h-7 px-2 text-xs text-orange-600 hover:text-orange-700"
                           onClick={async () => {
                             setSelectedRevertVersion(version);
-                            await handleViewSnapshot(version);
-                            setRevertDialogOpen(true);
+                            const loaded = await handleViewSnapshot(version);
+                            if (loaded) {
+                              setRevertDialogOpen(true);
+                            }
                           }}
                         >
                           <RotateCcw className="h-3 w-3 mr-1" />

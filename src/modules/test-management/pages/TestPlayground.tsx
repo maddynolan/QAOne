@@ -291,7 +291,7 @@ function ProductsSection({ addToCart, cartItemCount }: ProductsSectionProps) {
               data-product-price={product.price}
               data-product-stock={product.stock}
               className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-lg ${
-                selectedProduct?.id === product.id ? 'ring-2 ring-violet-500 bg-violet-50' : 'bg-white dark:bg-slate-800'
+                selectedProduct?.id === product.id ? 'ring-2 ring-primary bg-accent' : 'bg-card'
               }`}
               onClick={() => setSelectedProduct(product)}
             >
@@ -299,7 +299,7 @@ function ProductsSection({ addToCart, cartItemCount }: ProductsSectionProps) {
               <h3 className="font-semibold text-sm">{product.name}</h3>
               <p className="text-xs text-muted-foreground">{product.category}</p>
               <div className="flex items-center justify-between mt-2">
-                <span className="text-lg font-bold text-violet-600" data-testid={`price-${product.id}`}>
+                <span className="text-lg font-bold text-primary" data-testid={`price-${product.id}`}>
                   ${product.price.toFixed(2)}
                 </span>
                 <Badge variant={product.stock > 20 ? 'default' : product.stock > 0 ? 'secondary' : 'destructive'}>
@@ -439,7 +439,7 @@ function CartSection({ cartItems, setCartItems }: CartSectionProps) {
               </div>
             ) : null}
             {cartItems.map(item => (
-              <div key={item.id} className="flex items-center gap-4 p-4 bg-white dark:bg-slate-800 rounded-lg border" data-cart-item={item.id}>
+              <div key={item.id} className="flex items-center gap-4 p-4 bg-card rounded-lg border" data-cart-item={item.id}>
                 <div className="text-3xl">{item.image}</div>
                 <div className="flex-1">
                   <h4 className="font-medium" data-testid={`cart-item-name-${item.id}`}>{item.name}</h4>
@@ -463,7 +463,7 @@ function CartSection({ cartItems, setCartItems }: CartSectionProps) {
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50" 
+                    className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
                     onClick={() => removeItem(item.id)}
                     data-testid={`remove-item-${item.id}`}
                   >
@@ -632,7 +632,7 @@ function TablesSection() {
         {/* Table */}
         <div className="border rounded-lg overflow-auto">
           <table className="min-w-max w-full" data-testid="orders-table">
-            <thead className="bg-slate-100 dark:bg-slate-800">
+            <thead className="bg-muted">
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-semibold">Order ID</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold">Customer</th>
@@ -644,7 +644,7 @@ function TablesSection() {
             </thead>
             <tbody className="divide-y">
               {filteredOrders.map(order => (
-                <tr key={order.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50" data-order-id={order.id}>
+                <tr key={order.id} className="hover:bg-muted/50" data-order-id={order.id}>
                   <td className="px-4 py-3 font-mono text-sm">{order.id}</td>
                   <td className="px-4 py-3">{order.customer}</td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">{order.date}</td>
@@ -675,7 +675,7 @@ function TablesSection() {
                       <Button 
                         variant="ghost" 
                         size="sm" 
-                        className="text-red-500"
+                        className="text-destructive"
                         data-testid={`delete-${order.id}`}
                         onClick={() => toast.error(`Deleted ${order.id}`)}
                       >
@@ -692,7 +692,7 @@ function TablesSection() {
         {/* Edit Modal */}
         {editingOrder && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingOrder(null)}>
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-popover p-6 rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-semibold mb-4">Edit Order {editingOrder}</h3>
               <div className="space-y-4">
                 <div>
@@ -996,7 +996,7 @@ function LoginSection() {
               {USERS.map(user => (
                 <div 
                   key={user.username} 
-                  className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                  className="p-3 bg-muted/50 rounded-lg cursor-pointer hover:bg-muted transition-colors"
                   onClick={() => {
                     setUsername(user.username);
                     setPassword(user.password);
@@ -1072,7 +1072,7 @@ function LoginSection() {
                   </div>
                 )}
                 {loggedInUser.role === 'Guest' && (
-                  <div className="text-center p-4 bg-slate-50 rounded-lg">
+                  <div className="text-center p-4 bg-muted/50 rounded-lg">
                     <p className="text-muted-foreground">Limited access. Please upgrade your account.</p>
                   </div>
                 )}
@@ -1193,13 +1193,13 @@ function InteractionsSection() {
               {/* Source */}
               <div>
                 <Label>Drag Items</Label>
-                <div className="border-2 border-dashed rounded-lg p-4 min-h-[200px] bg-slate-50 dark:bg-slate-800/50" data-testid="drag-source">
+                <div className="border-2 border-dashed rounded-lg p-4 min-h-[200px] bg-muted/50" data-testid="drag-source">
                   {dragItems.map(item => (
                     <div
                       key={item}
                       draggable
                       onDragStart={() => handleDragStart(item)}
-                      className="p-3 mb-2 bg-white dark:bg-slate-700 rounded border cursor-move flex items-center gap-2 hover:shadow-md transition-shadow"
+                      className="p-3 mb-2 bg-card rounded border cursor-move flex items-center gap-2 hover:shadow-md transition-shadow"
                       data-testid={`draggable-${item.replace(' ', '-').toLowerCase()}`}
                     >
                       <GripVertical className="h-4 w-4 text-muted-foreground" />
@@ -1218,13 +1218,13 @@ function InteractionsSection() {
                 <div
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={handleDrop}
-                  className="border-2 border-dashed border-violet-300 rounded-lg p-4 min-h-[200px] bg-violet-50 dark:bg-violet-900/20"
+                  className="border-2 border-dashed border-primary/30 rounded-lg p-4 min-h-[200px] bg-accent/50"
                   data-testid="drop-zone"
                 >
                   {dropZone.map(item => (
                     <div
                       key={item}
-                      className="p-3 mb-2 bg-violet-100 dark:bg-violet-800 rounded border border-violet-200"
+                      className="p-3 mb-2 bg-accent rounded border border-border"
                     >
                       <CheckCircle className="h-4 w-4 text-green-500 inline mr-2" />
                       {item}
@@ -1351,7 +1351,7 @@ function FramesSection() {
           {/* External iFrame */}
           <div>
             <Label>External Content iFrame</Label>
-            <div className="border rounded-lg overflow-hidden bg-white">
+            <div className="border rounded-lg overflow-hidden bg-card">
               <iframe
                 id="external-frame"
                 name="external-frame"
@@ -1711,7 +1711,7 @@ function AdvancedSection() {
                 href="https://github.com" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="inline-flex items-center px-4 py-2 border rounded-md hover:bg-slate-100"
+                className="inline-flex items-center px-4 py-2 border rounded-md hover:bg-muted"
                 data-testid="link-new-tab"
               >
                 <ExternalLink className="h-4 w-4 mr-2" />
@@ -1787,8 +1787,8 @@ function AdvancedSection() {
                 <Label htmlFor="show-advanced">Show advanced options</Label>
               </div>
               <div id="advanced-options" className="hidden peer-checked:block">
-                <div className="p-4 bg-violet-50 rounded-lg space-y-3" data-testid="advanced-fields-container">
-                  <p className="text-sm font-medium text-violet-700">Advanced Options (conditionally visible)</p>
+                <div className="p-4 bg-accent rounded-lg space-y-3" data-testid="advanced-fields-container">
+                  <p className="text-sm font-medium text-accent-foreground">Advanced Options (conditionally visible)</p>
                   <Input placeholder="Advanced setting 1" data-testid="advanced-setting-1" />
                   <Input placeholder="Advanced setting 2" data-testid="advanced-setting-2" />
                 </div>

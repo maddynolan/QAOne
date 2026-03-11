@@ -211,7 +211,7 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
           {editingSuite && (
             <div className="space-y-4">
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Suite Name</label>
+                <label className="text-sm text-muted-foreground mb-1 block">Suite Name</label>
                 <Input
                   value={editingSuite.name}
                   onChange={(e) => setEditingSuite({ ...editingSuite, name: e.target.value })}
@@ -220,7 +220,7 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
+                <label className="text-sm text-muted-foreground mb-1 block">Description</label>
                 <Input
                   value={editingSuite.description || ''}
                   onChange={(e) => setEditingSuite({ ...editingSuite, description: e.target.value })}
@@ -229,11 +229,11 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Schedule</label>
+                <label className="text-sm text-muted-foreground mb-1 block">Schedule</label>
                 <select
                   value={editingSuite.schedule || 'on-demand'}
                   onChange={(e) => setEditingSuite({ ...editingSuite, schedule: e.target.value as any })}
-                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
+                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"
                 >
                   <option value="on-demand">On Demand</option>
                   <option value="daily">Daily</option>
@@ -256,50 +256,50 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
           {editingRelease && (
             <div className="space-y-4">
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Release Name</label>
+                <label className="text-sm text-muted-foreground mb-1 block">Release Name</label>
                 <Input value={editingRelease.name} onChange={(e) => setEditingRelease({ ...editingRelease, name: e.target.value })} placeholder="Enter release name" className="bg-secondary border-border" />
               </div>
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
+                <label className="text-sm text-muted-foreground mb-1 block">Description</label>
                 <Input value={editingRelease.description || ''} onChange={(e) => setEditingRelease({ ...editingRelease, description: e.target.value })} placeholder="Enter description" className="bg-secondary border-border" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Start Date</label>
+                  <label className="text-sm text-muted-foreground mb-1 block">Start Date</label>
                   <Input type="date" value={editingRelease.startDate?.split('T')[0] || ''} onChange={(e) => setEditingRelease({ ...editingRelease, startDate: e.target.value })} className="bg-secondary border-border" />
                 </div>
                 <div>
-                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">End Date</label>
+                  <label className="text-sm text-muted-foreground mb-1 block">End Date</label>
                   <Input type="date" value={editingRelease.endDate?.split('T')[0] || ''} onChange={(e) => setEditingRelease({ ...editingRelease, endDate: e.target.value })} className="bg-secondary border-border" />
                 </div>
               </div>
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Status</label>
-                <select value={editingRelease.status} onChange={(e) => setEditingRelease({ ...editingRelease, status: e.target.value as any })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white">
+                <label className="text-sm text-muted-foreground mb-1 block">Status</label>
+                <select value={editingRelease.status} onChange={(e) => setEditingRelease({ ...editingRelease, status: e.target.value as any })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground">
                   <option value="planning">Planning</option>
                   <option value="active">Active</option>
                   <option value="completed">Completed</option>
                 </select>
               </div>
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Link Test Suites ({editingRelease.suiteIds?.length || 0} selected)</label>
+                <label className="text-sm text-muted-foreground mb-1 block">Link Test Suites ({editingRelease.suiteIds?.length || 0} selected)</label>
                 <div className="max-h-32 overflow-y-auto border border-border rounded-md bg-secondary p-2 space-y-1">
-                  {suites.length === 0 ? <p className="text-gray-500 text-sm text-center py-2">No test suites available</p> : suites.map((suite) => (
+                  {suites.length === 0 ? <p className="text-muted-foreground text-sm text-center py-2">No test suites available</p> : suites.map((suite) => (
                     <label key={suite.id} className={cn("flex items-center gap-3 p-2 rounded cursor-pointer transition-colors", editingRelease.suiteIds?.includes(suite.id) ? "bg-amber-500/10 border border-amber-500/30" : "hover:bg-secondary")}>
                       <input type="checkbox" checked={editingRelease.suiteIds?.includes(suite.id) || false} onChange={(e) => { const ids = editingRelease.suiteIds || []; setEditingRelease({ ...editingRelease, suiteIds: e.target.checked ? [...ids, suite.id] : ids.filter(id => id !== suite.id) }); }} className="rounded border-gray-600 text-blue-600 dark:text-primary focus:ring-amber-500" />
-                      <span className="text-sm text-gray-900 dark:text-white truncate">{suite.name}</span>
-                      <span className="text-xs text-gray-500">({suite.testCaseIds.length} tests)</span>
+                      <span className="text-sm text-foreground truncate">{suite.name}</span>
+                      <span className="text-xs text-muted-foreground">({suite.testCaseIds.length} tests)</span>
                     </label>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Link Test Plans ({editingRelease.planIds?.length || 0} selected)</label>
+                <label className="text-sm text-muted-foreground mb-1 block">Link Test Plans ({editingRelease.planIds?.length || 0} selected)</label>
                 <div className="max-h-32 overflow-y-auto border border-border rounded-md bg-secondary p-2 space-y-1">
-                  {testPlans.length === 0 ? <p className="text-gray-500 text-sm text-center py-2">No test plans available</p> : testPlans.map((plan) => (
+                  {testPlans.length === 0 ? <p className="text-muted-foreground text-sm text-center py-2">No test plans available</p> : testPlans.map((plan) => (
                     <label key={plan.id} className={cn("flex items-center gap-3 p-2 rounded cursor-pointer transition-colors", editingRelease.planIds?.includes(plan.id) ? "bg-amber-500/10 border border-amber-500/30" : "hover:bg-secondary")}>
                       <input type="checkbox" checked={editingRelease.planIds?.includes(plan.id) || false} onChange={(e) => { const ids = editingRelease.planIds || []; setEditingRelease({ ...editingRelease, planIds: e.target.checked ? [...ids, plan.id] : ids.filter(id => id !== plan.id) }); }} className="rounded border-gray-600 text-blue-600 dark:text-primary focus:ring-amber-500" />
-                      <span className="text-sm text-gray-900 dark:text-white truncate">{plan.name}</span>
+                      <span className="text-sm text-foreground truncate">{plan.name}</span>
                       <Badge className="text-[10px] bg-secondary">{plan.status}</Badge>
                     </label>
                   ))}
@@ -320,24 +320,24 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
           <DialogHeader><DialogTitle>Create Test Suite</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Suite Name *</label>
+              <label className="text-sm text-muted-foreground mb-1 block">Suite Name *</label>
               <Input value={newSuiteName} onChange={(e) => setNewSuiteName(e.target.value)} placeholder="e.g., Login Flow Tests, Checkout Regression" className="bg-secondary border-border" />
             </div>
             <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
+              <label className="text-sm text-muted-foreground mb-1 block">Description</label>
               <Input value={newSuiteDescription} onChange={(e) => setNewSuiteDescription(e.target.value)} placeholder="Brief description of this test suite" className="bg-secondary border-border" />
             </div>
             <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Link Test Cases ({newSuiteTestCases.length} selected)</label>
+              <label className="text-sm text-muted-foreground mb-1 block">Link Test Cases ({newSuiteTestCases.length} selected)</label>
               <div className="max-h-48 overflow-y-auto border border-border rounded-md bg-secondary p-2 space-y-1">
-                {testCases.length === 0 ? <p className="text-gray-500 text-sm text-center py-4">No test cases available</p> : testCases.map((tc) => (
+                {testCases.length === 0 ? <p className="text-muted-foreground text-sm text-center py-4">No test cases available</p> : testCases.map((tc) => (
                   <label key={tc.id} className={cn("flex items-center gap-3 p-2 rounded cursor-pointer transition-colors", newSuiteTestCases.includes(tc.id) ? "bg-amber-500/10 border border-amber-500/30" : "hover:bg-secondary")}>
                     <input type="checkbox" checked={newSuiteTestCases.includes(tc.id)} onChange={(e) => { if (e.target.checked) setNewSuiteTestCases(prev => [...prev, tc.id]); else setNewSuiteTestCases(prev => prev.filter(id => id !== tc.id)); }} className="rounded border-gray-600 text-blue-600 dark:text-primary focus:ring-amber-500" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">{tc.name}</p>
                       <p className="text-xs text-muted-foreground">{tc.priority || 'No priority'} &bull; {tc.automationStatus || 'none'}</p>
                     </div>
-                    {tc.lastResult && <Badge className={cn("text-xs", tc.lastResult === 'passed' ? "bg-green-500/10 text-green-400" : tc.lastResult === 'failed' ? "bg-red-500/10 text-red-400" : "bg-gray-500/10 text-gray-500 dark:text-gray-400")}>{tc.lastResult}</Badge>}
+                    {tc.lastResult && <Badge className={cn("text-xs", tc.lastResult === 'passed' ? "bg-green-500/10 text-green-400" : tc.lastResult === 'failed' ? "bg-red-500/10 text-red-400" : "bg-gray-500/10 text-muted-foreground")}>{tc.lastResult}</Badge>}
                   </label>
                 ))}
               </div>
@@ -360,34 +360,34 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
           <DialogHeader><DialogTitle>Create Release</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Release Name *</label>
+              <label className="text-sm text-muted-foreground mb-1 block">Release Name *</label>
               <Input value={newReleaseName} onChange={(e) => setNewReleaseName(e.target.value)} placeholder="e.g., Sprint 1.0, Q1 2024 Release" className="bg-secondary border-border" />
             </div>
             <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
+              <label className="text-sm text-muted-foreground mb-1 block">Description</label>
               <Input value={newReleaseDescription} onChange={(e) => setNewReleaseDescription(e.target.value)} placeholder="Brief description of this release" className="bg-secondary border-border" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Start Date</label>
+                <label className="text-sm text-muted-foreground mb-1 block">Start Date</label>
                 <Input type="date" value={newReleaseStartDate} onChange={(e) => setNewReleaseStartDate(e.target.value)} className="bg-secondary border-border" />
               </div>
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">End Date</label>
+                <label className="text-sm text-muted-foreground mb-1 block">End Date</label>
                 <Input type="date" value={newReleaseEndDate} onChange={(e) => setNewReleaseEndDate(e.target.value)} className="bg-secondary border-border" />
               </div>
             </div>
             <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Link Test Suites ({newReleaseSuites.length} selected)</label>
+              <label className="text-sm text-muted-foreground mb-1 block">Link Test Suites ({newReleaseSuites.length} selected)</label>
               <div className="max-h-48 overflow-y-auto border border-border rounded-md bg-secondary p-2 space-y-1">
-                {suites.length === 0 ? <p className="text-gray-500 text-sm text-center py-4">No test suites available. Create suites first.</p> : suites.map((suite) => (
+                {suites.length === 0 ? <p className="text-muted-foreground text-sm text-center py-4">No test suites available. Create suites first.</p> : suites.map((suite) => (
                   <label key={suite.id} className={cn("flex items-center gap-3 p-2 rounded cursor-pointer transition-colors", newReleaseSuites.includes(suite.id) ? "bg-amber-500/10 border border-amber-500/30" : "hover:bg-secondary")}>
                     <input type="checkbox" checked={newReleaseSuites.includes(suite.id)} onChange={(e) => { if (e.target.checked) setNewReleaseSuites(prev => [...prev, suite.id]); else setNewReleaseSuites(prev => prev.filter(id => id !== suite.id)); }} className="rounded border-gray-600 text-blue-600 dark:text-primary focus:ring-amber-500" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{suite.name}</p>
-                      <p className="text-xs text-gray-500">{suite.testCaseIds.length} test cases &bull; {suite.schedule || 'on-demand'}</p>
+                      <p className="text-sm font-medium text-foreground truncate">{suite.name}</p>
+                      <p className="text-xs text-muted-foreground">{suite.testCaseIds.length} test cases &bull; {suite.schedule || 'on-demand'}</p>
                     </div>
-                    {suite.lastRun && <div className="text-xs text-gray-500"><span className="text-green-400">{suite.lastRun.passed}&#10003;</span><span className="text-red-400 ml-1">{suite.lastRun.failed}&#10007;</span></div>}
+                    {suite.lastRun && <div className="text-xs text-muted-foreground"><span className="text-green-400">{suite.lastRun.passed}&#10003;</span><span className="text-red-400 ml-1">{suite.lastRun.failed}&#10007;</span></div>}
                   </label>
                 ))}
               </div>
@@ -411,40 +411,40 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
           {editingPlan && (
             <div className="space-y-4">
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Plan Name *</label>
+                <label className="text-sm text-muted-foreground mb-1 block">Plan Name *</label>
                 <Input value={editingPlan.name} onChange={(e) => setEditingPlan({ ...editingPlan, name: e.target.value })} placeholder="Enter plan name" className="bg-secondary border-border" />
               </div>
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
+                <label className="text-sm text-muted-foreground mb-1 block">Description</label>
                 <Input value={editingPlan.description || ''} onChange={(e) => setEditingPlan({ ...editingPlan, description: e.target.value })} placeholder="Enter description" className="bg-secondary border-border" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Status</label>
-                  <select value={editingPlan.status} onChange={(e) => setEditingPlan({ ...editingPlan, status: e.target.value as any })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white">
+                  <label className="text-sm text-muted-foreground mb-1 block">Status</label>
+                  <select value={editingPlan.status} onChange={(e) => setEditingPlan({ ...editingPlan, status: e.target.value as any })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground">
                     <option value="draft">Draft</option><option value="ready">Ready</option><option value="in-progress">In Progress</option><option value="completed">Completed</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Environment</label>
+                  <label className="text-sm text-muted-foreground mb-1 block">Environment</label>
                   <Input value={editingPlan.environment || ''} onChange={(e) => setEditingPlan({ ...editingPlan, environment: e.target.value })} placeholder="e.g., QA, Staging, Prod" className="bg-secondary border-border" />
                 </div>
               </div>
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Link Test Suites ({editingPlan.suiteIds.length} selected)</label>
+                <label className="text-sm text-muted-foreground mb-1 block">Link Test Suites ({editingPlan.suiteIds.length} selected)</label>
                 <div className="max-h-40 overflow-y-auto border border-border rounded-md bg-secondary p-2 space-y-1">
-                  {suites.length === 0 ? <p className="text-gray-500 text-sm text-center py-2">No test suites available</p> : suites.map((suite) => (
+                  {suites.length === 0 ? <p className="text-muted-foreground text-sm text-center py-2">No test suites available</p> : suites.map((suite) => (
                     <label key={suite.id} className={cn("flex items-center gap-3 p-2 rounded cursor-pointer transition-colors", editingPlan.suiteIds.includes(suite.id) ? "bg-amber-500/10 border border-amber-500/30" : "hover:bg-secondary")}>
                       <input type="checkbox" checked={editingPlan.suiteIds.includes(suite.id)} onChange={(e) => { if (e.target.checked) setEditingPlan({ ...editingPlan, suiteIds: [...editingPlan.suiteIds, suite.id] }); else setEditingPlan({ ...editingPlan, suiteIds: editingPlan.suiteIds.filter(id => id !== suite.id) }); }} className="rounded border-gray-600 text-blue-600 dark:text-primary focus:ring-amber-500" />
-                      <div className="flex-1 min-w-0"><p className="text-sm font-medium text-gray-900 dark:text-white truncate">{suite.name}</p><p className="text-xs text-gray-500">{suite.testCaseIds.length} test cases</p></div>
+                      <div className="flex-1 min-w-0"><p className="text-sm font-medium text-foreground truncate">{suite.name}</p><p className="text-xs text-muted-foreground">{suite.testCaseIds.length} test cases</p></div>
                     </label>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Link Individual Test Cases ({editingPlan.testCaseIds.length} selected)</label>
+                <label className="text-sm text-muted-foreground mb-1 block">Link Individual Test Cases ({editingPlan.testCaseIds.length} selected)</label>
                 <div className="max-h-40 overflow-y-auto border border-border rounded-md bg-secondary p-2 space-y-1">
-                  {testCases.length === 0 ? <p className="text-gray-500 text-sm text-center py-2">No test cases available</p> : testCases.slice(0, 50).map((tc) => (
+                  {testCases.length === 0 ? <p className="text-muted-foreground text-sm text-center py-2">No test cases available</p> : testCases.slice(0, 50).map((tc) => (
                     <label key={tc.id} className={cn("flex items-center gap-3 p-2 rounded cursor-pointer transition-colors", editingPlan.testCaseIds.includes(tc.id) ? "bg-amber-500/10 border border-amber-500/30" : "hover:bg-secondary")}>
                       <input type="checkbox" checked={editingPlan.testCaseIds.includes(tc.id)} onChange={(e) => { if (e.target.checked) setEditingPlan({ ...editingPlan, testCaseIds: [...editingPlan.testCaseIds, tc.id] }); else setEditingPlan({ ...editingPlan, testCaseIds: editingPlan.testCaseIds.filter(id => id !== tc.id) }); }} className="rounded border-gray-600 text-blue-600 dark:text-primary focus:ring-amber-500" />
                       <span className="text-sm text-foreground truncate">{tc.name}</span>
@@ -473,26 +473,26 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
                 {selectedRun.status === 'running' && <Clock className="w-8 h-8 text-blue-600 dark:text-primary animate-pulse" />}
                 {selectedRun.status === 'pending' && <Clock className="w-8 h-8 text-gray-500" />}
                 {selectedRun.status === 'blocked' && <AlertCircle className="w-8 h-8 text-yellow-500" />}
-                <div><h3 className="font-semibold text-lg">{selectedRun.name}</h3><p className="text-sm text-gray-500 dark:text-gray-400">{selectedRun.mode} execution</p></div>
+                <div><h3 className="font-semibold text-lg">{selectedRun.name}</h3><p className="text-sm text-muted-foreground">{selectedRun.mode} execution</p></div>
               </div>
               <div className="grid grid-cols-2 gap-4 p-4 bg-secondary rounded-lg">
-                <div><p className="text-xs text-gray-500 mb-1">Status</p><Badge className={cn(selectedRun.status === 'passed' && "bg-green-500/10 text-green-400", selectedRun.status === 'failed' && "bg-red-500/10 text-red-400", selectedRun.status === 'running' && "bg-amber-500/10 text-blue-600 dark:text-primary", selectedRun.status === 'pending' && "bg-gray-500/10 text-gray-500 dark:text-gray-400", selectedRun.status === 'blocked' && "bg-yellow-500/10 text-yellow-400")}>{selectedRun.status}</Badge></div>
-                <div><p className="text-xs text-gray-500 mb-1">Mode</p><Badge className={cn(selectedRun.mode === 'automated' ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-blue-600 dark:text-primary")}>{selectedRun.mode}</Badge></div>
-                <div><p className="text-xs text-gray-500 mb-1">Started</p><p className="text-sm">{new Date(selectedRun.startTime).toLocaleString()}</p></div>
-                <div><p className="text-xs text-gray-500 mb-1">Ended</p><p className="text-sm">{selectedRun.endTime ? new Date(selectedRun.endTime).toLocaleString() : 'In progress'}</p></div>
+                <div><p className="text-xs text-muted-foreground mb-1">Status</p><Badge className={cn(selectedRun.status === 'passed' && "bg-green-500/10 text-green-400", selectedRun.status === 'failed' && "bg-red-500/10 text-red-400", selectedRun.status === 'running' && "bg-amber-500/10 text-blue-600 dark:text-primary", selectedRun.status === 'pending' && "bg-gray-500/10 text-muted-foreground", selectedRun.status === 'blocked' && "bg-yellow-500/10 text-yellow-400")}>{selectedRun.status}</Badge></div>
+                <div><p className="text-xs text-muted-foreground mb-1">Mode</p><Badge className={cn(selectedRun.mode === 'automated' ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-blue-600 dark:text-primary")}>{selectedRun.mode}</Badge></div>
+                <div><p className="text-xs text-muted-foreground mb-1">Started</p><p className="text-sm">{new Date(selectedRun.startTime).toLocaleString()}</p></div>
+                <div><p className="text-xs text-muted-foreground mb-1">Ended</p><p className="text-sm">{selectedRun.endTime ? new Date(selectedRun.endTime).toLocaleString() : 'In progress'}</p></div>
               </div>
               {selectedRun.results && (
                 <div className="p-4 bg-secondary rounded-lg">
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Results</p>
+                  <p className="text-sm text-muted-foreground mb-3">Results</p>
                   <div className="flex items-center justify-around">
-                    <div className="text-center"><p className="text-2xl font-bold text-green-400">{selectedRun.results.passed}</p><p className="text-xs text-gray-500">Passed</p></div>
-                    <div className="text-center"><p className="text-2xl font-bold text-red-400">{selectedRun.results.failed}</p><p className="text-xs text-gray-500">Failed</p></div>
-                    <div className="text-center"><p className="text-2xl font-bold text-gray-500 dark:text-gray-400">{selectedRun.results.skipped}</p><p className="text-xs text-gray-500">Skipped</p></div>
+                    <div className="text-center"><p className="text-2xl font-bold text-green-400">{selectedRun.results.passed}</p><p className="text-xs text-muted-foreground">Passed</p></div>
+                    <div className="text-center"><p className="text-2xl font-bold text-red-400">{selectedRun.results.failed}</p><p className="text-xs text-muted-foreground">Failed</p></div>
+                    <div className="text-center"><p className="text-2xl font-bold text-muted-foreground">{selectedRun.results.skipped}</p><p className="text-xs text-muted-foreground">Skipped</p></div>
                   </div>
                 </div>
               )}
-              {selectedRun.planId && <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400"><Target className="w-4 h-4" />Plan: {testPlans.find(p => p.id === selectedRun.planId)?.name || 'Unknown'}</div>}
-              {selectedRun.releaseId && <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400"><Rocket className="w-4 h-4" />Release: {releases.find(r => r.id === selectedRun.releaseId)?.name || 'Unknown'}</div>}
+              {selectedRun.planId && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Target className="w-4 h-4" />Plan: {testPlans.find(p => p.id === selectedRun.planId)?.name || 'Unknown'}</div>}
+              {selectedRun.releaseId && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Rocket className="w-4 h-4" />Release: {releases.find(r => r.id === selectedRun.releaseId)?.name || 'Unknown'}</div>}
             </div>
           )}
           <DialogFooter>
@@ -510,17 +510,17 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
           <DialogHeader><DialogTitle>Link Plan to Release</DialogTitle></DialogHeader>
           {editingPlan && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Select a release to link <strong>{editingPlan.name}</strong> to:</p>
+              <p className="text-sm text-muted-foreground">Select a release to link <strong>{editingPlan.name}</strong> to:</p>
               <div className="space-y-2">
-                {releases.length === 0 ? <p className="text-gray-500 text-sm text-center py-4">No releases available. Create a release first.</p> : releases.map((release) => (
+                {releases.length === 0 ? <p className="text-muted-foreground text-sm text-center py-4">No releases available. Create a release first.</p> : releases.map((release) => (
                   <button key={release.id} onClick={() => onLinkPlanToRelease(release.id)} className={cn("w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left", editingPlan.releaseId === release.id ? "bg-primary/10 border-primary/30" : "bg-secondary border-border hover:border-blue-500/50 dark:hover:border-amber-500/30")}>
                     <Rocket className="w-5 h-5 text-purple-400" />
-                    <div className="flex-1"><p className="font-medium text-gray-900 dark:text-white">{release.name}</p><p className="text-xs text-gray-500">{release.status} &bull; {release.suiteIds.length} suites</p></div>
+                    <div className="flex-1"><p className="font-medium text-gray-900 dark:text-white">{release.name}</p><p className="text-xs text-muted-foreground">{release.status} &bull; {release.suiteIds.length} suites</p></div>
                     {editingPlan.releaseId === release.id && <CheckCircle className="w-5 h-5 text-blue-600 dark:text-primary" />}
                   </button>
                 ))}
               </div>
-              {editingPlan.releaseId && <Button variant="outline" size="sm" className="w-full border-border text-gray-500 dark:text-gray-400" onClick={onUnlinkPlanFromRelease}>Remove Link</Button>}
+              {editingPlan.releaseId && <Button variant="outline" size="sm" className="w-full border-border text-muted-foreground" onClick={onUnlinkPlanFromRelease}>Remove Link</Button>}
             </div>
           )}
           <DialogFooter>
@@ -534,11 +534,11 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
         <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white sm:max-w-[500px]">
           <DialogHeader><DialogTitle>Create Test Case</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div><label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Test Name *</label><Input value={newTestName} onChange={(e) => setNewTestName(e.target.value)} placeholder="e.g., User Login with Valid Credentials" className="bg-secondary border-border" autoFocus /></div>
-            <div><label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label><Input value={newTestDescription} onChange={(e) => setNewTestDescription(e.target.value)} placeholder="Brief description of what this test validates" className="bg-secondary border-border" /></div>
+            <div><label className="text-sm text-muted-foreground mb-1 block">Test Name *</label><Input value={newTestName} onChange={(e) => setNewTestName(e.target.value)} placeholder="e.g., User Login with Valid Credentials" className="bg-secondary border-border" autoFocus /></div>
+            <div><label className="text-sm text-muted-foreground mb-1 block">Description</label><Input value={newTestDescription} onChange={(e) => setNewTestDescription(e.target.value)} placeholder="Brief description of what this test validates" className="bg-secondary border-border" /></div>
             <div className="grid grid-cols-2 gap-4">
-              <div><label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Priority</label><select value={newTestPriority} onChange={(e) => setNewTestPriority(e.target.value as any)} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
-              <div><label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Folder</label><select value={newTestFolder} onChange={(e) => setNewTestFolder(e.target.value)} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"><option value="root">Test Repository (Root)</option>{folders.filter(f => f.id !== 'root').map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
+              <div><label className="text-sm text-muted-foreground mb-1 block">Priority</label><select value={newTestPriority} onChange={(e) => setNewTestPriority(e.target.value as any)} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
+              <div><label className="text-sm text-muted-foreground mb-1 block">Folder</label><select value={newTestFolder} onChange={(e) => setNewTestFolder(e.target.value)} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"><option value="root">Test Repository (Root)</option>{folders.filter(f => f.id !== 'root').map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
             </div>
           </div>
           <DialogFooter>
@@ -556,17 +556,17 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
             const apiTest = isApiTest(testCaseToRun);
             return (
               <div className="space-y-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400">How would you like to run <strong className="text-gray-900 dark:text-white">{testCaseToRun.name}</strong>?</p>
+                <p className="text-sm text-muted-foreground">How would you like to run <strong className="text-gray-900 dark:text-white">{testCaseToRun.name}</strong>?</p>
                 {apiTest && <Badge variant="secondary" className="text-xs">API test -- runs via API Testing engine</Badge>}
                 {apiTest ? (
                   <button onClick={async () => { await runApiTestFromRepository(testCaseToRun); }} className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-green-500/50 hover:bg-green-900/20 transition-all text-left">
                     <div className="p-2 rounded-lg bg-green-600"><Play className="w-5 h-5 text-white" /></div>
-                    <div className="flex-1"><p className="font-medium text-white">Quick Run (Execute Now)</p><p className="text-xs text-gray-500">Runs this API test and shows result here</p></div>
+                    <div className="flex-1"><p className="font-medium text-foreground">Quick Run (Execute Now)</p><p className="text-xs text-muted-foreground">Runs this API test and shows result here</p></div>
                   </button>
                 ) : (
                   <button onClick={() => onQuickRunTest(testCaseToRun)} className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-green-500/50 hover:bg-green-900/20 transition-all text-left">
                     <div className="p-2 rounded-lg bg-green-600"><Play className="w-5 h-5 text-white" /></div>
-                    <div className="flex-1"><p className="font-medium text-white">Quick Run (Execute Now)</p><p className="text-xs text-gray-500">Opens builder and runs test immediately</p></div>
+                    <div className="flex-1"><p className="font-medium text-foreground">Quick Run (Execute Now)</p><p className="text-xs text-muted-foreground">Opens builder and runs test immediately</p></div>
                   </button>
                 )}
                 {apiRunResult && (
@@ -578,17 +578,17 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
                 )}
                 <button onClick={() => onOpenInBuilder(testCaseToRun)} className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-amber-500/50 hover:bg-accent transition-all text-left">
                   <div className="p-2 rounded-lg bg-blue-600"><Pencil className="w-5 h-5 text-white" /></div>
-                  <div className="flex-1"><p className="font-medium text-white">Open in Builder</p><p className="text-xs text-gray-500">Edit steps in the visual builder, then run when ready</p></div>
+                  <div className="flex-1"><p className="font-medium text-foreground">Open in Builder</p><p className="text-xs text-muted-foreground">Edit steps in the visual builder, then run when ready</p></div>
                 </button>
                 {apiTest && (
                   <button onClick={onOpenInApiTesting} className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-cyan-500/50 hover:bg-cyan-900/20 transition-all text-left">
                     <div className="p-2 rounded-lg bg-cyan-600"><Zap className="w-5 h-5 text-white" /></div>
-                    <div className="flex-1"><p className="font-medium text-white">Open in API Testing</p><p className="text-xs text-gray-500">Edit request, assertions, and run in API tab</p></div>
+                    <div className="flex-1"><p className="font-medium text-foreground">Open in API Testing</p><p className="text-xs text-muted-foreground">Edit request, assertions, and run in API tab</p></div>
                   </button>
                 )}
                 <button onClick={() => onAddToTestRun(testCaseToRun)} className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-purple-500/50 hover:bg-purple-900/20 transition-all text-left">
                   <div className="p-2 rounded-lg bg-purple-600"><Plus className="w-5 h-5 text-white" /></div>
-                  <div className="flex-1"><p className="font-medium text-white">Add to Test Run</p><p className="text-xs text-gray-500">Create or add to a formal test run with more cases</p></div>
+                  <div className="flex-1"><p className="font-medium text-foreground">Add to Test Run</p><p className="text-xs text-muted-foreground">Create or add to a formal test run with more cases</p></div>
                 </button>
               </div>
             );
@@ -602,49 +602,49 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
         <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Create Test Run</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div><label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Run Name *</label><Input value={newRunName} onChange={(e) => setNewRunName(e.target.value)} placeholder="e.g., Smoke Test - Sprint 1" className="bg-secondary border-border" /></div>
+            <div><label className="text-sm text-muted-foreground mb-1 block">Run Name *</label><Input value={newRunName} onChange={(e) => setNewRunName(e.target.value)} placeholder="e.g., Smoke Test - Sprint 1" className="bg-secondary border-border" /></div>
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Test Mode</label>
-                <select value={newRunMode} onChange={(e) => { const mode = e.target.value as 'automated' | 'manual'; setNewRunMode(mode); if (mode === 'manual') setNewRunExecutionMode('sequential'); }} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white">
+                <label className="text-sm text-muted-foreground mb-1 block">Test Mode</label>
+                <select value={newRunMode} onChange={(e) => { const mode = e.target.value as 'automated' | 'manual'; setNewRunMode(mode); if (mode === 'manual') setNewRunExecutionMode('sequential'); }} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground">
                   <option value="automated">Automated</option><option value="manual">Manual (Step-by-Step)</option>
                 </select>
               </div>
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Execution Order</label>
-                <select value={newRunExecutionMode} onChange={(e) => setNewRunExecutionMode(e.target.value as any)} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white" disabled={newRunMode === 'manual'}>
+                <label className="text-sm text-muted-foreground mb-1 block">Execution Order</label>
+                <select value={newRunExecutionMode} onChange={(e) => setNewRunExecutionMode(e.target.value as any)} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground" disabled={newRunMode === 'manual'}>
                   <option value="sequential">Sequential (one by one)</option>{newRunMode === 'automated' && <option value="parallel">Parallel (all at once)</option>}
                 </select>
-                {newRunMode === 'manual' && <p className="text-xs text-gray-500 mt-1">Manual tests run sequentially</p>}
+                {newRunMode === 'manual' && <p className="text-xs text-muted-foreground mt-1">Manual tests run sequentially</p>}
               </div>
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Link to Release</label>
-                <select value={newRunReleaseId} onChange={(e) => setNewRunReleaseId(e.target.value)} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white">
+                <label className="text-sm text-muted-foreground mb-1 block">Link to Release</label>
+                <select value={newRunReleaseId} onChange={(e) => setNewRunReleaseId(e.target.value)} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground">
                   <option value="">No Release</option>{releases.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </div>
             </div>
             {newRunExecutionMode === 'parallel' && <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-blue-600 dark:text-primary"><strong>Note:</strong> Parallel execution runs tests in headless mode. Best for independent tests that don&apos;t share state.</div>}
             <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Select Test Cases ({newRunTestCases.length} selected)</label>
-              <div className="relative mb-2"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" /><Input value={newRunTestSearch} onChange={(e) => setNewRunTestSearch(e.target.value)} placeholder="Search by test ID or name..." className="pl-10 bg-secondary border-border text-white" /></div>
+              <label className="text-sm text-muted-foreground mb-1 block">Select Test Cases ({newRunTestCases.length} selected)</label>
+              <div className="relative mb-2"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" /><Input value={newRunTestSearch} onChange={(e) => setNewRunTestSearch(e.target.value)} placeholder="Search by test ID or name..." className="pl-10 bg-secondary border-border" /></div>
               <div className="max-h-56 overflow-y-auto border border-border rounded-md bg-secondary p-2 space-y-1">
-                {testCases.length === 0 ? <p className="text-gray-500 text-sm text-center py-4">No test cases available</p> : (() => {
+                {testCases.length === 0 ? <p className="text-muted-foreground text-sm text-center py-4">No test cases available</p> : (() => {
                   const searchLower = newRunTestSearch.toLowerCase();
                   const filtered = searchLower ? testCases.filter(tc => tc.id.toLowerCase().includes(searchLower) || tc.name.toLowerCase().includes(searchLower)) : testCases.slice(0, 50);
-                  if (filtered.length === 0) return <p className="text-gray-500 text-sm text-center py-4">No test cases match &quot;{newRunTestSearch}&quot;</p>;
+                  if (filtered.length === 0) return <p className="text-muted-foreground text-sm text-center py-4">No test cases match &quot;{newRunTestSearch}&quot;</p>;
                   return filtered.map((tc) => (
                     <label key={tc.id} className={cn("flex items-center gap-3 p-2 rounded cursor-pointer transition-colors", newRunTestCases.includes(tc.id) ? "bg-amber-500/10 border border-amber-500/30" : "hover:bg-secondary")}>
                       <input type="checkbox" checked={newRunTestCases.includes(tc.id)} onChange={(e) => { if (e.target.checked) setNewRunTestCases(prev => [...prev, tc.id]); else setNewRunTestCases(prev => prev.filter(id => id !== tc.id)); }} className="rounded border-gray-600 text-blue-600 dark:text-primary focus:ring-amber-500" />
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2"><p className="text-sm font-medium text-gray-900 dark:text-white truncate">{tc.name}</p><code className="text-[10px] text-gray-500 bg-secondary px-1 rounded">{tc.id.slice(0, 8)}</code></div>
-                        <p className="text-xs text-gray-500">{tc.priority || 'medium'} &bull; {tc.automationStatus || 'manual'}</p>
+                        <div className="flex items-center gap-2"><p className="text-sm font-medium text-foreground truncate">{tc.name}</p><code className="text-[10px] text-gray-500 bg-secondary px-1 rounded">{tc.id.slice(0, 8)}</code></div>
+                        <p className="text-xs text-muted-foreground">{tc.priority || 'medium'} &bull; {tc.automationStatus || 'manual'}</p>
                       </div>
                     </label>
                   ));
                 })()}
               </div>
-              {testCases.length > 50 && !newRunTestSearch && <p className="text-xs text-gray-500 mt-1">Showing first 50 tests. Use search to find more.</p>}
+              {testCases.length > 50 && !newRunTestSearch && <p className="text-xs text-muted-foreground mt-1">Showing first 50 tests. Use search to find more.</p>}
               <div className="flex gap-2 mt-2">
                 <Button variant="outline" size="sm" className="text-xs border-border" onClick={() => { const s = newRunTestSearch.toLowerCase(); const sel = s ? testCases.filter(tc => tc.id.toLowerCase().includes(s) || tc.name.toLowerCase().includes(s)) : testCases.slice(0, 50); setNewRunTestCases(sel.map(tc => tc.id)); }}>Select All Visible</Button>
                 <Button variant="outline" size="sm" className="text-xs border-border" onClick={() => setNewRunTestCases([])}>Clear</Button>
@@ -668,20 +668,20 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
           {editingTestCase && (
             <div className="space-y-4">
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Test Name *</label>
+                <label className="text-sm text-muted-foreground mb-1 block">Test Name *</label>
                 <textarea value={editingTestCase.name} onChange={(e) => setEditingTestCase({ ...editingTestCase, name: e.target.value })} placeholder="Test case name" rows={2} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500" style={{ minHeight: '42px', maxHeight: '100px' }} />
                 {editingTestCase.name?.length > 50 && <p className="text-xs text-blue-600 dark:text-primary mt-1">{editingTestCase.name.length} characters - Consider shortening for better readability</p>}
               </div>
               <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
+                <label className="text-sm text-muted-foreground mb-1 block">Description</label>
                 <textarea value={editingTestCase.description || ''} onChange={(e) => setEditingTestCase({ ...editingTestCase, description: e.target.value })} placeholder="Brief description of what this test case validates" rows={2} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500" />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Priority</label><select value={editingTestCase.priority || 'medium'} onChange={(e) => setEditingTestCase({ ...editingTestCase, priority: e.target.value as any })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
-                <div><label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Status</label><select value={editingTestCase.status || 'draft'} onChange={(e) => setEditingTestCase({ ...editingTestCase, status: e.target.value as any })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"><option value="draft">Draft</option><option value="ready">Ready</option><option value="approved">Approved</option><option value="deprecated">Deprecated</option></select></div>
+                <div><label className="text-sm text-muted-foreground mb-1 block">Priority</label><select value={editingTestCase.priority || 'medium'} onChange={(e) => setEditingTestCase({ ...editingTestCase, priority: e.target.value as any })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
+                <div><label className="text-sm text-muted-foreground mb-1 block">Status</label><select value={editingTestCase.status || 'draft'} onChange={(e) => setEditingTestCase({ ...editingTestCase, status: e.target.value as any })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"><option value="draft">Draft</option><option value="ready">Ready</option><option value="approved">Approved</option><option value="deprecated">Deprecated</option></select></div>
               </div>
-              <div><label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Folder</label><select value={editingTestCase.folderId || 'root'} onChange={(e) => setEditingTestCase({ ...editingTestCase, folderId: e.target.value === 'root' ? null : e.target.value })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"><option value="root">Test Repository (Root)</option>{folders.filter(f => f.id !== 'root').map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
-              <div><label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Tags (comma separated)</label><Input value={editingTestCase.tags?.join(', ') || ''} onChange={(e) => setEditingTestCase({ ...editingTestCase, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })} placeholder="e.g., smoke, regression, login" className="bg-secondary border-border" /></div>
+              <div><label className="text-sm text-muted-foreground mb-1 block">Folder</label><select value={editingTestCase.folderId || 'root'} onChange={(e) => setEditingTestCase({ ...editingTestCase, folderId: e.target.value === 'root' ? null : e.target.value })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"><option value="root">Test Repository (Root)</option>{folders.filter(f => f.id !== 'root').map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
+              <div><label className="text-sm text-muted-foreground mb-1 block">Tags (comma separated)</label><Input value={editingTestCase.tags?.join(', ') || ''} onChange={(e) => setEditingTestCase({ ...editingTestCase, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })} placeholder="e.g., smoke, regression, login" className="bg-secondary border-border" /></div>
             </div>
           )}
           <DialogFooter>

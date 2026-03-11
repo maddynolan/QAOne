@@ -1,3 +1,6 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the Autonomous Explorer / Flowmap system which is unused.
+# Router registration commented out in main.py.
 """
 Complete Exploration Workflow API
 Runs full workflow: Exploration → Defect Detection → Test Generation → Test Execution → Reporting

@@ -1,3 +1,6 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# The old 8-agent registry system is unused. Agent execution is handled by
+# dedicated services (AgenticOrchestrator, BlazeExplorer, etc.) instead.
 """
 Agent Registry - Registration and discovery system for agents
 Phase 1.2: Agent Orchestrator Enhancement

@@ -423,10 +423,10 @@ ${report.map(r => `
   
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'pass': return <CheckCircle className="w-4 h-4 text-green-400" />;
-      case 'fail': return <XCircle className="w-4 h-4 text-red-400" />;
-      case 'running': return <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />;
-      case 'blocked': return <AlertTriangle className="w-4 h-4 text-yellow-400" />;
+      case 'pass': return <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />;
+      case 'fail': return <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />;
+      case 'running': return <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin" />;
+      case 'blocked': return <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />;
       case 'skipped': return <AlertTriangle className="w-4 h-4 text-slate-400" />;
       default: return <Clock className="w-4 h-4 text-slate-400" />;
     }
@@ -444,9 +444,9 @@ ${report.map(r => `
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'high': return 'text-red-400 border-red-400/30';
-      case 'medium': return 'text-yellow-400 border-yellow-400/30';
-      case 'low': return 'text-green-400 border-green-400/30';
+      case 'high': return 'text-red-600 dark:text-red-400 border-red-400/30';
+      case 'medium': return 'text-yellow-600 dark:text-yellow-400 border-yellow-400/30';
+      case 'low': return 'text-green-600 dark:text-green-400 border-green-400/30';
       default: return 'text-slate-400 border-slate-400/30';
     }
   };
@@ -562,7 +562,7 @@ ${report.map(r => `
                         size="sm"
                         variant="outline"
                         onClick={() => deleteTestCase(selectedTest.id)}
-                        className="gap-1.5 text-red-400 border-red-400/30 hover:bg-red-500/20"
+                        className="gap-1.5 text-red-600 dark:text-red-400 border-red-400/30 hover:bg-red-500/20"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
@@ -751,7 +751,7 @@ Verify the opportunity was created`}
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-foreground text-sm flex items-center gap-2">
-                    <Play className="w-4 h-4 text-green-400" />
+                    <Play className="w-4 h-4 text-green-600 dark:text-green-400" />
                     Executing: {selectedTest.title}
                   </CardTitle>
                   <Button
@@ -786,7 +786,7 @@ Verify the opportunity was created`}
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3">
                           <span className={`text-lg font-bold ${
-                            idx === currentStepIndex ? 'text-blue-400' : 'text-slate-500'
+                            idx === currentStepIndex ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500'
                           }`}>
                             {idx + 1}
                           </span>

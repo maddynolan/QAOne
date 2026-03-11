@@ -170,7 +170,7 @@ export function SalesforceContextPanel({
             {/* Current Context */}
             <CollapsibleSection
               title="Current Context"
-              icon={<Target className="w-4 h-4 text-blue-400" />}
+              icon={<Target className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
               isExpanded={expandedSections.has('context')}
               onToggle={() => toggleSection('context')}
             >
@@ -216,11 +216,11 @@ export function SalesforceContextPanel({
             {context?.validationRules && context.validationRules.length > 0 && (
               <CollapsibleSection
                 title={`Validation Rules (${context.validationRules.length})`}
-                icon={<Shield className="w-4 h-4 text-yellow-400" />}
+                icon={<Shield className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />}
                 isExpanded={expandedSections.has('rules')}
                 onToggle={() => toggleSection('rules')}
                 badge={
-                  <Badge className="bg-yellow-600/20 text-yellow-400 text-xs">
+                  <Badge className="bg-yellow-600/20 text-yellow-600 dark:text-yellow-400 text-xs">
                     Active
                   </Badge>
                 }
@@ -249,7 +249,7 @@ export function SalesforceContextPanel({
             {context?.flows && context.flows.length > 0 && (
               <CollapsibleSection
                 title={`Flows (${context.flows.length})`}
-                icon={<Zap className="w-4 h-4 text-green-400" />}
+                icon={<Zap className="w-4 h-4 text-green-600 dark:text-green-400" />}
                 isExpanded={expandedSections.has('flows')}
                 onToggle={() => toggleSection('flows')}
               >
@@ -286,7 +286,7 @@ export function SalesforceContextPanel({
             {context?.currentObject && (
               <CollapsibleSection
                 title="Test Coverage"
-                icon={<Target className="w-4 h-4 text-cyan-400" />}
+                icon={<Target className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />}
                 isExpanded={expandedSections.has('coverage')}
                 onToggle={() => toggleSection('coverage')}
               >
@@ -448,7 +448,7 @@ function FlowCard({ flow }: FlowCardProps) {
           <p className="text-xs font-medium text-foreground truncate">{flow.name}</p>
           <p className="text-xs text-slate-500">{flow.type}</p>
         </div>
-        <Badge variant="outline" className="text-green-400 border-green-400/30 text-xs shrink-0">
+        <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-400/30 text-xs shrink-0">
           Active
         </Badge>
       </div>
@@ -472,8 +472,8 @@ function SuggestionCard({ suggestion, onAdd, onCopy }: SuggestionCardProps) {
   };
 
   const priorityColors = {
-    high: 'text-red-400',
-    medium: 'text-yellow-400',
+    high: 'text-red-600 dark:text-red-400',
+    medium: 'text-yellow-600 dark:text-yellow-400',
     low: 'text-muted-foreground',
   };
 
@@ -504,7 +504,7 @@ function SuggestionCard({ suggestion, onAdd, onCopy }: SuggestionCardProps) {
             size="sm"
             variant="ghost"
             onClick={onAdd}
-            className="h-6 px-1.5 text-green-400 hover:text-green-300"
+            className="h-6 px-1.5 text-green-600 dark:text-green-400 hover:text-green-300"
           >
             <Plus className="w-3 h-3" />
           </Button>

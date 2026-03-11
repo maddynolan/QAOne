@@ -113,7 +113,7 @@ export async function loadEnvironments(
     if (envsToMigrate.length > 0) {
       (async () => {
         for (const env of envsToMigrate.slice(0, 5)) {
-          try { await saveEnvironmentToDb(env); } catch {}
+          try { await saveEnvironmentToDb(env); } catch (err) { console.warn('[EnvPersistence] DB migration failed for env:', env.name, err); }
         }
       })();
     }

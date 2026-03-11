@@ -184,10 +184,10 @@ export function SalesforceFieldAnalyzer({ isConnected }: SalesforceFieldAnalyzer
   }, [analysisResult]);
 
   const getPopulationColor = (rate: number) => {
-    if (rate >= 80) return 'text-green-400';
-    if (rate >= 50) return 'text-yellow-400';
-    if (rate >= 20) return 'text-orange-400';
-    return 'text-red-400';
+    if (rate >= 80) return 'text-green-600 dark:text-green-400';
+    if (rate >= 50) return 'text-yellow-600 dark:text-yellow-400';
+    if (rate >= 20) return 'text-orange-600 dark:text-orange-400';
+    return 'text-red-600 dark:text-red-400';
   };
 
   const getPopulationBgColor = (rate: number) => {
@@ -299,20 +299,20 @@ export function SalesforceFieldAnalyzer({ isConnected }: SalesforceFieldAnalyzer
           </Card>
           <Card className="bg-green-500/10 border-green-500/30">
             <CardContent className="pt-4 text-center">
-              <div className="text-2xl font-bold text-green-400">{summaryStats.wellPopulated}</div>
-              <div className="text-xs text-green-400">Well Populated (≥80%)</div>
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">{summaryStats.wellPopulated}</div>
+              <div className="text-xs text-green-600 dark:text-green-400">Well Populated (≥80%)</div>
             </CardContent>
           </Card>
           <Card className="bg-yellow-500/10 border-yellow-500/30">
             <CardContent className="pt-4 text-center">
-              <div className="text-2xl font-bold text-yellow-400">{summaryStats.partiallyPopulated}</div>
-              <div className="text-xs text-yellow-400">Partial (20-80%)</div>
+              <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{summaryStats.partiallyPopulated}</div>
+              <div className="text-xs text-yellow-600 dark:text-yellow-400">Partial (20-80%)</div>
             </CardContent>
           </Card>
           <Card className="bg-red-500/10 border-red-500/30">
             <CardContent className="pt-4 text-center">
-              <div className="text-2xl font-bold text-red-400">{summaryStats.sparselyPopulated}</div>
-              <div className="text-xs text-red-400">Sparse (&lt;20%)</div>
+              <div className="text-2xl font-bold text-red-600 dark:text-red-400">{summaryStats.sparselyPopulated}</div>
+              <div className="text-xs text-red-600 dark:text-red-400">Sparse (&lt;20%)</div>
             </CardContent>
           </Card>
         </div>
@@ -370,18 +370,18 @@ export function SalesforceFieldAnalyzer({ isConnected }: SalesforceFieldAnalyzer
                       <span className="text-foreground font-medium">{field.fieldLabel}</span>
                       <span className="text-slate-500 text-xs font-mono">{field.fieldName}</span>
                       {field.isRequired && (
-                        <Badge variant="outline" className="text-[10px] border-red-500/50 text-red-400">
+                        <Badge variant="outline" className="text-[10px] border-red-500/50 text-red-600 dark:text-red-400">
                           Required
                         </Badge>
                       )}
                       {field.isCustom && (
-                        <Badge variant="outline" className="text-[10px] border-orange-500/50 text-orange-400">
+                        <Badge variant="outline" className="text-[10px] border-orange-500/50 text-orange-600 dark:text-orange-400">
                           Custom
                         </Badge>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-[10px] text-cyan-300 border-cyan-500/50">
+                      <Badge variant="outline" className="text-[10px] text-cyan-700 dark:text-cyan-300 border-cyan-500/50">
                         {field.fieldType}
                       </Badge>
                       <span className={`text-sm font-bold ${getPopulationColor(field.populationRate)}`}>

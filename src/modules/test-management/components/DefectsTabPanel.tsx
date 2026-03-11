@@ -45,7 +45,7 @@ export function DefectsTabPanel({
           <div className="text-center py-16">
             <Bug className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
             <h2 className="text-xl font-semibold mb-2">No Defects Found</h2>
-            <p className="text-gray-500 dark:text-gray-400 mb-6">Track bugs and issues linked to your test runs</p>
+            <p className="text-muted-foreground mb-6">Track bugs and issues linked to your test runs</p>
             <Button
               onClick={onCreateDefect}
               className="bg-primary hover:bg-primary/90 text-primary-foreground"
@@ -87,7 +87,7 @@ export function DefectsTabPanel({
                             defect.severity === 'critical' && "bg-red-500/20 text-red-400 border-red-500/50",
                             defect.severity === 'major' && "bg-orange-500/20 text-orange-400 border-orange-500/50",
                             defect.severity === 'minor' && "bg-yellow-500/20 text-yellow-400 border-yellow-500/50",
-                            defect.severity === 'trivial' && "bg-gray-500/20 text-gray-500 dark:text-gray-400 border-gray-500/50",
+                            defect.severity === 'trivial' && "bg-gray-500/20 text-muted-foreground border-gray-500/50",
                           )}>
                             {defect.severity}
                           </Badge>
@@ -100,7 +100,7 @@ export function DefectsTabPanel({
                             defect.status === 'verified' && "bg-cyan-500/20 text-cyan-400",
                             defect.status === 'closed' && "bg-green-500/20 text-green-400",
                             defect.status === 'reopened' && "bg-red-500/20 text-red-400",
-                            defect.status === 'deferred' && "bg-gray-500/20 text-gray-500 dark:text-gray-400",
+                            defect.status === 'deferred' && "bg-gray-500/20 text-muted-foreground",
                           )}>
                             {defect.status}
                           </Badge>
@@ -108,7 +108,7 @@ export function DefectsTabPanel({
                         </div>
                         <h3 className="font-medium text-foreground mb-1">{defect.title}</h3>
                         {defect.description && (
-                          <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">{defect.description}</p>
+                          <p className="text-sm text-muted-foreground line-clamp-2">{defect.description}</p>
                         )}
                         <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                           {defect.assignedTo && (
@@ -147,11 +147,11 @@ export function DefectsTabPanel({
                         </Badge>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 dark:text-gray-400">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
                               <MoreVertical className="w-4 h-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border">
+                          <DropdownMenuContent align="end" className="bg-popover border-border">
                             <DropdownMenuItem
                               className="text-foreground focus:bg-secondary"
                               onClick={() => onEditDefect(defect)}

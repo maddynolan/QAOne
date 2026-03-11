@@ -224,12 +224,12 @@ export function SalesforceDebugLogAnalyzer({ isConnected }: SalesforceDebugLogAn
   }, [parsedEntries, categoryFilter, searchQuery, showOnlyErrors]);
 
   const getEntryColor = (category: string): string => {
-    if (category.startsWith('APEX')) return 'text-blue-400';
-    if (category.startsWith('DB') || category.startsWith('SOQL')) return 'text-green-400';
-    if (category.startsWith('DML')) return 'text-yellow-400';
+    if (category.startsWith('APEX')) return 'text-blue-600 dark:text-blue-400';
+    if (category.startsWith('DB') || category.startsWith('SOQL')) return 'text-green-600 dark:text-green-400';
+    if (category.startsWith('DML')) return 'text-yellow-600 dark:text-yellow-400';
     if (category.startsWith('CALLOUT')) return 'text-purple-400';
-    if (category.startsWith('VALIDATION')) return 'text-orange-400';
-    if (category.includes('ERROR') || category.includes('EXCEPTION')) return 'text-red-400';
+    if (category.startsWith('VALIDATION')) return 'text-orange-600 dark:text-orange-400';
+    if (category.includes('ERROR') || category.includes('EXCEPTION')) return 'text-red-600 dark:text-red-400';
     return 'text-slate-400';
   };
 
@@ -306,7 +306,7 @@ export function SalesforceDebugLogAnalyzer({ isConnected }: SalesforceDebugLogAn
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-xs text-blue-300 border-blue-500/50">
+                      <Badge variant="outline" className="text-xs text-blue-700 dark:text-blue-300 border-blue-500/50">
                         {(log.LogLength / 1024).toFixed(1)} KB
                       </Badge>
                       <Badge variant="outline" className="text-xs text-purple-300 border-purple-500/50">
@@ -342,8 +342,8 @@ export function SalesforceDebugLogAnalyzer({ isConnected }: SalesforceDebugLogAn
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400">{config.label}</span>
                       <span className={
-                        status === 'danger' ? 'text-red-400' :
-                        status === 'warning' ? 'text-yellow-400' : 'text-green-400'
+                        status === 'danger' ? 'text-red-600 dark:text-red-400' :
+                        status === 'warning' ? 'text-yellow-600 dark:text-yellow-400' : 'text-green-600 dark:text-green-400'
                       }>
                         {value.toLocaleString()} / {config.limit.toLocaleString()}
                       </span>

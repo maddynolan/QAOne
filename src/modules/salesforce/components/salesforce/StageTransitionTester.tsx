@@ -265,7 +265,7 @@ export function StageTransitionTester({
           
           {loading && (
             <div className="flex justify-center py-6">
-              <Loader2 className="h-6 w-6 animate-spin text-cyan-400" />
+              <Loader2 className="h-6 w-6 animate-spin text-cyan-600 dark:text-cyan-400" />
             </div>
           )}
           
@@ -365,7 +365,7 @@ export function StageTransitionTester({
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="h-5 px-1.5 text-[9px] text-cyan-400"
+                                className="h-5 px-1.5 text-[9px] text-cyan-600 dark:text-cyan-400"
                                 onClick={() => addTransitionStep(fromStage, toStage)}
                               >
                                 <Plus className="h-3 w-3" />
@@ -407,7 +407,7 @@ export function StageTransitionTester({
                             toast.success(`Added "${action.label}" step`);
                           }}
                         >
-                          <Icon className="h-3.5 w-3.5 mr-2 text-cyan-400" />
+                          <Icon className="h-3.5 w-3.5 mr-2 text-cyan-600 dark:text-cyan-400" />
                           {action.label}
                         </Button>
                       );
@@ -455,7 +455,7 @@ export function StageTransitionTester({
                   }}
                   className="flex items-center gap-2 p-2 rounded bg-secondary hover:bg-accent text-left transition-colors"
                 >
-                  <Target className="h-3 w-3 text-cyan-400 shrink-0" />
+                  <Target className="h-3 w-3 text-cyan-600 dark:text-cyan-400 shrink-0" />
                   <span className="text-[10px] text-muted-foreground">{template.label}</span>
                 </button>
               ))}

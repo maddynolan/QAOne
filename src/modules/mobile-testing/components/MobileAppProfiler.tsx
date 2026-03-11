@@ -203,10 +203,10 @@ export default function MobileAppProfiler() {
             {/* Metric Cards */}
             <div className="grid grid-cols-4 gap-3">
               {[
-                { label: 'CPU Usage', value: latest ? `${latest.cpu}%` : '—', icon: Cpu, color: 'sky', warn: latest && latest.cpu > 80 },
-                { label: 'Memory', value: latest ? `${latest.memory_mb} MB` : '—', icon: MemoryStick, color: 'purple', warn: latest && latest.memory_mb > 280 },
-                { label: 'FPS', value: latest ? `${latest.fps}` : '—', icon: Gauge, color: 'emerald', warn: latest && latest.fps < 30 },
-                { label: 'Battery', value: latest ? `${latest.battery.toFixed(0)}%` : '—', icon: Battery, color: 'amber', warn: latest && latest.battery < 20 },
+                { label: 'CPU Usage', value: latest ? `${latest.cpu}%` : '—', icon: Cpu, bgClass: 'bg-sky-500/10', iconClass: 'text-sky-500', warn: latest && latest.cpu > 80 },
+                { label: 'Memory', value: latest ? `${latest.memory_mb} MB` : '—', icon: MemoryStick, bgClass: 'bg-purple-500/10', iconClass: 'text-purple-500', warn: latest && latest.memory_mb > 280 },
+                { label: 'FPS', value: latest ? `${latest.fps}` : '—', icon: Gauge, bgClass: 'bg-emerald-500/10', iconClass: 'text-emerald-500', warn: latest && latest.fps < 30 },
+                { label: 'Battery', value: latest ? `${latest.battery.toFixed(0)}%` : '—', icon: Battery, bgClass: 'bg-amber-500/10', iconClass: 'text-amber-500', warn: latest && latest.battery < 20 },
               ].map(m => (
                 <Card key={m.label} className={cn(m.warn ? 'border-red-500/30' : '')}>
                   <CardContent className="p-4">
@@ -215,8 +215,8 @@ export default function MobileAppProfiler() {
                         <p className="text-xs text-muted-foreground">{m.label}</p>
                         <p className={cn("text-2xl font-bold mt-1", m.warn ? 'text-red-500' : '')}>{m.value}</p>
                       </div>
-                      <div className={cn("p-2.5 rounded-lg", `bg-${m.color}-500/10`)}>
-                        <m.icon className={cn("w-5 h-5", `text-${m.color}-500`)} />
+                      <div className={cn("p-2.5 rounded-lg", m.bgClass)}>
+                        <m.icon className={cn("w-5 h-5", m.iconClass)} />
                       </div>
                     </div>
                   </CardContent>

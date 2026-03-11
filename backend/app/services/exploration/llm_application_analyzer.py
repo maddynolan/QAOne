@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the Autonomous Explorer / Flowmap system which is unused.
 """
 LLM-Powered Application Analyzer
 Uses GPT-4o-mini to intelligently analyze applications and generate domain-specific test flows.

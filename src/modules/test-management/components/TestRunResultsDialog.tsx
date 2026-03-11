@@ -107,7 +107,7 @@ export function TestRunResultsDialog({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col bg-popover border-border">
         <DialogHeader className="border-b border-gray-200 dark:border-gray-800 pb-4 flex-shrink-0">
-          <DialogTitle className="flex items-center gap-3 text-white">
+          <DialogTitle className="flex items-center gap-3 text-foreground">
             <div className={cn(
               "p-2 rounded-lg",
               run.status === 'passed' ? "bg-emerald-500/20" :
@@ -134,7 +134,7 @@ export function TestRunResultsDialog({
           {/* Summary Stats */}
           <div className="grid grid-cols-4 gap-3">
             <div className="bg-secondary rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-white">{totalSteps}</div>
+              <div className="text-2xl font-bold text-foreground">{totalSteps}</div>
               <div className="text-xs text-gray-500 dark:text-gray-400">{isMultiTest ? 'Total Tests' : 'Total Steps'}</div>
             </div>
             <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-center">
@@ -228,7 +228,7 @@ export function TestRunResultsDialog({
                       )}
                     >
                       <div
-                        className="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/5"
+                        className="flex items-center gap-3 p-3 cursor-pointer hover:bg-accent/50"
                         onClick={() => setExpandedTest(expandedTest === idx ? null : idx)}
                       >
                         <div className="flex-shrink-0">
@@ -248,7 +248,7 @@ export function TestRunResultsDialog({
                               <span className="text-xs px-1.5 py-0.5 rounded bg-secondary text-foreground">
                                 Test {idx + 1}
                               </span>
-                              <span className="text-sm text-white font-medium truncate">
+                              <span className="text-sm text-foreground font-medium truncate">
                                 {testResult.testName}
                               </span>
                             </div>
@@ -280,7 +280,7 @@ export function TestRunResultsDialog({
 
                       {/* Expanded test details - handles both automated and manual step results */}
                       {expandedTest === idx && ((testResult as any).stepResults?.length > 0 || (testResult as any).steps?.length > 0) && (
-                        <div className="border-t border-gray-200 dark:border-gray-800 p-3 space-y-2 bg-black/20">
+                        <div className="border-t border-gray-200 dark:border-gray-800 p-3 space-y-2 bg-muted/50">
                           <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">Step Details:</div>
                           {((testResult as any).stepResults || (testResult as any).steps || []).map((step: any, stepIdx: number) => (
                             <div
@@ -426,7 +426,7 @@ export function TestRunResultsDialog({
                                 <span className="text-xs px-1.5 py-0.5 rounded bg-secondary text-foreground font-medium">
                                   Step {(step.stepIndex ?? idx) + 1}
                                 </span>
-                                <span className="text-sm text-white font-medium">
+                                <span className="text-sm text-foreground font-medium">
                                   {step.stepName || actionDescription || `Step ${(step.stepIndex ?? idx) + 1}`}
                                 </span>
                               </div>

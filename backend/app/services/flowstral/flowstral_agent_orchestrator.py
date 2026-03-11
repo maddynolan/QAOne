@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Uses the old 8-agent registry system. Not imported anywhere in the codebase.
 """
 Flowstral Agent Orchestrator
 Phase 2.4: Orchestrates agents based on Action Graph

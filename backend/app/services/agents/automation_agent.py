@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the old 8-agent registry system. Unused in production.
 """
 Automation Agent - Wrapper around Playwright runner with DOM recorder and self-healing
 Phase 2.2: Automation Agent Enhancement

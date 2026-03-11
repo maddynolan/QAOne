@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the Nexus Exploratory system which is unused.
 """
 Nexus Session Storage Service
 Handles persistence of Nexus autonomous exploratory testing sessions to PostgreSQL

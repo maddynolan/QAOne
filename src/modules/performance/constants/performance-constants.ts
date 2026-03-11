@@ -2,14 +2,13 @@
  * Constants for the Performance testing page.
  */
 
-/** Test website endpoint for quick-start scenarios */
-export const ECOMMERCE_TEST_URL = "http://localhost:8002";
+import { API_BASE_URL } from '@/lib/api-config';
 
 /** Flowstral.com production URL for website load testing */
 export const FLOWSTRAL_WEBSITE_URL = "https://flowstral.com";
 
-/** Flowstral backend API URL for API load testing */
-export const FLOWSTRAL_API_URL = "https://qaone-production.up.railway.app";
+/** Flowstral backend API URL for API load testing (uses centralized API_BASE_URL) */
+export const FLOWSTRAL_API_URL = API_BASE_URL;
 
 /** In-browser runner: quick validation only. For real load use Go runner or k6. */
 export const MAX_BROWSER_VUS = 20;

@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the Autonomous Explorer / Flowmap system which is unused.
 """
 Defect Storage Service
 Handles storage of defects detected during exploration.

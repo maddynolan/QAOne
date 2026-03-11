@@ -17,6 +17,18 @@
 import { API_BASE_URL } from '@/lib/api-config';
 
 // ============================================================================
+// CONFIGURATION
+// ============================================================================
+
+/**
+ * Salesforce Connected App client ID.
+ * Override via VITE_SF_CLIENT_ID environment variable.
+ * Default is the Flowstral Connected App client_id.
+ */
+const SF_CLIENT_ID = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SF_CLIENT_ID)
+  || '3MVG9I9urWNIrEluKXkz0U8fSLu3F.D15u7C5h2AqF_HCLI1nWGlHqlmz3_Ax4yrJlBklOQV9fPF5';
+
+// ============================================================================
 // TYPES
 // ============================================================================
 
@@ -443,7 +455,7 @@ class SalesforceApiService {
     
     const params = new URLSearchParams();
     params.append('grant_type', 'refresh_token');
-    params.append('client_id', '3MVG9I9urWNIrEluKXkz0U8fSLu3F.D15u7C5h2AqF_HCLI1nWGlHqlmz3_Ax4yrJlBklOQV9fPF5');
+    params.append('client_id', SF_CLIENT_ID);
     params.append('refresh_token', org.refreshToken);
     
     const response = await fetch(tokenUrl, {
@@ -1046,23 +1058,45 @@ class SalesforceApiService {
     return response.text(); // Returns the AsyncApexJobId
   }
 
+  /**
+   * Sanitize a Salesforce ID to prevent SOQL injection.
+   * Valid Salesforce IDs are 15 or 18 alphanumeric characters.
+   */
+  private sanitizeSalesforceId(id: string): string {
+    const cleaned = id.replace(/[^a-zA-Z0-9]/g, '');
+    if (cleaned.length !== 15 && cleaned.length !== 18) {
+      throw new Error(`Invalid Salesforce ID format: expected 15 or 18 alphanumeric characters`);
+    }
+    return cleaned;
+  }
+
+  /**
+   * Sanitize a string value for use in SOQL WHERE clauses.
+   * Escapes single quotes and backslashes.
+   */
+  private sanitizeSoqlValue(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  }
+
   async getApexTestResults(asyncApexJobId: string): Promise<ApexTestResult[]> {
+    const safeId = this.sanitizeSalesforceId(asyncApexJobId);
     const soql = `
       SELECT Id, QueueItemId, StackTrace, Message, MethodName, Outcome,
              ApexClass.Id, ApexClass.Name, ApexClass.NamespacePrefix,
              RunTime, TestTimestamp
       FROM ApexTestResult
-      WHERE AsyncApexJobId = '${asyncApexJobId}'
+      WHERE AsyncApexJobId = '${safeId}'
     `;
     const result = await this.toolingQuery<ApexTestResult>(soql);
     return result.records;
   }
 
   async getApexTestQueueStatus(asyncApexJobId: string): Promise<any> {
+    const safeId = this.sanitizeSalesforceId(asyncApexJobId);
     const soql = `
       SELECT Id, Status, ApexClassId, ApexClass.Name, ExtendedStatus
       FROM ApexTestQueueItem
-      WHERE ParentJobId = '${asyncApexJobId}'
+      WHERE ParentJobId = '${safeId}'
     `;
     return this.toolingQuery(soql);
   }
@@ -1100,12 +1134,13 @@ class SalesforceApiService {
   // ========== PERMISSIONS ==========
 
   async getObjectPermissions(userId: string): Promise<ObjectPermission[]> {
+    const safeId = this.sanitizeSalesforceId(userId);
     const soql = `
       SELECT SobjectType, PermissionsCreate, PermissionsRead, PermissionsEdit, PermissionsDelete,
              PermissionsViewAllRecords, PermissionsModifyAllRecords
       FROM ObjectPermissions
       WHERE ParentId IN (
-        SELECT PermissionSetId FROM PermissionSetAssignment WHERE AssigneeId = '${userId}'
+        SELECT PermissionSetId FROM PermissionSetAssignment WHERE AssigneeId = '${safeId}'
       )
     `;
     const result = await this.query(soql);
@@ -1121,17 +1156,19 @@ class SalesforceApiService {
   }
 
   async getFieldPermissions(userId: string, objectName?: string): Promise<FieldPermission[]> {
+    const safeId = this.sanitizeSalesforceId(userId);
     let soql = `
       SELECT SobjectType, Field, PermissionsRead, PermissionsEdit
       FROM FieldPermissions
       WHERE ParentId IN (
-        SELECT PermissionSetId FROM PermissionSetAssignment WHERE AssigneeId = '${userId}'
+        SELECT PermissionSetId FROM PermissionSetAssignment WHERE AssigneeId = '${safeId}'
       )
     `;
     if (objectName) {
-      soql += ` AND SobjectType = '${objectName}'`;
+      const safeObjectName = this.sanitizeSoqlValue(objectName);
+      soql += ` AND SobjectType = '${safeObjectName}'`;
     }
-    
+
     const result = await this.query(soql);
     return result.records.map((r: any) => ({
       objectName: r.SobjectType,
@@ -1142,7 +1179,12 @@ class SalesforceApiService {
   }
 
   async getCurrentUserId(): Promise<string> {
-    const result = await this.query('SELECT Id FROM User WHERE Username = \'' + this.currentOrg?.username + '\'');
+    const username = this.currentOrg?.username;
+    if (!username) {
+      throw new Error('No org selected or username not available');
+    }
+    const safeUsername = this.sanitizeSoqlValue(username);
+    const result = await this.query(`SELECT Id FROM User WHERE Username = '${safeUsername}'`);
     if (result.records.length > 0) {
       return result.records[0].Id;
     }

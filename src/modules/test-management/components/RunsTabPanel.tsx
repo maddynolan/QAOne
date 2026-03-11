@@ -60,7 +60,7 @@ export function RunsTabPanel({
               Create Test Run
             </Button>
             <div className="mt-6 p-4 bg-secondary rounded-lg max-w-md mx-auto">
-              <p className="text-gray-500 dark:text-gray-400 text-sm">
+              <p className="text-muted-foreground text-sm">
                 <strong className="text-blue-600 dark:text-primary">Automated:</strong> Runs tests via Playwright in desktop app<br/>
                 <strong className="text-blue-400">Manual:</strong> Step-by-step execution with screenshots &amp; defect linking
               </p>
@@ -118,7 +118,7 @@ export function RunsTabPanel({
                   {run.status === 'blocked' && <AlertCircle className="w-5 h-5 text-yellow-500" />}
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-gray-900 dark:text-white">{run.name || 'Test Run'}</p>
+                      <p className="font-medium text-foreground">{run.name || 'Test Run'}</p>
                       {(run.testCaseIds?.length || 0) > 1 && (
                         <Badge className="text-xs bg-purple-500/10 text-purple-400">
                           {run.testCaseIds?.length} tests
@@ -137,7 +137,7 @@ export function RunsTabPanel({
                     <div className="flex items-center gap-2 text-sm">
                       <span className="text-green-400">{run.results.passed}&#10003;</span>
                       <span className="text-red-400">{run.results.failed}&#10007;</span>
-                      <span className="text-gray-500 dark:text-gray-400">{run.results.skipped}&#9675;</span>
+                      <span className="text-muted-foreground">{run.results.skipped}&#9675;</span>
                     </div>
                   )}
                   <Badge className={cn(
@@ -216,12 +216,12 @@ export function RunsTabPanel({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-gray-500 dark:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         <MoreVertical className="w-4 h-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border">
+                    <DropdownMenuContent align="end" className="bg-popover border-border">
                       <DropdownMenuItem
                         className="text-foreground focus:bg-secondary"
                         onClick={() => onViewResults(run)}

@@ -60,7 +60,7 @@ export default function CrossOriginEditorDialog({
 
         <div className="space-y-4 py-4">
           <div className="p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
-            <p className="text-xs text-yellow-300">
+            <p className="text-xs text-yellow-700 dark:text-yellow-300">
               This step was recorded in an external tab where we couldn't capture actions automatically.
               Add selectors below to define what actions to perform during playback.
             </p>

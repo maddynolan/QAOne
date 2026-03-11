@@ -39,7 +39,7 @@ import {
   Pencil, Flag, FileDown, Cloud, File, TestTube,
   // Advanced UI icons
   Table, Move, Sliders, Keyboard, Layout, Maximize2, CheckSquare, GripVertical,
-  Crosshair
+  Crosshair, Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -144,6 +144,7 @@ export default function UnifiedWorkflowEditor() {
   const [savedTestCaseId, setSavedTestCaseId] = useState<string | null>(null);
   const [showSaveAsDialog, setShowSaveAsDialog] = useState(false);
   const [saveAsName, setSaveAsName] = useState('');
+  const [saving, setSaving] = useState(false);
   
   // Import test case as precondition
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -2813,6 +2814,7 @@ export default function UnifiedWorkflowEditor() {
   // Save test case - update if exists, create if new
   const saveTestCase = async () => {
     try {
+      setSaving(true);
       const testCaseData = buildTestCaseData();
       const testCaseId = savedTestCaseId || `tc_${Date.now()}`;
       
@@ -2893,34 +2895,91 @@ export default function UnifiedWorkflowEditor() {
     } catch (error) {
       console.error('[Save] Error:', error);
       toast.error('Failed to save');
+    } finally {
+      setSaving(false);
     }
   };
-  
+
   // Save As - always create new with different name
   const saveTestCaseAs = async (newName: string) => {
     try {
+      setSaving(true);
       const testCaseData = buildTestCaseData(newName);
-      
-      const response = await fetch(`${API_BASE_URL}/test-cases`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(testCaseData),
-      });
+      const newId = `tc_${Date.now()}`;
 
-      if (response.ok) {
-        const data = await response.json();
-        // Update current test case name and ID
-        setTestCase(prev => ({ ...prev, name: newName }));
-        setSavedTestCaseId(data.id);
-        toast.success(`Saved as "${newName}"`);
-        setShowSaveAsDialog(false);
-        setSaveAsName('');
-      } else {
-        toast.error('Failed to save');
+      // Save to localStorage first as a safety net
+      const fullTestCase = {
+        id: newId,
+        ...testCaseData,
+        unified_data: { ...testCase, name: newName },
+        steps: testCase.steps,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      try {
+        const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
+        localCases.push(fullTestCase);
+        localStorage.setItem('test_cases', JSON.stringify(localCases));
+        console.log('[SaveAs] Saved to localStorage as backup');
+      } catch (localStorageError) {
+        console.warn('[SaveAs] Could not save to localStorage:', localStorageError);
       }
+
+      // Save to Electron local storage if available
+      if (isElectron()) {
+        try {
+          await localData.saveTestCase(fullTestCase);
+          console.log('[SaveAs] Saved to Electron local storage');
+        } catch (electronError) {
+          console.warn('[SaveAs] Could not save to Electron storage:', electronError);
+        }
+      }
+
+      // Try backend
+      try {
+        const response = await fetch(`${API_BASE_URL}/test-cases`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testCaseData),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // Update localStorage entry with real backend ID
+          try {
+            const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
+            const idx = localCases.findIndex((tc: any) => tc.id === newId);
+            if (idx >= 0) {
+              localCases[idx].id = data.id;
+              localStorage.setItem('test_cases', JSON.stringify(localCases));
+            }
+          } catch { /* ignore */ }
+
+          setTestCase(prev => ({ ...prev, name: newName }));
+          setSavedTestCaseId(data.id);
+          toast.success(`Saved as "${newName}"`);
+        } else {
+          // Backend failed but saved locally
+          setTestCase(prev => ({ ...prev, name: newName }));
+          setSavedTestCaseId(newId);
+          toast.success(`Saved locally as "${newName}"`);
+        }
+      } catch (networkError) {
+        // Network error - already saved locally
+        console.log('[SaveAs] Backend unavailable, saved locally');
+        setTestCase(prev => ({ ...prev, name: newName }));
+        setSavedTestCaseId(newId);
+        toast.success(`Saved locally as "${newName}"`);
+      }
+
+      setShowSaveAsDialog(false);
+      setSaveAsName('');
     } catch (error) {
       console.error('[SaveAs] Error:', error);
-      toast.error('Failed to save');
+      toast.error('Failed to save test case');
+    } finally {
+      setSaving(false);
     }
   };
   
@@ -3229,14 +3288,19 @@ export default function UnifiedWorkflowEditor() {
               </DropdownMenu>
 
               {/* Save Button - Primary action */}
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 variant="outline"
                 onClick={saveTestCase}
+                disabled={saving}
                 className="border-blue-500/50 dark:border-amber-500/50 text-blue-600 dark:text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 px-4"
               >
-                <Save className="h-4 w-4 mr-1.5" />
-                {savedTestCaseId ? 'Save' : 'Save New'}
+                {saving ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-1.5" />
+                )}
+                {saving ? 'Saving...' : savedTestCaseId ? 'Save' : 'Save New'}
               </Button>
               
               {/* Environment Selector (next to Run) */}
@@ -3530,7 +3594,7 @@ export default function UnifiedWorkflowEditor() {
                               <div 
                                 key={precond.testCaseId} 
                                 className={`flex items-center justify-between p-2 rounded-md ${
-                                  precond.enabled ? 'bg-white dark:bg-gray-100 dark:bg-gray-800' : 'bg-gray-100 dark:bg-white dark:bg-gray-900 opacity-60'
+                                  precond.enabled ? 'bg-white dark:bg-gray-800' : 'bg-gray-100 dark:bg-gray-900 opacity-60'
                                 }`}
                               >
                                 <div className="flex items-center gap-2">
@@ -3916,7 +3980,7 @@ export default function UnifiedWorkflowEditor() {
                                     req.method === 'POST' ? 'text-blue-600 border-blue-300' :
                                     req.method === 'PUT' ? 'text-amber-600 border-amber-300' :
                                     req.method === 'DELETE' ? 'text-red-600 border-red-300' :
-                                    'text-gray-600 border-gray-300'
+                                    'text-gray-600 border-gray-300 dark:text-gray-400 dark:border-gray-600'
                                   }`}
                                 >
                                   {req.method}
@@ -4087,7 +4151,7 @@ export default function UnifiedWorkflowEditor() {
                           {coverage.missingHigh.slice(0, 10).map(v => (
                             <div 
                               key={v.id}
-                              className="p-2 bg-white dark:bg-white dark:bg-gray-900 rounded text-xs cursor-pointer hover:ring-2 ring-red-300"
+                              className="p-2 bg-white dark:bg-gray-900 rounded text-xs cursor-pointer hover:ring-2 ring-red-300"
                               onClick={() => {
                                 setCoveredValidations(prev => [...prev, v.id]);
                               }}
@@ -4317,12 +4381,19 @@ export default function UnifiedWorkflowEditor() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowSaveAsDialog(false)}>Cancel</Button>
-              <Button 
+              <Button variant="outline" onClick={() => setShowSaveAsDialog(false)} disabled={saving}>Cancel</Button>
+              <Button
                 onClick={() => saveTestCaseAs(saveAsName)}
-                disabled={!saveAsName.trim()}
+                disabled={!saveAsName.trim() || saving}
               >
-                Save
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save'
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -4477,8 +4548,8 @@ export default function UnifiedWorkflowEditor() {
                     <span className="text-red-600 font-medium">
                       {Object.values(manualResults).filter(r => r.result === 'failed').length}
                     </span>
-                    <span className="text-gray-500 font-medium">
-                      ⏭️ {Object.values(manualResults).filter(r => r.result === 'skipped').length}
+                    <span className="text-muted-foreground font-medium">
+                      {Object.values(manualResults).filter(r => r.result === 'skipped').length}
                     </span>
                   </div>
                   <Button variant="outline" onClick={endManualExecution}>
@@ -4498,14 +4569,14 @@ export default function UnifiedWorkflowEditor() {
                       key={step.id}
                       onClick={() => setManualCurrentStep(idx)}
                       className={`flex-none px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                        isCurrent 
-                          ? 'bg-amber-500 text-white ring-2 ring-amber-300' 
-                          : result?.result === 'passed' 
-                          ? 'bg-green-100 text-green-700' 
-                          : result?.result === 'failed' 
-                          ? 'bg-red-100 text-red-700' 
-                          : result?.result === 'skipped' 
-                          ? 'bg-gray-100 text-gray-500' 
+                        isCurrent
+                          ? 'bg-amber-500 text-white ring-2 ring-amber-300'
+                          : result?.result === 'passed'
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                          : result?.result === 'failed'
+                          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          : result?.result === 'skipped'
+                          ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
                           : 'bg-muted hover:bg-muted/80'
                       }`}
                     >
@@ -4548,7 +4619,7 @@ export default function UnifiedWorkflowEditor() {
                           
                           {/* Test Data */}
                           {getCurrentManualStep().value && (
-                            <div className="mt-3 p-3 bg-white dark:bg-white dark:bg-gray-900 rounded border">
+                            <div className="mt-3 p-3 bg-white dark:bg-gray-900 rounded border">
                               <span className="text-xs text-muted-foreground">Test Data:</span>
                               <p className="font-mono text-sm mt-1">{getCurrentManualStep().value}</p>
                             </div>
@@ -4578,7 +4649,7 @@ export default function UnifiedWorkflowEditor() {
                           
                           {/* Assertions to verify */}
                           {getCurrentManualStep().assertion?.enabled && (
-                            <div className="mt-3 p-3 bg-white dark:bg-white dark:bg-gray-900 rounded border">
+                            <div className="mt-3 p-3 bg-white dark:bg-gray-900 rounded border">
                               <span className="text-xs text-muted-foreground">Verify:</span>
                               <div className="flex items-center gap-2 mt-1">
                                 <Badge variant="outline">{getCurrentManualStep().assertion.type}</Badge>

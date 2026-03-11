@@ -171,12 +171,12 @@ export default function AccessibilityTabContent({
                             )}
                             {issue.suggested_fix && (
                               <div className="bg-emerald-500/10 border border-emerald-500/20 rounded p-1.5 mt-1">
-                                <p className="text-[9px] text-emerald-400 font-medium mb-0.5">Fix:</p>
-                                <p className="text-[10px] text-emerald-300/80">{issue.suggested_fix}</p>
+                                <p className="text-[9px] text-emerald-700 dark:text-emerald-400 font-medium mb-0.5">Fix:</p>
+                                <p className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80">{issue.suggested_fix}</p>
                               </div>
                             )}
                             <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[9px] text-purple-400">{issue.wcag_criterion}</span>
+                              <span className="text-[9px] text-purple-600 dark:text-purple-400">{issue.wcag_criterion}</span>
                               {issue.help_url && (
                                 <a
                                   href={issue.help_url}

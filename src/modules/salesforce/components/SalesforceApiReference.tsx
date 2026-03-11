@@ -454,10 +454,10 @@ export function SalesforceApiReference({ onSelectEndpoint, objects = [] }: Sales
 
   const getMethodColor = (method: string) => {
     switch (method) {
-      case 'GET': return 'bg-green-500/20 text-green-400 border-green-500/30';
-      case 'POST': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-      case 'PATCH': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-      case 'DELETE': return 'bg-red-500/20 text-red-400 border-red-500/30';
+      case 'GET': return 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30';
+      case 'POST': return 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30';
+      case 'PATCH': return 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30';
+      case 'DELETE': return 'bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30';
       default: return 'bg-secondary text-muted-foreground border-border';
     }
   };
@@ -549,7 +549,7 @@ export function SalesforceApiReference({ onSelectEndpoint, objects = [] }: Sales
                           {endpoint.path}
                         </code>
                       </div>
-                      <Play className="w-4 h-4 text-muted-foreground hover:text-green-400 flex-shrink-0 mt-1" />
+                      <Play className="w-4 h-4 text-muted-foreground hover:text-green-600 dark:hover:text-green-400 flex-shrink-0 mt-1" />
                     </div>
                   ))}
                 </div>
@@ -565,7 +565,7 @@ export function SalesforceApiReference({ onSelectEndpoint, objects = [] }: Sales
           href="https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/intro_rest.htm"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300"
+          className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
         >
           <BookOpen className="w-3.5 h-3.5" />
           REST API Docs
@@ -575,7 +575,7 @@ export function SalesforceApiReference({ onSelectEndpoint, objects = [] }: Sales
           href="https://developer.salesforce.com/docs/atlas.en-us.api_tooling.meta/api_tooling/intro_rest_resources.htm"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300"
+          className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
         >
           <Settings className="w-3.5 h-3.5" />
           Tooling API Docs

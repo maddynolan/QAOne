@@ -414,7 +414,7 @@ export function SFContextDashboard({
               {/* Org Info */}
               <div className="p-2.5 rounded-lg bg-secondary border border-border space-y-2">
                 <div className="flex items-center gap-2">
-                  <Building2 className="h-3.5 w-3.5 text-blue-400" />
+                  <Building2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                   <span className="text-xs text-foreground font-medium">{currentOrg.name}</span>
                 </div>
                 <div className="flex items-center gap-2 text-[10px] text-gray-500">
@@ -646,18 +646,18 @@ export function SFContextDashboard({
           >
             <CollapsibleTrigger className="flex items-center justify-between w-full p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/15 transition-colors">
               <div className="flex items-center gap-2">
-                <History className="h-3.5 w-3.5 text-blue-400" />
-                <span className="text-xs font-medium text-blue-400">Recent Records</span>
+                <History className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Recent Records</span>
                 {recentRecords.length > 0 && (
-                  <Badge variant="outline" className="h-4 px-1.5 text-[9px] border-blue-500/30 text-blue-400">
+                  <Badge variant="outline" className="h-4 px-1.5 text-[9px] border-blue-500/30 text-blue-600 dark:text-blue-400">
                     {recentRecords.length}
                   </Badge>
                 )}
               </div>
               {expandedSections.has('recent') ? (
-                <ChevronDown className="h-3.5 w-3.5 text-blue-400" />
+                <ChevronDown className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
               ) : (
-                <ChevronRight className="h-3.5 w-3.5 text-blue-400" />
+                <ChevronRight className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
               )}
             </CollapsibleTrigger>
             
@@ -671,7 +671,7 @@ export function SFContextDashboard({
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <Badge variant="outline" className="h-4 px-1 text-[8px] border-blue-500/30 text-blue-400">
+                          <Badge variant="outline" className="h-4 px-1 text-[8px] border-blue-500/30 text-blue-600 dark:text-blue-400">
                             {record.objectType}
                           </Badge>
                           <span className="text-xs text-foreground truncate">{record.name}</span>
@@ -681,7 +681,7 @@ export function SFContextDashboard({
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 px-2 text-[9px] text-blue-400 hover:bg-blue-500/20 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="h-6 px-2 text-[9px] text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => useRecord(record)}
                       >
                         Use

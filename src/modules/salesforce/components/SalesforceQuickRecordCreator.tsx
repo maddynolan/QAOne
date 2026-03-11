@@ -343,7 +343,7 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
                     {template.name} ({template.objectName})
                   </span>
                   <X
-                    className="w-3 h-3 hover:text-red-400"
+                    className="w-3 h-3 hover:text-red-600 dark:hover:text-red-400"
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteTemplate(template.id);
@@ -393,7 +393,7 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
                       {field.label}
                     </span>
                     {field.isRequired && (
-                      <span className="text-red-400 text-xs">*</span>
+                      <span className="text-red-600 dark:text-red-400 text-xs">*</span>
                     )}
                   </div>
                   <div className="flex-1">
@@ -437,7 +437,7 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
                       />
                     )}
                   </div>
-                  <Badge variant="outline" className="text-[10px] w-20 justify-center text-cyan-300 border-cyan-500/50">
+                  <Badge variant="outline" className="text-[10px] w-20 justify-center text-cyan-700 dark:text-cyan-300 border-cyan-500/50">
                     {field.type}
                   </Badge>
                 </div>
@@ -505,13 +505,13 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
                 >
                   {result.success ? (
                     <>
-                      <Check className="w-4 h-4 text-green-400" />
-                      <span className="text-green-400 font-mono text-sm">{result.id}</span>
+                      <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
+                      <span className="text-green-600 dark:text-green-400 font-mono text-sm">{result.id}</span>
                     </>
                   ) : (
                     <>
-                      <X className="w-4 h-4 text-red-400" />
-                      <span className="text-red-400 text-sm">{result.error}</span>
+                      <X className="w-4 h-4 text-red-600 dark:text-red-400" />
+                      <span className="text-red-600 dark:text-red-400 text-sm">{result.error}</span>
                     </>
                   )}
                 </div>

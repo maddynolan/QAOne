@@ -359,11 +359,11 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               {result.success ? (
-                <CheckCircle className="w-5 h-5 text-green-400" />
+                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
               ) : (
-                <AlertCircle className="w-5 h-5 text-red-400" />
+                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
               )}
-              <CardTitle className={result.success ? 'text-green-400' : 'text-red-400'}>
+              <CardTitle className={result.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
                 {result.success ? 'Execution Successful' : 'Execution Failed'}
               </CardTitle>
             </div>
@@ -371,7 +371,7 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
           <CardContent>
             {result.compileProblem && (
               <div className="mb-3">
-                <div className="text-sm text-red-400 font-medium">Compile Error:</div>
+                <div className="text-sm text-red-600 dark:text-red-400 font-medium">Compile Error:</div>
                 <div className="text-sm text-foreground font-mono bg-secondary p-2 rounded mt-1">
                   {result.compileProblem}
                   {result.line && result.column && (
@@ -385,7 +385,7 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
             
             {result.exceptionMessage && (
               <div className="mb-3">
-                <div className="text-sm text-red-400 font-medium">Exception:</div>
+                <div className="text-sm text-red-600 dark:text-red-400 font-medium">Exception:</div>
                 <div className="text-sm text-foreground font-mono bg-secondary p-2 rounded mt-1">
                   {result.exceptionMessage}
                 </div>
@@ -394,7 +394,7 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
             
             {result.exceptionStackTrace && (
               <div>
-                <div className="text-sm text-red-400 font-medium">Stack Trace:</div>
+                <div className="text-sm text-red-600 dark:text-red-400 font-medium">Stack Trace:</div>
                 <pre className="text-xs text-muted-foreground font-mono bg-secondary p-2 rounded mt-1 overflow-auto max-h-[200px]">
                   {result.exceptionStackTrace}
                 </pre>
@@ -402,7 +402,7 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
             )}
 
             {result.success && !result.compileProblem && !result.exceptionMessage && (
-              <div className="text-sm text-green-400">
+              <div className="text-sm text-green-600 dark:text-green-400">
                 Code executed successfully. Check debug logs for System.debug() output.
               </div>
             )}
@@ -434,9 +434,9 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       {item.success ? (
-                        <CheckCircle className="w-3 h-3 text-green-400" />
+                        <CheckCircle className="w-3 h-3 text-green-600 dark:text-green-400" />
                       ) : (
-                        <AlertCircle className="w-3 h-3 text-red-400" />
+                        <AlertCircle className="w-3 h-3 text-red-600 dark:text-red-400" />
                       )}
                       <span className="text-xs text-muted-foreground">
                         {new Date(item.timestamp).toLocaleTimeString()}
@@ -447,7 +447,7 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
                     {item.code.split('\n')[0]}
                   </div>
                   {item.error && (
-                    <div className="text-xs text-red-400 truncate mt-1">
+                    <div className="text-xs text-red-600 dark:text-red-400 truncate mt-1">
                       {item.error}
                     </div>
                   )}

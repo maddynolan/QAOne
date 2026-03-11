@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the Autonomous Explorer / Flowmap system which is unused.
 """
 Sync helper methods for autonomous explorer (Windows compatibility)
 These methods mirror the async methods but use sync Playwright API

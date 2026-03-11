@@ -40,10 +40,10 @@ export function MatchCountBadge({
       className={cn(
         'text-[10px] h-5 px-1.5',
         hasMultiple && showWarning
-          ? isHighRisk 
-            ? 'bg-red-500/20 text-red-400 border-red-500/30'
-            : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-          : 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+          ? isHighRisk
+            ? 'bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/30'
+            : 'bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/30'
+          : 'bg-blue-500/20 text-blue-700 dark:text-blue-400 border-blue-500/30',
         className
       )}
     >
@@ -75,7 +75,7 @@ export function MatchCountBadge({
             Position #{used} was {hasMultiple ? 'selected' : 'used'}.
           </p>
           {isHighRisk && (
-            <p className="mt-1 text-amber-400">
+            <p className="mt-1 text-amber-700 dark:text-amber-400">
               Consider adding a data-testid for more reliable selection.
             </p>
           )}

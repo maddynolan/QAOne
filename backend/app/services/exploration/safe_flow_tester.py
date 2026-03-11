@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the Autonomous Explorer / Flowmap system which is unused.
 """
 Safe Flow Tester
 Tests high-risk flows (checkout, payments, account deletion) safely by navigating

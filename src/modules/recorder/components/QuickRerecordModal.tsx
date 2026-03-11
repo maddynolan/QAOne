@@ -291,8 +291,8 @@ export default function QuickRerecordModal({
           {/* Error Display */}
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
-              <p className="text-sm text-red-400">{error}</p>
+              <AlertCircle className="h-4 w-4 text-red-700 dark:text-red-400 flex-shrink-0" />
+              <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
             </div>
           )}
 
@@ -331,8 +331,8 @@ export default function QuickRerecordModal({
               </Button>
 
               {!flowstral?.playwrightRecorder && (
-                <p className="text-xs text-amber-400 text-center">
-                  ⚠️ Browser control requires Electron app
+                <p className="text-xs text-amber-700 dark:text-amber-400 text-center">
+                  Browser control requires Electron app
                 </p>
               )}
             </div>
@@ -342,8 +342,8 @@ export default function QuickRerecordModal({
           {(status === 'ready' || status === 'picking') && (
             <div className="space-y-3">
               <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                <span className="text-sm text-emerald-400">Browser ready</span>
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-sm text-emerald-700 dark:text-emerald-400">Browser ready</span>
               </div>
 
               <Button
@@ -375,8 +375,8 @@ export default function QuickRerecordModal({
             <div className="space-y-3">
               <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
                 <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  <span className="text-sm font-medium text-emerald-400">Element Captured!</span>
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Element Captured!</span>
                 </div>
                 <div className="space-y-1 text-xs">
                   <p><span className="text-muted-foreground">Tag:</span> {pickedElement.tag}</p>

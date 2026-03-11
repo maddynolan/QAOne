@@ -23,17 +23,17 @@ interface ConfidenceBadgeProps {
 const config = {
   HIGH: {
     icon: ShieldCheck,
-    className: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30',
+    className: 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30',
     label: 'High'
   },
   MEDIUM: {
     icon: ShieldAlert,
-    className: 'bg-amber-500/20 text-amber-400 border-amber-500/30 hover:bg-amber-500/30',
+    className: 'bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/30',
     label: 'Medium'
   },
   LOW: {
     icon: ShieldX,
-    className: 'bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30',
+    className: 'bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/30 hover:bg-red-500/30',
     label: 'Low'
   }
 };

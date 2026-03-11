@@ -308,7 +308,7 @@ export function SalesforceReportRunner({ isConnected }: SalesforceReportRunnerPr
                       ) : (
                         <ChevronRight className="w-4 h-4 text-slate-400" />
                       )}
-                      <FolderOpen className="w-4 h-4 text-yellow-400" />
+                      <FolderOpen className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
                       <span className="text-sm text-slate-300">{folder}</span>
                       <Badge variant="outline" className="text-[10px] ml-auto text-slate-300 border-border">
                         {folderReports.length}
@@ -365,7 +365,7 @@ export function SalesforceReportRunner({ isConnected }: SalesforceReportRunnerPr
           <CardContent>
             {isLoading && selectedReportId ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600 dark:text-blue-400" />
               </div>
             ) : reportResult ? (
               <div className="overflow-auto max-h-[500px] rounded-lg border border-border">

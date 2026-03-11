@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the old 8-agent registry system. Unused in production.
 """
 Performance Testing Agent - Wrapper around k6 executor with metrics storage
 Phase 3.1: Specialized Agents

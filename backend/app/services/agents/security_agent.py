@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the old 8-agent registry system. Unused in production.
 """
 Security Agent - Wrapper around ZAP executor with intelligent triage
 Phase 3.3: Specialized Agents

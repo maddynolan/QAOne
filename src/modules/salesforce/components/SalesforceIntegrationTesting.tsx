@@ -423,9 +423,9 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'pass': return <CheckCircle className="w-4 h-4 text-green-400" />;
-      case 'fail': return <XCircle className="w-4 h-4 text-red-400" />;
-      case 'error': return <AlertTriangle className="w-4 h-4 text-orange-400" />;
+      case 'pass': return <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />;
+      case 'fail': return <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />;
+      case 'error': return <AlertTriangle className="w-4 h-4 text-orange-600 dark:text-orange-400" />;
       default: return <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />;
     }
   };
@@ -451,7 +451,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <ArrowLeftRight className="w-5 h-5 text-green-400" />
+            <ArrowLeftRight className="w-5 h-5 text-green-600 dark:text-green-400" />
             Integration Testing
           </h3>
           <p className="text-sm text-slate-400">
@@ -650,7 +650,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                                 const newAssertions = selectedTest.assertions.filter((_, i) => i !== idx);
                                 updateApiTest({ ...selectedTest, assertions: newAssertions });
                               }}
-                              className="h-8 px-2 text-red-400"
+                              className="h-8 px-2 text-red-600 dark:text-red-400"
                             >
                               <Trash2 className="w-3 h-3" />
                             </Button>
@@ -725,9 +725,9 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                                 }`}>
                                   <div className="flex items-center gap-2">
                                     {a.passed ? (
-                                      <CheckCircle className="w-3 h-3 text-green-400" />
+                                      <CheckCircle className="w-3 h-3 text-green-600 dark:text-green-400" />
                                     ) : (
-                                      <XCircle className="w-3 h-3 text-red-400" />
+                                      <XCircle className="w-3 h-3 text-red-600 dark:text-red-400" />
                                     )}
                                     <span className="font-mono text-slate-300">{a.path}</span>
                                   </div>
@@ -741,7 +741,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                         )}
                         
                         {result.error && (
-                          <div className="p-2 rounded bg-red-500/10 text-red-400 text-xs">
+                          <div className="p-2 rounded bg-red-500/10 text-red-600 dark:text-red-400 text-xs">
                             {result.error}
                           </div>
                         )}

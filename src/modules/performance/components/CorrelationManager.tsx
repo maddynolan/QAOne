@@ -281,9 +281,21 @@ export default function CorrelationManager({
             size="sm"
             className="h-7 text-xs gap-1.5"
             onClick={() => {
-              /* Auto-detect placeholder */
+              // Auto-detect: add all preset rules that aren't already present
+              const existingNames = new Set(rules.map(r => r.name));
+              const newRules = PRESET_RULES
+                .filter(preset => !existingNames.has(preset.rule.name))
+                .map(preset => ({
+                  ...preset.rule,
+                  id: generateId(),
+                  occurrence: 'first' as const,
+                  enabled: true,
+                }));
+              if (newRules.length > 0) {
+                onRulesChange([...rules, ...newRules]);
+              }
             }}
-            title="Run a test first to auto-detect correlatable values"
+            title="Add all common correlation rules (CSRF, JWT, Session, OAuth)"
           >
             <Sparkles className="h-3.5 w-3.5" />
             Auto-Detect

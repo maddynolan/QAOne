@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the Autonomous Explorer / Flowmap system which is unused.
 """
 Synthetic Test Data Generator
 Generates realistic test data for form filling and E2E testing.

@@ -320,7 +320,7 @@ export function SalesforceTemplates({
       {/* Salesforce Detection Banner */}
       {isSalesforcePage && (
         <div className="mx-4 mt-3 p-2 bg-green-500/10 border border-green-500/30 rounded-lg">
-          <div className="flex items-center gap-2 text-green-400 text-xs">
+          <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-xs">
             <CheckCircle className="w-4 h-4" />
             <span>Salesforce detected! Navigation steps will be optimized.</span>
           </div>
@@ -364,10 +364,10 @@ export function SalesforceTemplates({
                           
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <h5 className="text-sm font-medium text-foreground group-hover:text-blue-400 transition-colors">
+                              <h5 className="text-sm font-medium text-foreground group-hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                                 Create {template.label}
                               </h5>
-                              <ArrowRight className="w-3 h-3 text-slate-500 group-hover:text-blue-400 transition-colors" />
+                              <ArrowRight className="w-3 h-3 text-slate-500 group-hover:text-blue-600 dark:hover:text-blue-400 transition-colors" />
                             </div>
                             <p className="text-xs text-slate-400 mt-0.5 truncate">
                               {template.description}
@@ -376,7 +376,7 @@ export function SalesforceTemplates({
                               <Badge variant="outline" className="text-[10px] h-5 border-border text-slate-400">
                                 {template.fields.length} fields
                               </Badge>
-                              <Badge variant="outline" className="text-[10px] h-5 border-orange-600/50 text-orange-400">
+                              <Badge variant="outline" className="text-[10px] h-5 border-orange-600/50 text-orange-600 dark:text-orange-400">
                                 {requiredCount} required
                               </Badge>
                             </div>
@@ -412,11 +412,11 @@ export function SalesforceTemplates({
                 key={objName}
                 size="sm"
                 variant="outline"
-                className="h-7 text-xs gap-1.5 border-slate-500 bg-slate-800 text-slate-100 hover:border-blue-400 hover:text-blue-300 hover:bg-blue-500/20"
+                className="h-7 text-xs gap-1.5 border-slate-300 dark:border-slate-500 bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:border-blue-400 hover:text-blue-500 dark:hover:text-blue-300 hover:bg-blue-500/20"
                 onClick={() => handleSelectTemplate(template)}
               >
                 <span>{template.icon}</span>
-                <span className="text-slate-100">{objName}</span>
+                <span className="text-slate-800 dark:text-slate-100">{objName}</span>
               </Button>
             );
           })}
@@ -441,7 +441,7 @@ export function SalesforceTemplates({
               </DialogHeader>
               
               <Tabs defaultValue="fields" className="mt-4">
-                <TabsList className="bg-slate-800">
+                <TabsList className="bg-slate-200 dark:bg-slate-800">
                   <TabsTrigger value="fields">Fields & Data</TabsTrigger>
                   <TabsTrigger value="options">Options</TabsTrigger>
                   <TabsTrigger value="preview">Preview ({previewSteps.length})</TabsTrigger>
@@ -470,8 +470,8 @@ export function SalesforceTemplates({
                           key={field.apiName}
                           className={`p-3 rounded-lg border transition-colors ${
                             config.selectedFields.includes(field.apiName)
-                              ? 'bg-slate-800/80 border-blue-500/50'
-                              : 'bg-slate-800/30 border-border/50'
+                              ? 'bg-slate-200/80 dark:bg-slate-800/80 border-blue-500/50'
+                              : 'bg-slate-200/30 dark:bg-slate-800/30 border-border/50'
                           }`}
                         >
                           <div className="flex items-start gap-3">
@@ -561,8 +561,8 @@ export function SalesforceTemplates({
                     
                     <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
                       <div className="flex items-start gap-2">
-                        <Info className="w-4 h-4 text-blue-400 mt-0.5" />
-                        <div className="text-sm text-blue-300">
+                        <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5" />
+                        <div className="text-sm text-blue-700 dark:text-blue-300">
                           <strong>Tip:</strong> If you're already on a Salesforce page with 
                           the New {selectedTemplate.label} form open, uncheck navigation steps.
                         </div>
@@ -588,8 +588,8 @@ export function SalesforceTemplates({
                                 variant="outline" 
                                 className={`text-[10px] h-5 ${
                                   step.type === 'click' ? 'border-purple-500/50 text-purple-400' :
-                                  step.type === 'fill' ? 'border-blue-500/50 text-blue-400' :
-                                  step.type === 'assert' ? 'border-green-500/50 text-green-400' :
+                                  step.type === 'fill' ? 'border-blue-500/50 text-blue-600 dark:text-blue-400' :
+                                  step.type === 'assert' ? 'border-green-500/50 text-green-600 dark:text-green-400' :
                                   'border-slate-500/50 text-slate-400'
                                 }`}
                               >
