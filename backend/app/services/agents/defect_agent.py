@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the old 8-agent registry system. Unused in production.
 """
 Defect Agent - Captures and files defects automatically from test failures
 App-First Flow: Critical component for logging findings and bugs

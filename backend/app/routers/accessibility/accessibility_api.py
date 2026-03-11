@@ -53,8 +53,8 @@ async def run_axe_core_scan(url: str, component_selector: Optional[str] = None, 
         logger.info(f"[A11Y] Script exists: {os.path.exists(script_path)}")
 
         if not os.path.exists(script_path):
-            scanner_error = f"Scanner script not found at {script_path}"
-            logger.error(f"[A11Y] {scanner_error}")
+            scanner_error = "Axe-core scanner script not found"
+            logger.error(f"[A11Y] Scanner script not found at {script_path}")
             return {"violations": violations, "html": html_content, "scanner_error": scanner_error}
 
         # Build command — pass component_selector (or "None"), wcag_level, wcag_version
@@ -104,10 +104,10 @@ async def run_axe_core_scan(url: str, component_selector: Optional[str] = None, 
         scanner_error = "Axe-core scan timed out after 120 seconds"
         logger.error(f"[A11Y] {scanner_error}")
     except json.JSONDecodeError as e:
-        scanner_error = f"Failed to parse axe scanner output: {e}"
-        logger.error(f"[A11Y] {scanner_error}")
+        scanner_error = "Failed to parse axe scanner output"
+        logger.error(f"[A11Y] Failed to parse axe scanner output: {e}")
     except Exception as e:
-        scanner_error = str(e)
+        scanner_error = "Axe-core scanner encountered an unexpected error"
         logger.error(f"Error running axe-core scan: {e}", exc_info=True)
 
     return {"violations": violations, "html": html_content, "scanner_error": scanner_error}
@@ -198,8 +198,8 @@ async def scan_page(
         from app.utils.url_validator import validate_url, sanitize_url_for_logging
         try:
             validate_url(body.url)
-        except ValueError as url_err:
-            raise HTTPException(status_code=400, detail=f"Invalid URL: {str(url_err)}")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid or blocked URL. Please provide a valid, publicly accessible URL.")
 
         logger.info(f"Starting accessibility scan for URL: {sanitize_url_for_logging(body.url)}")
 
@@ -295,8 +295,9 @@ async def scan_page(
 
         # Include scanner warning if axe-core couldn't run (so frontend can show it)
         if scanner_error and not axe_violations:
-            result["scanner_warning"] = f"Axe-core scanner unavailable ({scanner_error}). Results are from basic HTML analysis only — install Playwright for full axe-core scanning."
+            result["scanner_warning"] = "Axe-core scanner unavailable. Results are from basic HTML analysis only — install Playwright for full axe-core scanning."
             result["scan_method"] = "basic_html"
+            logger.warning(f"[A11Y] Scanner fallback to basic HTML: {scanner_error}")
         else:
             result["scan_method"] = "axe_core"
 

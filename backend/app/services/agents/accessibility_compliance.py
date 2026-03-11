@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the old 8-agent registry system. Unused in production.
 """
 Accessibility Compliance Templates (WCAG 2.1 AA)
 Hardcoded templates - no inference needed

@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# All exploration routers are unused. Router registrations commented out in main.py.
 """
 Exploration Module Routers
 
@@ -13,6 +15,7 @@ Routers:
 - nexus_exploratory_api: /api/nexus/* - Nexus exploratory testing agent
 - blaze_api: /api/blaze/* - Blaze rapid test generation agent
 """
+# DEPRECATED (v3.20.0) — imports kept for backward compatibility but routers are not registered
 from .exploration_api import router as exploration_router
 from .exploration_test_generation_api import router as exploration_test_generation_router
 from .exploration_reporting_api import router as exploration_reporting_router

@@ -195,11 +195,14 @@ class SalesforceTestIntegration {
   async loadValidationRules(objectName: string): Promise<ValidationRuleInfo[]> {
     const currentOrg = salesforceApi.getCurrentOrg();
     if (!currentOrg) return [];
-    
+
     try {
-      const query = `SELECT Id, ValidationName, Active, Description, ErrorMessage 
-                     FROM ValidationRule 
-                     WHERE EntityDefinition.QualifiedApiName = '${objectName}'`;
+      // Sanitize objectName to prevent SOQL injection — only allow alphanumeric + underscore
+      const sanitizedObject = objectName.replace(/[^a-zA-Z0-9_]/g, '');
+      if (!sanitizedObject) return [];
+      const query = `SELECT Id, ValidationName, Active, Description, ErrorMessage
+                     FROM ValidationRule
+                     WHERE EntityDefinition.QualifiedApiName = '${sanitizedObject}'`;
       const result = await salesforceApi.toolingQuery(query);
       return (result.records || []).map((r: any) => ({
         id: r.Id,

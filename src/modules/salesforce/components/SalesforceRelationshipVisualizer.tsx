@@ -344,7 +344,7 @@ export function SalesforceRelationshipVisualizer({ isConnected }: SalesforceRela
           )}
 
           {/* Legend */}
-          <div className="absolute bottom-4 left-4 bg-slate-800/90 p-3 rounded-lg">
+          <div className="absolute bottom-4 left-4 bg-white/90 dark:bg-slate-800/90 p-3 rounded-lg">
             <div className="text-xs text-slate-400 mb-2">Legend</div>
             <div className="flex items-center gap-4 text-xs">
               <div className="flex items-center gap-1">
@@ -356,7 +356,7 @@ export function SalesforceRelationshipVisualizer({ isConnected }: SalesforceRela
                 <span className="text-slate-300">Master-Detail</span>
               </div>
               <div className="flex items-center gap-1">
-                <Badge variant="outline" className="text-[8px] bg-orange-500/20 text-orange-400 px-1">C</Badge>
+                <Badge variant="outline" className="text-[8px] bg-orange-500/20 text-orange-600 dark:text-orange-400 px-1">C</Badge>
                 <span className="text-slate-300">Custom</span>
               </div>
             </div>

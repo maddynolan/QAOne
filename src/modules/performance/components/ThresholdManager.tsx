@@ -292,29 +292,30 @@ export default function ThresholdManager({
                       )}
                     </div>
 
-                    {/* Result indicator */}
-                    {result && (
-                      <div className="flex items-center gap-1 ml-auto">
-                        {result.passed ? (
-                          <CheckCircle className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <XCircle className="h-4 w-4 text-red-500" />
-                        )}
-                        <span className="text-xs text-muted-foreground">
-                          actual: {result.actual.toFixed(1)}
-                        </span>
-                      </div>
-                    )}
+                    {/* Result indicator + Delete (grouped right) */}
+                    <div className="flex items-center gap-2 ml-auto">
+                      {result && (
+                        <div className="flex items-center gap-1">
+                          {result.passed ? (
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <XCircle className="h-4 w-4 text-red-500" />
+                          )}
+                          <span className="text-xs text-muted-foreground">
+                            actual: {result.actual.toFixed(1)}
+                          </span>
+                        </div>
+                      )}
 
-                    {/* Delete */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive ml-auto"
-                      onClick={() => deleteThreshold(threshold.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteThreshold(threshold.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

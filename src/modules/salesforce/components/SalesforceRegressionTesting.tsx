@@ -397,22 +397,22 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pass':
-      case 'Pass': return <CheckCircle className="w-4 h-4 text-green-400" />;
+      case 'Pass': return <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />;
       case 'fail':
       case 'Fail':
-      case 'CompileFail': return <XCircle className="w-4 h-4 text-red-400" />;
-      case 'running': return <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />;
+      case 'CompileFail': return <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />;
+      case 'running': return <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin" />;
       case 'skipped':
-      case 'Skip': return <AlertTriangle className="w-4 h-4 text-yellow-400" />;
+      case 'Skip': return <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />;
       default: return <Clock className="w-4 h-4 text-muted-foreground" />;
     }
   };
 
   const getChangeTypeColor = (type: string) => {
     switch (type) {
-      case 'added': return 'bg-green-500/20 text-green-400 border-green-500/30';
-      case 'modified': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-      case 'deleted': return 'bg-red-500/20 text-red-400 border-red-500/30';
+      case 'added': return 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30';
+      case 'modified': return 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30';
+      case 'deleted': return 'bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30';
       default: return 'bg-secondary text-muted-foreground border-border';
     }
   };
@@ -431,7 +431,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <GitBranch className="w-5 h-5 text-yellow-400" />
+            <GitBranch className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
             Regression Testing
           </h3>
           <p className="text-sm text-muted-foreground">
@@ -815,7 +815,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                           </span>
                         </div>
                         {result.Message && (
-                          <p className="text-xs text-red-400 mt-2">{result.Message}</p>
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-2">{result.Message}</p>
                         )}
                         {result.StackTrace && (
                           <pre className="text-xs text-slate-500 mt-1 overflow-x-auto">

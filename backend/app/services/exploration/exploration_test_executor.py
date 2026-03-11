@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the Autonomous Explorer / Flowmap system which is unused.
 """
 Exploration Test Executor
 Executes all generated test cases from capability map and creates defects from failures.

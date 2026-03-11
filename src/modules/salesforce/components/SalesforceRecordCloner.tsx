@@ -409,7 +409,7 @@ export function SalesforceRecordCloner({ isConnected }: SalesforceRecordClonerPr
                 <CardDescription>Modify values before cloning</CardDescription>
               </div>
               {modifiedFields.length > 0 && (
-                <Badge className="bg-blue-500/20 text-blue-400">
+                <Badge className="bg-blue-500/20 text-blue-600 dark:text-blue-400">
                   {modifiedFields.length} modified
                 </Badge>
               )}
@@ -444,7 +444,7 @@ export function SalesforceRecordCloner({ isConnected }: SalesforceRecordClonerPr
                         <RefreshCw className="w-3 h-3" />
                       </Button>
                     )}
-                    <Badge variant="outline" className="text-[10px] text-cyan-300 border-cyan-500/50">
+                    <Badge variant="outline" className="text-[10px] text-cyan-700 dark:text-cyan-300 border-cyan-500/50">
                       {field.type}
                     </Badge>
                   </div>
@@ -487,16 +487,16 @@ export function SalesforceRecordCloner({ isConnected }: SalesforceRecordClonerPr
                 >
                   <div className="flex items-center gap-2">
                     {result.success ? (
-                      <Check className="w-4 h-4 text-green-400" />
+                      <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
                     ) : (
-                      <X className="w-4 h-4 text-red-400" />
+                      <X className="w-4 h-4 text-red-600 dark:text-red-400" />
                     )}
                     <span className="text-foreground font-mono text-sm">
                       {result.originalId} → {result.newId || 'Failed'}
                     </span>
                   </div>
                   {result.error && (
-                    <div className="text-sm text-red-400 mt-1">{result.error}</div>
+                    <div className="text-sm text-red-600 dark:text-red-400 mt-1">{result.error}</div>
                   )}
                   {result.childResults && result.childResults.length > 0 && (
                     <div className="mt-2 pl-4 text-xs text-slate-400">

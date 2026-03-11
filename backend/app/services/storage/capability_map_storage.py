@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the Autonomous Explorer / Flowmap system which is unused.
 """
 Storage service for capability maps and exploration results.
 Handles persistence of exploration runs, capability maps, and comparisons.

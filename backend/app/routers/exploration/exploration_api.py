@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Autonomous Explorer / Flowmap is unused. Router registration commented out in main.py.
 """
 Exploration API Router
 Endpoints for autonomous app exploration and capability map generation.

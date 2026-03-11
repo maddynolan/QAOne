@@ -46,7 +46,7 @@ export default function MergePreviewDialog({
       <DialogContent className="max-w-3xl h-[80vh] bg-card border-border flex flex-col overflow-hidden">
         <DialogHeader className="shrink-0">
           <DialogTitle className="text-foreground flex items-center gap-2">
-            <Merge className="h-5 w-5 text-purple-400" />
+            <Merge className="h-5 w-5 text-purple-600 dark:text-purple-400" />
             Merge Preview - {selectedTestCase?.name}
           </DialogTitle>
         </DialogHeader>
@@ -101,10 +101,10 @@ export default function MergePreviewDialog({
                           {step.name || step.description || `${step.qword} ${step.args?.[0] || ''}`}
                         </span>
                         {step._merged && (
-                          <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">Merged</Badge>
+                          <Badge className="bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-[10px]">Merged</Badge>
                         )}
                         {step._hasMultipleActions && (
-                          <Badge className="bg-blue-500/20 text-blue-400 text-[10px]">
+                          <Badge className="bg-blue-500/20 text-blue-700 dark:text-blue-400 text-[10px]">
                             {step.automationActions?.length || 0} Actions
                           </Badge>
                         )}
@@ -117,7 +117,7 @@ export default function MergePreviewDialog({
                           <Badge className="bg-muted-foreground/20 text-muted-foreground text-[10px]">Manual</Badge>
                         )}
                         {step._extra && (
-                          <Badge className="bg-purple-500/20 text-purple-400 text-[10px]">New Step</Badge>
+                          <Badge className="bg-purple-500/20 text-purple-700 dark:text-purple-400 text-[10px]">New Step</Badge>
                         )}
                       </div>
 
@@ -149,7 +149,7 @@ export default function MergePreviewDialog({
                       )}
                     </div>
                     {step.qword || step._hasMultipleActions ? (
-                      <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+                      <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     ) : (
                       <AlertCircle className="h-4 w-4 text-muted-foreground shrink-0" />
                     )}

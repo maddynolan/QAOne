@@ -150,10 +150,10 @@ export function fixTypeVariant(fixType: string): 'default' | 'destructive' | 'ou
  * Get a background color class for a flakiness score.
  */
 export function flakyScoreColor(score: number): string {
-  if (score >= 0.5) return 'bg-red-500/20 text-red-400 border-red-500/30';
-  if (score >= 0.25) return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
-  if (score > 0) return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-  return 'bg-green-500/20 text-green-400 border-green-500/30';
+  if (score >= 0.5) return 'bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/30';
+  if (score >= 0.25) return 'bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/30';
+  if (score > 0) return 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30';
+  return 'bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30';
 }
 
 /**
@@ -171,11 +171,11 @@ export function flakyLabel(score: number, isFlaky: boolean): string {
  */
 export function rootCauseBadge(rootCause: string): { label: string; className: string } {
   const badges: Record<string, { label: string; className: string }> = {
-    element_changed: { label: 'Element Changed', className: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-    timing_issue: { label: 'Timing Issue', className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
-    app_bug: { label: 'App Bug', className: 'bg-red-500/20 text-red-400 border-red-500/30' },
-    env_issue: { label: 'Environment', className: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
-    test_issue: { label: 'Test Issue', className: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
+    element_changed: { label: 'Element Changed', className: 'bg-blue-500/20 text-blue-700 dark:text-blue-400 border-blue-500/30' },
+    timing_issue: { label: 'Timing Issue', className: 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30' },
+    app_bug: { label: 'App Bug', className: 'bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/30' },
+    env_issue: { label: 'Environment', className: 'bg-purple-500/20 text-purple-700 dark:text-purple-400 border-purple-500/30' },
+    test_issue: { label: 'Test Issue', className: 'bg-orange-500/20 text-orange-700 dark:text-orange-400 border-orange-500/30' },
   };
-  return badges[rootCause] || { label: rootCause, className: 'bg-gray-500/20 text-gray-400 border-gray-500/30' };
+  return badges[rootCause] || { label: rootCause, className: 'bg-gray-500/20 text-gray-700 dark:text-gray-400 border-gray-500/30' };
 }

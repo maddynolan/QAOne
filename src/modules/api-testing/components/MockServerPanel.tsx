@@ -91,7 +91,9 @@ export default function MockServerPanel() {
       if (!res.ok) return;
       const data = await res.json();
       setEndpoints(data.endpoints || []);
-    } catch {}
+    } catch (err) {
+      console.warn('[MockServer] Failed to load endpoints:', err);
+    }
   }, []);
 
   // Load logs for active server
@@ -101,7 +103,9 @@ export default function MockServerPanel() {
       if (!res.ok) return;
       const data = await res.json();
       setLogs(data.logs || []);
-    } catch {}
+    } catch (err) {
+      console.warn('[MockServer] Failed to load logs:', err);
+    }
   }, []);
 
   useEffect(() => {
@@ -199,8 +203,10 @@ export default function MockServerPanel() {
     try {
       await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${activeServerId}/endpoint/${endpointId}`, { method: "DELETE" });
       await loadEndpoints(activeServerId);
-    } catch {}
-  }, [activeServerId, loadEndpoints]);
+    } catch (err: any) {
+      toast({ title: "Failed to delete endpoint", description: err.message, variant: "destructive" });
+    }
+  }, [activeServerId, loadEndpoints, toast]);
 
   const methodColor = (m: string) => {
     const colors: Record<string, string> = { GET: "text-green-600", POST: "text-blue-600", PUT: "text-amber-600", PATCH: "text-orange-600", DELETE: "text-red-600" };

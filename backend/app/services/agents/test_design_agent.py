@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the old 8-agent registry system. Unused in production.
 """
 Test Design Agent - Converts Playwright scripts to structured test cases
 App-First Flow: Converts recorded flows into structured test cases

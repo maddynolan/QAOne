@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# The /agents endpoints are unused. Router registration commented out in main.py.
 """
 Agents API Router
 Handles agent execution and health checks

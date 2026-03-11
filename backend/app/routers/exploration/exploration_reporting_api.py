@@ -1,3 +1,6 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the Autonomous Explorer / Flowmap system which is unused.
+# Router registration commented out in main.py.
 """
 API endpoints for exploration reporting.
 """

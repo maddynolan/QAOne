@@ -24,7 +24,7 @@
  * @api /performance/* - Load testing engine (80 endpoints)
  * @api /api/protocol-recording/* - HTTP traffic capture (13 endpoints)
  */
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -163,10 +163,10 @@ export default function VirtualUserGenerator() {
   // ---------------------------------------------------------------------------
   // URL params (incoming test case from Builder/Recorder)
   // ---------------------------------------------------------------------------
-  const urlParams = new URLSearchParams(window.location.search);
-  const incomingTestCaseName = urlParams.get('testCaseName');
-  const hasProtocolData = urlParams.get('hasProtocolData') === 'true';
-  const source = urlParams.get('source');
+  const urlParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const incomingTestCaseName = useMemo(() => urlParams.get('testCaseName'), [urlParams]);
+  const hasProtocolData = useMemo(() => urlParams.get('hasProtocolData') === 'true', [urlParams]);
+  const source = useMemo(() => urlParams.get('source'), [urlParams]);
 
   // ---------------------------------------------------------------------------
   // Refs for closure access
@@ -487,11 +487,12 @@ export default function VirtualUserGenerator() {
         store.setActiveTab("results");
       }, (store.duration + 10) * 1000);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[LoadTest] Error starting backend test:', error);
       store.setIsRunning(false);
       isRunningRef.current = false;
-      toast({ title: "Load Test Failed", description: error.message || "Failed to start load test on backend", variant: "destructive" });
+      const message = error instanceof Error ? error.message : "Failed to start load test on backend";
+      toast({ title: "Load Test Failed", description: message, variant: "destructive" });
     }
   };
 
@@ -543,12 +544,35 @@ export default function VirtualUserGenerator() {
   // ============================================================================
 
   const completeTest = () => {
-    // Evaluate thresholds
+    // Evaluate thresholds using the store's configurable thresholds
     const results = evaluateThresholds(store.metrics, store.thresholds);
     store.setThresholdResults(results);
 
-    // Get verdict
-    const verdictInfo = getVerdict(store.metrics);
+    // Derive verdict from threshold results (respects user-configured thresholds)
+    let verdict = 'PENDING';
+    let verdictReason = '';
+    if (store.metrics.totalRequests === 0) {
+      verdict = 'PENDING';
+      verdictReason = 'No test data yet';
+    } else if (results.length === 0) {
+      // No thresholds configured, fall back to getVerdict() defaults
+      const fallback = getVerdict(store.metrics);
+      verdict = fallback.verdict;
+      verdictReason = fallback.reason;
+    } else {
+      const passed = results.filter(r => r.passed).length;
+      const criticalFails = results.filter(r => !r.passed && r.threshold.critical);
+      if (criticalFails.length > 0) {
+        verdict = 'FAIL';
+        verdictReason = `Critical threshold failed: ${criticalFails.map(f => f.threshold.name || f.threshold.metric).join(', ')}`;
+      } else if (passed === results.length) {
+        verdict = 'PASS';
+        verdictReason = `All ${results.length} thresholds passed`;
+      } else {
+        verdict = 'FAIL';
+        verdictReason = `${results.length - passed} of ${results.length} thresholds failed`;
+      }
+    }
 
     // Save to history
     store.addToHistory({
@@ -563,8 +587,8 @@ export default function VirtualUserGenerator() {
         pattern: store.pattern,
       },
       metrics: { ...store.metrics },
-      verdict: verdictInfo.verdict,
-      verdictReason: verdictInfo.reason,
+      verdict: verdict,
+      verdictReason: verdictReason,
       thresholdResults: results,
     });
   };
@@ -747,6 +771,15 @@ export default function VirtualUserGenerator() {
   // ============================================================================
   // Effects
   // ============================================================================
+
+  // Cleanup all intervals on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (metricsInterval.current) clearInterval(metricsInterval.current);
+      if (testInterval.current) clearTimeout(testInterval.current);
+      if (metricsPollingRef.current) clearInterval(metricsPollingRef.current);
+    };
+  }, []);
 
   // Load saved configs and auto-refresh sessions
   useEffect(() => {
@@ -1341,6 +1374,8 @@ export default function VirtualUserGenerator() {
               steps={store.scenarioSteps}
               onStepsChange={store.setScenarioSteps}
               targetUrl={store.targetUrl}
+              onImportHar={handleHarImport}
+              onImportRecording={() => { setShowImportDialog(true); loadFlowstralSessions(); }}
             />
 
             {/* Legacy steps display (from HAR/Flowstral import) */}
@@ -1577,7 +1612,7 @@ export default function VirtualUserGenerator() {
                     <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-2">
                       {v.details.map((result, i) => (
                         <div key={i} className={`p-2 rounded text-xs ${
-                          result.passed ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                          result.passed ? 'bg-green-500/20 text-green-700 dark:text-green-400' : 'bg-red-500/20 text-red-700 dark:text-red-400'
                         }`}>
                           <div className="flex items-center justify-between">
                             <span>{result.passed ? '>' : 'x'} {result.name}</span>

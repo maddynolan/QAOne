@@ -82,7 +82,7 @@ export function CreateDefectForm({
     <div className="space-y-4">
       {/* Title */}
       <div>
-        <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Title *</label>
+        <label className="text-sm text-muted-foreground mb-1 block">Title *</label>
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -93,7 +93,7 @@ export function CreateDefectForm({
 
       {/* Description */}
       <div>
-        <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
+        <label className="text-sm text-muted-foreground mb-1 block">Description</label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -105,11 +105,11 @@ export function CreateDefectForm({
       {/* Row 1: Severity, Priority, Status, Type */}
       <div className="grid grid-cols-4 gap-3">
         <div>
-          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Severity</label>
+          <label className="text-sm text-muted-foreground mb-1 block">Severity</label>
           <select
             value={severity}
             onChange={(e) => setSeverity(e.target.value as any)}
-            className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
+            className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"
           >
             <option value="critical">S1 - Critical</option>
             <option value="major">S2 - Major</option>
@@ -118,11 +118,11 @@ export function CreateDefectForm({
           </select>
         </div>
         <div>
-          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Priority</label>
+          <label className="text-sm text-muted-foreground mb-1 block">Priority</label>
           <select
             value={priority}
             onChange={(e) => setPriority(e.target.value as any)}
-            className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
+            className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"
           >
             <option value="critical">P1 - Critical</option>
             <option value="high">P2 - High</option>
@@ -131,11 +131,11 @@ export function CreateDefectForm({
           </select>
         </div>
         <div>
-          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Status</label>
+          <label className="text-sm text-muted-foreground mb-1 block">Status</label>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as any)}
-            className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
+            className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"
           >
             <option value="new">New</option>
             <option value="open">Open</option>
@@ -148,11 +148,11 @@ export function CreateDefectForm({
           </select>
         </div>
         <div>
-          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Type</label>
+          <label className="text-sm text-muted-foreground mb-1 block">Type</label>
           <select
             value={type}
             onChange={(e) => setType(e.target.value as any)}
-            className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
+            className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"
           >
             <option value="bug">Bug</option>
             <option value="enhancement">Enhancement</option>
@@ -167,7 +167,7 @@ export function CreateDefectForm({
       {/* Row 2: Environment, Component, Assigned To */}
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Environment</label>
+          <label className="text-sm text-muted-foreground mb-1 block">Environment</label>
           <Input
             value={environment}
             onChange={(e) => setEnvironment(e.target.value)}
@@ -176,7 +176,7 @@ export function CreateDefectForm({
           />
         </div>
         <div>
-          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Component</label>
+          <label className="text-sm text-muted-foreground mb-1 block">Component</label>
           <Input
             value={component}
             onChange={(e) => setComponent(e.target.value)}
@@ -185,7 +185,7 @@ export function CreateDefectForm({
           />
         </div>
         <div>
-          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Assigned To</label>
+          <label className="text-sm text-muted-foreground mb-1 block">Assigned To</label>
           <Input
             value={assignedTo}
             onChange={(e) => setAssignedTo(e.target.value)}
@@ -198,7 +198,7 @@ export function CreateDefectForm({
       {/* Row 3: Versions */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Affected Version</label>
+          <label className="text-sm text-muted-foreground mb-1 block">Affected Version</label>
           <Input
             value={affectedVersion}
             onChange={(e) => setAffectedVersion(e.target.value)}
@@ -207,7 +207,7 @@ export function CreateDefectForm({
           />
         </div>
         <div>
-          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Fix Version</label>
+          <label className="text-sm text-muted-foreground mb-1 block">Fix Version</label>
           <Input
             value={fixVersion}
             onChange={(e) => setFixVersion(e.target.value)}
@@ -219,7 +219,7 @@ export function CreateDefectForm({
 
       {/* Steps to Reproduce */}
       <div>
-        <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Steps to Reproduce</label>
+        <label className="text-sm text-muted-foreground mb-1 block">Steps to Reproduce</label>
         <textarea
           value={stepsToReproduce}
           onChange={(e) => setStepsToReproduce(e.target.value)}
@@ -231,7 +231,7 @@ export function CreateDefectForm({
       {/* Expected vs Actual */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Expected Result</label>
+          <label className="text-sm text-muted-foreground mb-1 block">Expected Result</label>
           <textarea
             value={expectedResult}
             onChange={(e) => setExpectedResult(e.target.value)}
@@ -240,7 +240,7 @@ export function CreateDefectForm({
           />
         </div>
         <div>
-          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Actual Result</label>
+          <label className="text-sm text-muted-foreground mb-1 block">Actual Result</label>
           <textarea
             value={actualResult}
             onChange={(e) => setActualResult(e.target.value)}
@@ -252,7 +252,7 @@ export function CreateDefectForm({
 
       {/* Linked Test Cases */}
       <div>
-        <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Linked Test Cases</label>
+        <label className="text-sm text-muted-foreground mb-1 block">Linked Test Cases</label>
         <div className="max-h-32 overflow-y-auto bg-secondary border border-border rounded-md p-2">
           {testCases.slice(0, 20).map(tc => (
             <label key={tc.id} className="flex items-center gap-2 p-1 hover:bg-secondary rounded cursor-pointer">
@@ -279,7 +279,7 @@ export function CreateDefectForm({
 
       {/* Tags */}
       <div>
-        <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Tags (comma separated)</label>
+        <label className="text-sm text-muted-foreground mb-1 block">Tags (comma separated)</label>
         <Input
           value={tags}
           onChange={(e) => setTags(e.target.value)}

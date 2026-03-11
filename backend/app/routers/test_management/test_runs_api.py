@@ -18,6 +18,16 @@ from app.utils.endpoint_helpers import (
     map_priority_from_db,
     DEFAULT_USER_ID
 )
+from app.services.storage.database import get_database_client
+from app.services.storage.postgres_direct import (
+    get_postgres_pool,
+    execute_query,
+    execute_insert,
+)
+from app.services.storage.test_results_storage import (
+    store_test_run_step,
+    store_artifact,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +53,6 @@ async def get_test_runs(project_id: Optional[str] = None):
         # Try PostgreSQL first
         if _is_postgres_available():
             try:
-                from app.services.storage.postgres_direct import execute_query
                 org_id, proj_id = await ensure_default_org_project()
                 project_id = project_id or proj_id
                 
@@ -93,6 +102,10 @@ async def get_test_runs(project_id: Optional[str] = None):
 async def get_test_run(run_id: str):
     """Get a specific test run with details including test cases and steps"""
     try:
+        # Check in-memory storage first
+        if run_id in _test_runs_store:
+            return _test_runs_store[run_id]
+
         pool = get_database_client()
         if not pool or not hasattr(pool, 'getconn'):
             raise HTTPException(status_code=404, detail="Test run not found")
@@ -407,24 +420,150 @@ async def create_test_run(request: Request):
     try:
         data = await request.json()
         now = datetime.now()
-        run_id = f"run_{int(time.time())}"
-        
+
         logger.info(f"CREATE TEST RUN - Received data keys: {list(data.keys())}")
-        
+
         # Try PostgreSQL first
         if _is_postgres_available():
             try:
-                from app.services.storage.database import get_database_client
-                from app.services.storage.postgres_direct import execute_insert, execute_query
-                pool = get_database_client()
-                if pool and hasattr(pool, 'getconn'):
-                    org_id, project_id = await ensure_default_org_project()
-                    # ... continue with PostgreSQL logic
-                    pass
+                org_id, project_id = await ensure_default_org_project()
+
+                # Verify project exists before trying to create test run
+                projects = await execute_query("SELECT id FROM projects WHERE id = %s", (project_id,))
+                if not projects:
+                    logger.error(f"Project {project_id} does not exist in database. Cannot create test run.")
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Project {project_id} does not exist. Please ensure default project is created."
+                    )
+
+                run_data = {
+                    "project_id": project_id,
+                    "name": data.get("name", f"Test Run {now.strftime('%Y-%m-%d %H:%M')}"),
+                    "status": "pending",
+                    "environment": data.get("environment", "local"),
+                    "plan_id": data.get("planId"),
+                    "created_by": DEFAULT_USER_ID
+                }
+
+                run_id = await execute_insert("test_runs", run_data)
+                logger.info(f"Created test run with ID: {run_id}")
+                if not run_id:
+                    raise HTTPException(status_code=500, detail="Failed to create test run")
+
+                # Support both old format (testCases array) and new format (test_case_ids array)
+                test_case_ids = data.get("test_case_ids", [])
+                test_cases = data.get("testCases", [])
+
+                # If test_case_ids provided, fetch test cases from database
+                if test_case_ids and len(test_case_ids) > 0:
+                    logger.info(f"CREATE TEST RUN - Using test_case_ids: {len(test_case_ids)} IDs provided")
+                    test_cases = []
+                    for case_id in test_case_ids:
+                        tc_query = """
+                            SELECT id, title, description, priority, tags, steps, test_type
+                            FROM test_cases
+                            WHERE id = %s
+                        """
+                        tc_results = await execute_query(tc_query, (case_id,))
+                        if tc_results:
+                            tc = tc_results[0]
+                            steps = tc.get("steps", [])
+                            if isinstance(steps, str):
+                                try:
+                                    steps = json.loads(steps)
+                                except Exception:
+                                    steps = []
+
+                            test_cases.append({
+                                "id": str(tc.get("id", "")),
+                                "title": tc.get("title", ""),
+                                "name": tc.get("title", ""),
+                                "description": tc.get("description", ""),
+                                "priority": tc.get("priority", "P2"),
+                                "tags": tc.get("tags", []) or [],
+                                "steps": steps or []
+                            })
+                        else:
+                            logger.warning(f"Test case {case_id} not found in database, skipping")
+
+                logger.info(f"CREATE TEST RUN - Processing {len(test_cases)} test cases")
+
+                if test_cases:
+                    for idx, test_case in enumerate(test_cases):
+                        case_id = test_case.get("id") or test_case.get("case_id")
+                        steps = test_case.get("steps", [])
+
+                        logger.debug(f"Processing test case {case_id} with {len(steps)} steps")
+
+                        # If no case_id, generate one (must be valid UUID)
+                        if not case_id:
+                            case_id = str(uuid.uuid4())
+                            logger.warning(f"Test case missing ID, generated: {case_id}")
+                        else:
+                            # Ensure case_id is a valid UUID format
+                            try:
+                                uuid.UUID(case_id)
+                            except ValueError:
+                                logger.warning(f"Test case ID '{case_id}' is not a valid UUID, generating new one")
+                                case_id = str(uuid.uuid4())
+
+                        # If no steps provided, create a placeholder step
+                        if not steps or len(steps) == 0:
+                            logger.warning(f"No steps found for test case {case_id}, creating placeholder")
+                            steps = [{
+                                "action": "Execute test case",
+                                "expectedResult": "Test case should complete successfully",
+                                "expected": "Test case should complete successfully"
+                            }]
+
+                        # Always create test_run_steps entries
+                        for step_idx, step in enumerate(steps):
+                            step_action = step.get("action") or "Execute step"
+
+                            test_case_name = test_case.get('title') or test_case.get('name') or 'Test'
+                            step_title = f"{test_case_name} - Step {step_idx + 1}: {step_action}"
+
+                            try:
+                                step_id = await store_test_run_step(
+                                    run_id=run_id,
+                                    case_id=case_id,
+                                    title=step_title,
+                                    status="pending",
+                                    duration_ms=0,
+                                    error_message=None,
+                                    stdout=None,
+                                    stderr=None,
+                                    started_at=None,
+                                    completed_at=None
+                                )
+                                if step_id:
+                                    logger.debug(f"Created test_run_step for case {case_id}, step {step_idx + 1}: {step_title}")
+                                else:
+                                    logger.warning(f"store_test_run_step returned None for case {case_id}, step {step_idx + 1}")
+                            except Exception as e:
+                                logger.error(f"Failed to create test_run_step for case {case_id}, step {step_idx + 1}: {str(e)}")
+                                raise
+                else:
+                    logger.warning(f"No test cases provided when creating test run {run_id}")
+
+                # Verify steps were actually inserted
+                verify_query = """
+                    SELECT COUNT(*) as count FROM test_run_steps WHERE run_id = %s
+                """
+                verify_result = await execute_query(verify_query, (run_id,))
+                if verify_result:
+                    count = verify_result[0].get("count", 0)
+                    logger.debug(f"VERIFY - Found {count} steps in database for run_id: {run_id}")
+
+                return {"id": run_id}
+            except HTTPException:
+                raise
             except Exception as pg_error:
-                logger.warning(f"PostgreSQL create failed: {pg_error}")
-        
+                logger.warning(f"PostgreSQL create failed, falling back to in-memory: {pg_error}")
+
         # Fallback: Create test run in memory
+        run_id = f"run_{int(time.time())}"
         test_cases = data.get("testCases", [])
         test_run = {
             "id": run_id,
@@ -439,138 +578,6 @@ async def create_test_run(request: Request):
         _test_runs_store[run_id] = test_run
         logger.info(f"Created test run in memory: {run_id}")
         return {"id": run_id, "testRun": test_run}
-        
-        # Verify project exists before trying to create test run
-        from app.services.storage.postgres_direct import execute_query
-        projects = await execute_query("SELECT id FROM projects WHERE id = %s", (project_id,))
-        if not projects:
-            logger.error(f"Project {project_id} does not exist in database. Cannot create test run.")
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Project {project_id} does not exist. Please ensure default project is created."
-            )
-        
-        run_data = {
-            "project_id": project_id,
-            "name": data.get("name", f"Test Run {datetime.utcnow().isoformat()}"),
-            "status": "pending",
-            "environment": data.get("environment", "local"),
-            "plan_id": data.get("planId"),
-            "created_by": DEFAULT_USER_ID
-        }
-        
-        run_id = await execute_insert("test_runs", run_data)
-        logger.info(f"Created test run with ID: {run_id}")
-        if not run_id:
-            raise HTTPException(status_code=500, detail="Failed to create test run")
-        
-        # Support both old format (testCases array) and new format (test_case_ids array)
-        test_case_ids = data.get("test_case_ids", [])
-        test_cases = data.get("testCases", [])
-        
-        # If test_case_ids provided, fetch test cases from database
-        if test_case_ids and len(test_case_ids) > 0:
-            logger.info(f"CREATE TEST RUN - Using test_case_ids: {len(test_case_ids)} IDs provided")
-            test_cases = []
-            for case_id in test_case_ids:
-                tc_query = """
-                    SELECT id, title, description, priority, tags, steps, test_type
-                    FROM test_cases 
-                    WHERE id = %s
-                """
-                tc_results = await execute_query(tc_query, (case_id,))
-                if tc_results:
-                    tc = tc_results[0]
-                    steps = tc.get("steps", [])
-                    if isinstance(steps, str):
-                        try:
-                            steps = json.loads(steps)
-                        except:
-                            steps = []
-                    
-                    test_cases.append({
-                        "id": str(tc.get("id", "")),
-                        "title": tc.get("title", ""),
-                        "name": tc.get("title", ""),
-                        "description": tc.get("description", ""),
-                        "priority": tc.get("priority", "P2"),
-                        "tags": tc.get("tags", []) or [],
-                        "steps": steps or []
-                    })
-                else:
-                    logger.warning(f"Test case {case_id} not found in database, skipping")
-        
-        logger.info(f"CREATE TEST RUN - Processing {len(test_cases)} test cases")
-        
-        if test_cases:
-            for idx, test_case in enumerate(test_cases):
-                case_id = test_case.get("id") or test_case.get("case_id")
-                steps = test_case.get("steps", [])
-                
-                logger.debug(f"Processing test case {case_id} with {len(steps)} steps")
-                
-                # If no case_id, generate one (must be valid UUID)
-                if not case_id:
-                    case_id = str(uuid.uuid4())
-                    logger.warning(f"Test case missing ID, generated: {case_id}")
-                else:
-                    # Ensure case_id is a valid UUID format
-                    try:
-                        uuid.UUID(case_id)
-                    except ValueError:
-                        logger.warning(f"Test case ID '{case_id}' is not a valid UUID, generating new one")
-                        case_id = str(uuid.uuid4())
-                
-                # If no steps provided, create a placeholder step
-                if not steps or len(steps) == 0:
-                    logger.warning(f"No steps found for test case {case_id}, creating placeholder")
-                    steps = [{
-                        "action": "Execute test case",
-                        "expectedResult": "Test case should complete successfully",
-                        "expected": "Test case should complete successfully"
-                    }]
-                
-                # Always create test_run_steps entries
-                for step_idx, step in enumerate(steps):
-                    step_action = step.get("action") or "Execute step"
-                    step_expected = step.get("expectedResult") or step.get("expected") or "Step should complete"
-                    
-                    test_case_name = test_case.get('title') or test_case.get('name') or 'Test'
-                    step_title = f"{test_case_name} - Step {step_idx + 1}: {step_action}"
-                    
-                    try:
-                        step_id = await store_test_run_step(
-                            run_id=run_id,
-                            case_id=case_id,
-                            title=step_title,
-                            status="pending",
-                            duration_ms=0,
-                            error_message=None,
-                            stdout=None,
-                            stderr=None,
-                            started_at=None,
-                            completed_at=None
-                        )
-                        if step_id:
-                            logger.debug(f"Created test_run_step for case {case_id}, step {step_idx + 1}: {step_title}")
-                        else:
-                            logger.warning(f"store_test_run_step returned None for case {case_id}, step {step_idx + 1}")
-                    except Exception as e:
-                        logger.error(f"Failed to create test_run_step for case {case_id}, step {step_idx + 1}: {str(e)}")
-                        raise
-        else:
-            logger.warning(f"No test cases provided when creating test run {run_id}")
-        
-        # Verify steps were actually inserted
-        verify_query = """
-            SELECT COUNT(*) as count FROM test_run_steps WHERE run_id = %s
-        """
-        verify_result = await execute_query(verify_query, (run_id,))
-        if verify_result:
-            count = verify_result[0].get("count", 0)
-            logger.debug(f"VERIFY - Found {count} steps in database for run_id: {run_id}")
-        
-        return {"id": run_id}
     except HTTPException:
         raise
     except Exception as e:
@@ -583,7 +590,12 @@ async def update_test_run(run_id: str, request: Request):
     """Update a test run"""
     try:
         data = await request.json()
-        
+
+        # Check in-memory storage first
+        if run_id in _test_runs_store:
+            _test_runs_store[run_id].update(data)
+            return {"id": run_id}
+
         pool = get_postgres_pool()
         if not pool:
             raise HTTPException(status_code=404, detail="Test run not found")
@@ -955,6 +967,11 @@ async def link_defect_to_run(run_id: str, request: Request):
 async def delete_test_run(run_id: str):
     """Delete a test run"""
     try:
+        # Check in-memory storage first
+        if run_id in _test_runs_store:
+            del _test_runs_store[run_id]
+            return {"status": "deleted", "id": run_id}
+
         pool = get_postgres_pool()
         if not pool:
             raise HTTPException(status_code=404, detail="Test run not found")

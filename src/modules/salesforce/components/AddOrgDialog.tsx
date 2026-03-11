@@ -2,6 +2,7 @@
  * AddOrgDialog - Dialog for connecting a new Salesforce org.
  * Supports three auth methods: Browser OAuth, Session ID, and manual credentials.
  */
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,6 +41,10 @@ export function AddOrgDialog({
   onAddOrg,
   onOrgConnected,
 }: AddOrgDialogProps) {
+  // React state for session ID inputs (replaces document.getElementById anti-pattern)
+  const [sessionInstanceUrl, setSessionInstanceUrl] = useState('');
+  const [sessionIdValue, setSessionIdValue] = useState('');
+
   const handleBrowserLogin = async () => {
     setIsLoading(true);
     let pollInterval: NodeJS.Timeout | null = null;
@@ -146,8 +151,8 @@ export function AddOrgDialog({
   };
 
   const handleSessionConnect = () => {
-    let instanceUrl = (document.getElementById('session-instance-url') as HTMLInputElement)?.value?.trim();
-    const sessionId = (document.getElementById('session-id-input') as HTMLInputElement)?.value?.trim();
+    let instanceUrl = sessionInstanceUrl.trim();
+    const sessionId = sessionIdValue.trim();
 
     if (!instanceUrl || !sessionId) {
       toast.error('Please enter both Instance URL and Session ID');
@@ -193,8 +198,8 @@ export function AddOrgDialog({
           {/* Browser OAuth Option - Recommended */}
           <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
             <div className="flex items-center gap-2 mb-2">
-              <ExternalLink className="w-5 h-5 text-blue-400" />
-              <span className="font-medium text-blue-300">Recommended: Login with Browser</span>
+              <ExternalLink className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              <span className="font-medium text-blue-700 dark:text-blue-300">Recommended: Login with Browser</span>
             </div>
             <p className="text-sm text-muted-foreground mb-3">
               Opens Salesforce login in your browser. Works with SSO, MFA, and all org types.
@@ -245,7 +250,7 @@ export function AddOrgDialog({
                   variant="outline"
                   size="sm"
                   onClick={() => setIsLoading(false)}
-                  className="text-red-400 border-red-500/50 hover:bg-red-500/20"
+                  className="text-red-600 dark:text-red-400 border-red-500/50 hover:bg-red-500/20"
                 >
                   Cancel
                 </Button>
@@ -256,8 +261,8 @@ export function AddOrgDialog({
           {/* Session ID Option */}
           <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
             <div className="flex items-center gap-2 mb-2">
-              <Key className="w-5 h-5 text-green-400" />
-              <span className="font-medium text-green-300">Quick: Connect with Session ID</span>
+              <Key className="w-5 h-5 text-green-600 dark:text-green-400" />
+              <span className="font-medium text-green-700 dark:text-green-300">Quick: Connect with Session ID</span>
             </div>
             <p className="text-xs text-muted-foreground mb-3">
               If username/password doesn't work, copy your session from the browser.
@@ -266,12 +271,14 @@ export function AddOrgDialog({
               <Input
                 placeholder="Instance URL (e.g., https://orgfarm-xxx.develop.my.salesforce.com)"
                 className="bg-secondary border-border text-foreground placeholder:text-muted-foreground text-xs"
-                id="session-instance-url"
+                value={sessionInstanceUrl}
+                onChange={(e) => setSessionInstanceUrl(e.target.value)}
               />
               <Input
                 placeholder="Session ID (from browser cookies)"
                 className="bg-secondary border-border text-foreground placeholder:text-muted-foreground text-xs"
-                id="session-id-input"
+                value={sessionIdValue}
+                onChange={(e) => setSessionIdValue(e.target.value)}
               />
               <Button
                 onClick={handleSessionConnect}

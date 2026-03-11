@@ -202,10 +202,10 @@ const STRATEGY_INFO: Record<BlackboxLocatorType, StrategyConfig> = {
 };
 
 const RELIABILITY_STYLES = {
-  'High': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  'Medium-High': 'bg-lime-500/20 text-lime-400 border-lime-500/30',
-  'Medium': 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  'Low': 'bg-red-500/20 text-red-400 border-red-500/30'
+  'High': 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+  'Medium-High': 'bg-lime-500/20 text-lime-700 dark:text-lime-400 border-lime-500/30',
+  'Medium': 'bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/30',
+  'Low': 'bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/30'
 };
 
 export function BlackboxLocatorStrategies({
@@ -392,14 +392,14 @@ for y in range(screenshot.height):
       {/* Header with Clear button */}
       {hasAppliedFallback && onClear && (
         <div className="p-3 bg-amber-500/10 border-b border-amber-500/20 flex items-center justify-between">
-          <span className="text-sm text-amber-400">
-            ⚡ Fallback strategy is active
+          <span className="text-sm text-amber-700 dark:text-amber-400">
+            Fallback strategy is active
           </span>
           <Button
             variant="ghost"
             size="sm"
             onClick={clearFallback}
-            className="h-7 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+            className="h-7 text-red-700 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-500/10"
           >
             <Trash2 className="h-3.5 w-3.5 mr-1" />
             Remove Fallback
@@ -814,7 +814,7 @@ for y in range(screenshot.height):
             {codeCopied ? 'Copied' : 'Copy'}
           </Button>
         </div>
-        <pre className="p-3 bg-muted rounded-lg text-xs text-emerald-400 overflow-x-auto max-h-32 font-mono">
+        <pre className="p-3 bg-muted rounded-lg text-xs text-emerald-700 dark:text-emerald-400 overflow-x-auto max-h-32 font-mono">
           {generateCode(locator)}
         </pre>
         <Button 

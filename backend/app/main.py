@@ -68,14 +68,16 @@ from app.services.storage.ai_storage import store_ai_generation
 from app.services.storage.database import create_requirement, get_database_client
 from app.services.llm.enhanced_generation_service import enhanced_generation_service
 
+# DEPRECATED (v3.20.0) — Old agent registry system unused
 # Phase 1.2: Initialize agent registry and orchestrator integration
-from app.services.core.agent_registry import agent_registry
+# from app.services.core.agent_registry import agent_registry
 from app.services.core.orchestrator import orchestrator
-orchestrator.set_agent_registry(agent_registry)
+# orchestrator.set_agent_registry(agent_registry)
 
+# DEPRECATED (v3.20.0) — Old agent registration unused
 # Phase 2-4: Register all agents
-from app.services.core.agent_registration import register_all_agents
-register_all_agents()
+# from app.services.core.agent_registration import register_all_agents
+# register_all_agents()
 from app.schemas import (
     ReqToTestPlanRequest, ReqToTestPlanResponse,
     ReqToTestsRequest, ReqToTestsResponse
@@ -656,7 +658,8 @@ from app.routers.test_management.test_plans_api import router as test_plans_rout
 from app.routers.platform.defects_api import router as defects_router
 from app.routers.platform.requirements_api import router as requirements_router
 from app.routers.platform.tenants_api import router as tenants_router
-from app.routers.ai.agents_api import router as agents_router
+# DEPRECATED (v3.20.0) — Old agent registry system unused
+# from app.routers.ai.agents_api import router as agents_router
 from app.routers.test_management.workflows_api import router as workflows_router
 from app.routers.ai.models_api import router as models_router
 from app.routers.ai.ai_generation_api import router as ai_generation_router
@@ -668,7 +671,7 @@ app.include_router(test_plans_router)
 app.include_router(defects_router)
 app.include_router(requirements_router)
 app.include_router(tenants_router)
-app.include_router(agents_router)
+# DEPRECATED (v3.20.0) — app.include_router(agents_router)
 app.include_router(workflows_router)
 app.include_router(models_router)
 app.include_router(ai_generation_router)
@@ -692,25 +695,25 @@ app.include_router(automation_router)
 from app.routers.test_management.requirement_to_testcase_api import router as requirement_to_testcase_router
 app.include_router(requirement_to_testcase_router)
 
-# Autonomous App Exploration API
-from app.routers.exploration.exploration_api import router as exploration_router
-app.include_router(exploration_router)
+# DEPRECATED (v3.20.0) — Autonomous App Exploration API (unused)
+# from app.routers.exploration.exploration_api import router as exploration_router
+# app.include_router(exploration_router)
 
-# Exploration Test Generation API
-from app.routers.exploration.exploration_test_generation_api import router as exploration_test_generation_router
-app.include_router(exploration_test_generation_router)
+# DEPRECATED (v3.20.0) — Exploration Test Generation API (unused)
+# from app.routers.exploration.exploration_test_generation_api import router as exploration_test_generation_router
+# app.include_router(exploration_test_generation_router)
 
-# Exploration Reporting API
-from app.routers.exploration.exploration_reporting_api import router as exploration_reporting_router
-app.include_router(exploration_reporting_router)
+# DEPRECATED (v3.20.0) — Exploration Reporting API (unused)
+# from app.routers.exploration.exploration_reporting_api import router as exploration_reporting_router
+# app.include_router(exploration_reporting_router)
 
-# Nexus Autonomous Exploratory Testing API
-from app.routers.exploration.nexus_exploratory_api import router as nexus_exploratory_router
-app.include_router(nexus_exploratory_router)
+# DEPRECATED (v3.20.0) — Nexus Autonomous Exploratory Testing API (unused)
+# from app.routers.exploration.nexus_exploratory_api import router as nexus_exploratory_router
+# app.include_router(nexus_exploratory_router)
 
-# Blaze - Real Autonomous Exploratory Testing (no AI dependency)
-from app.routers.exploration.blaze_api import router as blaze_router
-app.include_router(blaze_router)
+# DEPRECATED (v3.20.0) — Blaze Autonomous Exploratory Testing (unused)
+# from app.routers.exploration.blaze_api import router as blaze_router
+# app.include_router(blaze_router)
 
 # AI Vision Self-Healing API (GPT-4 Vision powered)
 try:
@@ -728,9 +731,9 @@ try:
 except ImportError as e:
     logger.warning(f"AI Automation API not available: {e}")
 
-# Exploration Complete Workflow API
-from app.routers.exploration.exploration_workflow_api import router as exploration_workflow_router
-app.include_router(exploration_workflow_router)
+# DEPRECATED (v3.20.0) — Exploration Complete Workflow API (unused)
+# from app.routers.exploration.exploration_workflow_api import router as exploration_workflow_router
+# app.include_router(exploration_workflow_router)
 
 # Prometheus Metrics API
 from app.routers.platform.metrics_api import router as metrics_router

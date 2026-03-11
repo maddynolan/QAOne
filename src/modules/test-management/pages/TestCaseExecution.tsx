@@ -814,7 +814,7 @@ export default function TestCaseExecution() {
                     {getActionIcon(currentStep?.qword)}
                     {stepDetails.action}
                   </h2>
-                  <p className="text-xs text-gray-500">Step {currentStepIndex + 1} of {steps.length}</p>
+                  <p className="text-xs text-muted-foreground">Step {currentStepIndex + 1} of {steps.length}</p>
                 </div>
               </div>
               <Badge className={cn(
@@ -849,7 +849,7 @@ export default function TestCaseExecution() {
                   <div className="bg-muted/50 rounded-lg p-3 space-y-1">
                     {stepDetails.details.map((detail, idx) => (
                       <div key={idx} className="flex gap-2 text-sm">
-                        <span className="text-gray-500 min-w-[70px]">{detail.label}:</span>
+                        <span className="text-muted-foreground min-w-[70px]">{detail.label}:</span>
                         <span className="text-foreground font-mono bg-muted px-2 py-0.5 rounded break-all">{detail.value}</span>
                       </div>
                     ))}
@@ -933,7 +933,7 @@ export default function TestCaseExecution() {
                       Screenshots ({currentResult?.screenshots?.length || 0})
                     </Label>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Clipboard className="w-3 h-3" />
                         Ctrl+V to paste
                       </span>
@@ -981,8 +981,8 @@ export default function TestCaseExecution() {
                       className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer"
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      <ImageIcon className="w-10 h-10 text-gray-600 mx-auto mb-2" />
-                      <p className="text-gray-500 text-sm">No screenshots attached</p>
+                      <ImageIcon className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-muted-foreground text-sm">No screenshots attached</p>
                       <p className="text-muted-foreground text-xs mt-1">Click to upload or press <kbd className="px-1.5 py-0.5 bg-muted rounded text-muted-foreground text-[10px] font-mono">Ctrl+V</kbd> to paste from clipboard</p>
                     </div>
                   )}
@@ -1039,10 +1039,10 @@ export default function TestCaseExecution() {
                       </Button>
                     </div>
                   ) : (
-                    <div className="border-2 border-dashed border-gray-700 rounded-lg p-6 text-center">
-                      <Bug className="w-8 h-8 text-gray-600 mx-auto mb-2" />
-                      <p className="text-gray-500 text-sm">No defect linked</p>
-                      <p className="text-gray-600 text-xs">Create a defect if this step reveals a bug</p>
+                    <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                      <Bug className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-muted-foreground text-sm">No defect linked</p>
+                      <p className="text-muted-foreground/80 text-xs">Create a defect if this step reveals a bug</p>
                     </div>
                   )}
                 </div>
@@ -1112,63 +1112,63 @@ export default function TestCaseExecution() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label className="text-gray-400">Title *</Label>
+              <Label className="text-muted-foreground">Title *</Label>
               <Input
                 value={newDefect.title}
                 onChange={(e) => setNewDefect({ ...newDefect, title: e.target.value })}
                 placeholder="Brief description of the bug..."
-                className="mt-1 bg-gray-900 border-gray-700 text-white"
+                className="mt-1"
               />
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="text-gray-400">Severity</Label>
+                <Label className="text-muted-foreground">Severity</Label>
                 <select
                   value={newDefect.severity}
                   onChange={(e) => setNewDefect({ ...newDefect, severity: e.target.value })}
-                  className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white"
+                  className="w-full mt-1 bg-background border border-border rounded-md px-3 py-2 text-foreground"
                 >
                   {SEVERITY_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   {SEVERITY_OPTIONS.find(o => o.value === newDefect.severity)?.description}
                 </p>
               </div>
               <div>
-                <Label className="text-gray-400">Priority</Label>
+                <Label className="text-muted-foreground">Priority</Label>
                 <select
                   value={newDefect.priority}
                   onChange={(e) => setNewDefect({ ...newDefect, priority: e.target.value })}
-                  className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white"
+                  className="w-full mt-1 bg-background border border-border rounded-md px-3 py-2 text-foreground"
                 >
                   {PRIORITY_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   {PRIORITY_OPTIONS.find(o => o.value === newDefect.priority)?.description}
                 </p>
               </div>
             </div>
-            
+
             <div>
-              <Label className="text-gray-400">
+              <Label className="text-muted-foreground">
                 Description / Steps to Reproduce
-                <span className="text-green-400 text-xs ml-2">(Auto-populated from test execution)</span>
+                <span className="text-green-600 dark:text-green-400 text-xs ml-2">(Auto-populated from test execution)</span>
               </Label>
               <Textarea
                 value={newDefect.description}
                 onChange={(e) => setNewDefect({ ...newDefect, description: e.target.value })}
                 placeholder="Steps to reproduce, expected vs actual..."
-                className="mt-1 bg-gray-900 border-gray-700 text-white h-48 font-mono text-sm"
+                className="mt-1 h-48 font-mono text-sm"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDefectDialog(false)} className="border-gray-700">Cancel</Button>
+            <Button variant="outline" onClick={() => setShowDefectDialog(false)}>Cancel</Button>
             <Button onClick={createDefect} className="bg-red-600 hover:bg-red-500">
               <Bug className="h-4 w-4 mr-2" />
               Create & Link Defect
@@ -1179,10 +1179,10 @@ export default function TestCaseExecution() {
 
       {/* Link Existing Defect Dialog */}
       <Dialog open={showLinkDefectDialog} onOpenChange={setShowLinkDefectDialog}>
-        <DialogContent className="bg-gray-800 border-gray-700 max-w-lg">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              <Link className="w-5 h-5 text-amber-400" />
+            <DialogTitle className="flex items-center gap-2">
+              <Link className="w-5 h-5 text-amber-500" />
               Link Existing Defect
             </DialogTitle>
           </DialogHeader>

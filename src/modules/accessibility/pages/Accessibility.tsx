@@ -16,12 +16,14 @@
  * - Multi-format report export (JSON, HTML, Markdown)
  * - Scan history persistence with compliance score
  * - Compliance score gauge (0-100)
+ * - Collapsible issue details for long element HTML
+ * - Empty state with getting-started guidance
  *
  * @api /api/accessibility/* - Main scan endpoints (10 endpoints)
  * @api /api/a11y/* - V2 scanning with reports (6 endpoints)
  */
-import { useState, useEffect } from "react";
-import { Scan, AlertTriangle, CheckCircle, Clock, FileText, Download, RefreshCw, ExternalLink, Filter, List, BarChart3 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Scan, AlertTriangle, CheckCircle, Download, RefreshCw, Filter, List, ChevronDown, ChevronRight, Trash2, Eye, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -65,6 +67,16 @@ function calcComplianceScore(summary: ScanResult['summary']): number {
   return Math.max(0, Math.min(100, 100 - penalty));
 }
 
+// Validate URL format
+function isValidUrl(urlStr: string): boolean {
+  try {
+    const u = new URL(urlStr);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export default function Accessibility() {
   const [url, setUrl] = useState("");
   const [scanType, setScanType] = useState<"full_page" | "component">("full_page");
@@ -73,6 +85,7 @@ export default function Accessibility() {
   const [wcagVersion, setWcagVersion] = useState<"2.0" | "2.1" | "2.2">("2.1");
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   // Scan history with localStorage persistence
   const [recentScans, setRecentScans] = useState<ScanResult[]>(() => {
@@ -93,6 +106,9 @@ export default function Accessibility() {
   // Export format
   const [exportFormat, setExportFormat] = useState<"json" | "html" | "markdown">("json");
 
+  // Expanded issue details
+  const [expandedIssues, setExpandedIssues] = useState<Set<string>>(new Set());
+
   // Persist scan history
   useEffect(() => {
     try {
@@ -104,13 +120,31 @@ export default function Accessibility() {
     return localStorage.getItem("api_key") || "";
   };
 
-  const scanPage = async () => {
+  const toggleIssueExpanded = (issueId: string) => {
+    setExpandedIssues(prev => {
+      const next = new Set(prev);
+      if (next.has(issueId)) {
+        next.delete(issueId);
+      } else {
+        next.add(issueId);
+      }
+      return next;
+    });
+  };
+
+  const scanPage = useCallback(async () => {
     if (!url) {
       toast.error("Please enter a URL");
       return;
     }
 
+    if (!isValidUrl(url)) {
+      toast.error("Please enter a valid URL (must start with http:// or https://)");
+      return;
+    }
+
     setIsScanning(true);
+    setScanError(null);
     try {
       const apiKey = getApiKey();
       const headers: HeadersInit = { "Content-Type": "application/json" };
@@ -129,30 +163,37 @@ export default function Accessibility() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || "Scan failed");
+        let detail = "Scan failed";
+        try {
+          const error = await response.json();
+          detail = error.detail || detail;
+        } catch { /* response may not be JSON */ }
+        throw new Error(detail);
       }
 
       const result = await response.json();
       result.complianceScore = calcComplianceScore(result.summary);
       setScanResult(result);
+      setExpandedIssues(new Set());
       setRecentScans(prev => [result, ...prev.filter(s => s.scan_id !== result.scan_id)].slice(0, 50));
       toast.success(`Scan completed: ${result.summary.total} issues found (Score: ${result.complianceScore})`);
     } catch (error: any) {
+      setScanError(error.message);
       toast.error(`Scan failed: ${error.message}`);
     } finally {
       setIsScanning(false);
     }
-  };
+  }, [url, scanType, componentSelector, wcagLevel, wcagVersion]);
 
   const runBatchScan = async () => {
-    const urls = batchUrls.split('\n').map(u => u.trim()).filter(u => u && u.startsWith('http'));
+    const urls = batchUrls.split('\n').map(u => u.trim()).filter(u => u && isValidUrl(u));
     if (urls.length === 0) {
-      toast.error("Enter at least one valid URL");
+      toast.error("Enter at least one valid URL (must start with http:// or https://)");
       return;
     }
 
     setIsScanning(true);
+    setScanError(null);
     setBatchResults([]);
     try {
       const apiKey = getApiKey();
@@ -164,7 +205,7 @@ export default function Accessibility() {
         const res = await fetch(`${API_BASE_URL}/api/a11y/batch-scan`, {
           method: "POST",
           headers,
-          body: JSON.stringify({ urls, wcag_level: wcagLevel, wcag_version: wcagVersion }),
+          body: JSON.stringify({ urls, wcag_level: wcagLevel }),
         });
         if (res.ok) {
           const data = await res.json();
@@ -202,6 +243,7 @@ export default function Accessibility() {
       setRecentScans(prev => [...results, ...prev].slice(0, 50));
       toast.success(`Batch scan complete: ${results.length}/${urls.length} URLs scanned`);
     } catch (error: any) {
+      setScanError(error.message);
       toast.error(`Batch scan failed: ${error.message}`);
     } finally {
       setIsScanning(false);
@@ -210,11 +252,11 @@ export default function Accessibility() {
 
   const getImpactColor = (impact: string) => {
     switch (impact) {
-      case "critical": return "bg-red-500";
-      case "serious": return "bg-orange-500";
-      case "moderate": return "bg-yellow-500";
-      case "minor": return "bg-blue-500";
-      default: return "bg-gray-500";
+      case "critical": return "bg-red-500 text-white";
+      case "serious": return "bg-orange-500 text-white";
+      case "moderate": return "bg-yellow-500 text-white";
+      case "minor": return "bg-blue-500 text-white";
+      default: return "bg-secondary text-secondary-foreground";
     }
   };
 
@@ -228,12 +270,12 @@ export default function Accessibility() {
         const res = await fetch(`${API_BASE_URL}/api/a11y/report/${scanResult.scan_id}?format=${fmt}`);
         if (res.ok) {
           const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
+          const dlUrl = URL.createObjectURL(blob);
           const a = document.createElement("a");
-          a.href = url;
+          a.href = dlUrl;
           a.download = `a11y-report-${Date.now()}.${fmt === 'html' ? 'html' : 'md'}`;
           a.click();
-          URL.revokeObjectURL(url);
+          URL.revokeObjectURL(dlUrl);
           toast.success(`${fmt.toUpperCase()} report exported`);
           return;
         }
@@ -278,11 +320,18 @@ export default function Accessibility() {
   // Compliance score for current result
   const complianceScore = scanResult?.complianceScore ?? (scanResult ? calcComplianceScore(scanResult.summary) : null);
 
+  // Handle Enter key on URL input
+  const handleUrlKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !isScanning) {
+      scanPage();
+    }
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Accessibility Scanner</h1>
+          <h1 className="text-3xl font-bold text-foreground">Accessibility Scanner</h1>
           <p className="text-muted-foreground mt-2">
             Scan pages for WCAG compliance and accessibility issues
           </p>
@@ -312,7 +361,7 @@ export default function Accessibility() {
                 onChange={(e) => setBatchUrls(e.target.value)}
                 rows={5}
               />
-              <p className="text-xs text-muted-foreground">{batchUrls.split('\n').filter(u => u.trim()).length} URL(s)</p>
+              <p className="text-xs text-muted-foreground">{batchUrls.split('\n').filter(u => u.trim() && isValidUrl(u.trim())).length} valid URL(s)</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -322,11 +371,15 @@ export default function Accessibility() {
                 placeholder="https://example.com"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
+                onKeyDown={handleUrlKeyDown}
               />
+              {url && !isValidUrl(url) && (
+                <p className="text-xs text-destructive">URL must start with http:// or https://</p>
+              )}
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Scan Type</Label>
               <select
@@ -377,7 +430,7 @@ export default function Accessibility() {
             </div>
           )}
 
-          <Button onClick={batchMode ? runBatchScan : scanPage} disabled={isScanning} className="w-full">
+          <Button onClick={batchMode ? runBatchScan : scanPage} disabled={isScanning || (!batchMode && !!url && !isValidUrl(url))} className="w-full">
             {isScanning ? (
               <>
                 <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
@@ -393,6 +446,24 @@ export default function Accessibility() {
         </CardContent>
       </Card>
 
+      {/* Scan Error */}
+      {scanError && !isScanning && (
+        <Card className="border-destructive">
+          <CardContent className="pt-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-destructive">Scan Failed</p>
+                <p className="text-sm text-muted-foreground mt-1">{scanError}</p>
+                <Button variant="outline" size="sm" className="mt-2" onClick={() => { setScanError(null); scanPage(); }}>
+                  <RefreshCw className="mr-1 h-3 w-3" /> Retry
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Batch Results */}
       {batchMode && batchResults.length > 0 && (
         <Card>
@@ -402,12 +473,12 @@ export default function Accessibility() {
           <CardContent>
             <div className="space-y-2">
               {batchResults.map((result, i) => (
-                <div key={i} className="flex items-center justify-between p-3 border rounded-md cursor-pointer hover:bg-muted"
-                  onClick={() => { setScanResult(result); setBatchMode(false); }}>
+                <div key={i} className="flex items-center justify-between p-3 border border-border rounded-md cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => { setScanResult(result); setBatchMode(false); setExpandedIssues(new Set()); }}>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{result.url}</p>
+                    <p className="font-medium truncate text-foreground">{result.url}</p>
                     <p className="text-xs text-muted-foreground">
-                      Score: {result.complianceScore}/100 • {result.summary.total} issues
+                      Score: {result.complianceScore}/100 -- {result.summary.total} issues
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -425,7 +496,7 @@ export default function Accessibility() {
 
       {/* Scanner Warning */}
       {scanResult && scanResult.scanner_warning && (
-        <Card className="border-amber-500 bg-amber-50 dark:bg-amber-900/20">
+        <Card className="border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20">
           <CardContent className="pt-4">
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
@@ -434,7 +505,7 @@ export default function Accessibility() {
                 <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">{scanResult.scanner_warning}</p>
                 <p className="text-xs text-amber-600 dark:text-amber-500 mt-2">
                   For full axe-core scanning with detailed element-level violations, run the backend locally with Playwright installed:
-                  <code className="bg-amber-100 dark:bg-amber-800/50 px-1.5 py-0.5 rounded ml-1">pip install playwright && playwright install chromium</code>
+                  <code className="bg-amber-100 dark:bg-amber-800/50 text-amber-900 dark:text-amber-200 px-1.5 py-0.5 rounded ml-1">pip install playwright && playwright install chromium</code>
                 </p>
               </div>
             </div>
@@ -446,19 +517,19 @@ export default function Accessibility() {
       {scanResult && !batchMode && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <CardTitle className="flex items-center gap-2">
                   Scan Results
                   {scanResult.scan_method === 'axe_core' && (
-                    <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-300">axe-core</Badge>
+                    <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700">axe-core</Badge>
                   )}
                   {scanResult.scan_method === 'basic_html' && (
-                    <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-300">basic HTML</Badge>
+                    <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700">basic HTML</Badge>
                   )}
                 </CardTitle>
                 <CardDescription>
-                  {scanResult.url} • {new Date(scanResult.timestamp).toLocaleString()}
+                  {scanResult.url} -- {new Date(scanResult.timestamp).toLocaleString()}
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -489,23 +560,23 @@ export default function Accessibility() {
               </div>
 
               {/* Severity cards */}
-              <div className="flex-1 grid grid-cols-4 gap-3">
-                <div className="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg cursor-pointer hover:ring-2 ring-red-500"
+              <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className={`text-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg cursor-pointer transition-all ${severityFilter === 'critical' ? 'ring-2 ring-red-500' : 'hover:ring-2 ring-red-500/50'}`}
                   onClick={() => setSeverityFilter(severityFilter === 'critical' ? 'all' : 'critical')}>
                   <div className="text-2xl font-bold text-red-600 dark:text-red-400">{scanResult.summary.critical}</div>
                   <div className="text-xs text-muted-foreground">Critical</div>
                 </div>
-                <div className="text-center p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg cursor-pointer hover:ring-2 ring-orange-500"
+                <div className={`text-center p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg cursor-pointer transition-all ${severityFilter === 'serious' ? 'ring-2 ring-orange-500' : 'hover:ring-2 ring-orange-500/50'}`}
                   onClick={() => setSeverityFilter(severityFilter === 'serious' ? 'all' : 'serious')}>
                   <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{scanResult.summary.serious}</div>
                   <div className="text-xs text-muted-foreground">Serious</div>
                 </div>
-                <div className="text-center p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg cursor-pointer hover:ring-2 ring-yellow-500"
+                <div className={`text-center p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg cursor-pointer transition-all ${severityFilter === 'moderate' ? 'ring-2 ring-yellow-500' : 'hover:ring-2 ring-yellow-500/50'}`}
                   onClick={() => setSeverityFilter(severityFilter === 'moderate' ? 'all' : 'moderate')}>
                   <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{scanResult.summary.moderate}</div>
                   <div className="text-xs text-muted-foreground">Moderate</div>
                 </div>
-                <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg cursor-pointer hover:ring-2 ring-blue-500"
+                <div className={`text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg cursor-pointer transition-all ${severityFilter === 'minor' ? 'ring-2 ring-blue-500' : 'hover:ring-2 ring-blue-500/50'}`}
                   onClick={() => setSeverityFilter(severityFilter === 'minor' ? 'all' : 'minor')}>
                   <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{scanResult.summary.minor}</div>
                   <div className="text-xs text-muted-foreground">Minor</div>
@@ -514,7 +585,7 @@ export default function Accessibility() {
             </div>
 
             {/* Severity Filter Bar */}
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
               <Filter className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">Filter:</span>
               {['all', 'critical', 'serious', 'moderate', 'minor'].map(sev => (
@@ -527,7 +598,7 @@ export default function Accessibility() {
 
             {/* Issues List */}
             <div className="space-y-3">
-              <h3 className="text-lg font-semibold">
+              <h3 className="text-lg font-semibold text-foreground">
                 Issues ({filteredIssues.length}{severityFilter !== 'all' ? ` of ${scanResult.summary.total}` : ''})
               </h3>
 
@@ -540,47 +611,106 @@ export default function Accessibility() {
                   )}
                 </div>
               ) : (
-                filteredIssues.map((issue, idx) => (
-                  <Card key={issue.id || idx} className="border-l-4" style={{ borderLeftColor: issue.impact === 'critical' ? '#ef4444' : issue.impact === 'serious' ? '#f97316' : issue.impact === 'moderate' ? '#eab308' : '#3b82f6' }}>
-                    <CardContent className="pt-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <Badge className={getImpactColor(issue.impact)}>
-                              {issue.impact?.toUpperCase()}
-                            </Badge>
-                            <span className="font-semibold">{issue.rule || issue.id}</span>
-                            {issue.wcag_criterion && (
-                              <Badge variant="outline">{issue.wcag_criterion}</Badge>
+                filteredIssues.map((issue, idx) => {
+                  const issueKey = issue.id || `issue-${idx}`;
+                  const isExpanded = expandedIssues.has(issueKey);
+                  const hasLongElement = issue.element && issue.element.length > 120;
+
+                  return (
+                    <Card key={issueKey} className="border-l-4" style={{ borderLeftColor: issue.impact === 'critical' ? '#ef4444' : issue.impact === 'serious' ? '#f97316' : issue.impact === 'moderate' ? '#eab308' : '#3b82f6' }}>
+                      <CardContent className="pt-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+                              <Badge className={getImpactColor(issue.impact)}>
+                                {issue.impact?.toUpperCase()}
+                              </Badge>
+                              <span className="font-semibold text-foreground">{issue.rule || issue.id}</span>
+                              {issue.wcag_criterion && (
+                                <Badge variant="outline">{issue.wcag_criterion}</Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground mb-2">{issue.description}</p>
+                            {issue.element && (
+                              <div className="mb-2">
+                                {hasLongElement ? (
+                                  <div>
+                                    <button
+                                      onClick={() => toggleIssueExpanded(issueKey)}
+                                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-1 transition-colors"
+                                    >
+                                      {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                      {isExpanded ? 'Hide' : 'Show'} element HTML
+                                    </button>
+                                    {isExpanded && (
+                                      <code className="block bg-secondary px-3 py-1.5 rounded text-xs text-secondary-foreground overflow-x-auto max-w-full whitespace-pre-wrap break-all">
+                                        {issue.element}
+                                      </code>
+                                    )}
+                                    {!isExpanded && (
+                                      <code className="block bg-secondary px-3 py-1.5 rounded text-xs text-secondary-foreground overflow-hidden max-w-full whitespace-nowrap text-ellipsis">
+                                        {issue.element.slice(0, 120)}...
+                                      </code>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <code className="block bg-secondary px-3 py-1.5 rounded text-xs text-secondary-foreground overflow-x-auto max-w-full whitespace-pre-wrap break-all">
+                                    {issue.element}
+                                  </code>
+                                )}
+                              </div>
+                            )}
+                            {issue.suggested_fix && (
+                              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-3 rounded-md">
+                                <p className="text-sm text-green-700 dark:text-green-300">
+                                  <span className="font-semibold">Fix: </span>{issue.suggested_fix}
+                                </p>
+                              </div>
+                            )}
+                            {issue.help_url && (
+                              <a href={issue.help_url} target="_blank" rel="noopener noreferrer"
+                                className="text-xs text-primary hover:underline mt-2 inline-block">
+                                Learn more →
+                              </a>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground mb-2">{issue.description}</p>
-                          {issue.element && (
-                            <div className="mb-2">
-                              <code className="block bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded text-xs overflow-x-auto max-w-full whitespace-pre-wrap break-all">
-                                {issue.element}
-                              </code>
-                            </div>
-                          )}
-                          {issue.suggested_fix && (
-                            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-3 rounded-md">
-                              <p className="text-sm text-green-700 dark:text-green-300">
-                                <span className="font-semibold">Fix: </span>{issue.suggested_fix}
-                              </p>
-                            </div>
-                          )}
-                          {issue.help_url && (
-                            <a href={issue.help_url} target="_blank" rel="noopener noreferrer"
-                              className="text-xs text-blue-600 hover:underline mt-2 inline-block">
-                              Learn more →
-                            </a>
-                          )}
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
+                      </CardContent>
+                    </Card>
+                  );
+                })
               )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Empty State — shown when no scan result and no history */}
+      {!scanResult && !batchMode && recentScans.length === 0 && !isScanning && (
+        <Card className="border-dashed">
+          <CardContent className="py-12">
+            <div className="text-center space-y-4">
+              <Globe className="h-12 w-12 mx-auto text-muted-foreground/50" />
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">No scans yet</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Enter a URL above to scan for WCAG accessibility violations
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-xl mx-auto mt-6 text-left">
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  <p className="text-sm font-medium text-foreground">1. Enter URL</p>
+                  <p className="text-xs text-muted-foreground mt-1">Paste any web page URL to analyze</p>
+                </div>
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  <p className="text-sm font-medium text-foreground">2. Choose WCAG Level</p>
+                  <p className="text-xs text-muted-foreground mt-1">AA is the standard for most compliance needs</p>
+                </div>
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  <p className="text-sm font-medium text-foreground">3. Review Issues</p>
+                  <p className="text-xs text-muted-foreground mt-1">Get actionable fixes for each violation</p>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -592,7 +722,8 @@ export default function Accessibility() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Scan History ({recentScans.length})</CardTitle>
-              <Button variant="ghost" size="sm" className="text-xs text-destructive" onClick={() => { setRecentScans([]); localStorage.removeItem('flowstral-a11y-history'); }}>
+              <Button variant="ghost" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => { setRecentScans([]); localStorage.removeItem('flowstral-a11y-history'); }}>
+                <Trash2 className="h-3 w-3 mr-1" />
                 Clear History
               </Button>
             </div>
@@ -602,13 +733,13 @@ export default function Accessibility() {
               {recentScans.slice(0, 20).map((scan, i) => (
                 <div
                   key={scan.scan_id || i}
-                  className="flex items-center justify-between p-3 border rounded-md cursor-pointer hover:bg-muted"
-                  onClick={() => { setScanResult(scan); setBatchMode(false); }}
+                  className="flex items-center justify-between p-3 border border-border rounded-md cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => { setScanResult(scan); setBatchMode(false); setExpandedIssues(new Set()); }}
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{scan.url}</p>
+                    <p className="font-medium truncate text-foreground">{scan.url}</p>
                     <p className="text-sm text-muted-foreground">
-                      {new Date(scan.timestamp).toLocaleString()} • {scan.summary.total} issues
+                      {new Date(scan.timestamp).toLocaleString()} -- {scan.summary.total} issues
                     </p>
                   </div>
                   <div className="flex items-center gap-3">

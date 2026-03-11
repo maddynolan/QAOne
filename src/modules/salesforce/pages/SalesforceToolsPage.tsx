@@ -14,7 +14,7 @@
  * 10. Permission Analyzer - Check user permissions
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Cloud, Database, Search, Code, FileJson, Users, Shield, Play,
   Plus, Trash2, RefreshCw, Copy, Download, Upload, Check, X,
@@ -144,13 +144,23 @@ export function SalesforceToolsPage() {
   const [selectedSeedTemplate, setSelectedSeedTemplate] = useState<string | null>(null);
   const [seedingProgress, setSeedingProgress] = useState<{ current: number; total: number } | null>(null);
 
+  // Refs for polling interval cleanup on unmount
+  const bulkPollRef = useRef<NodeJS.Timeout | null>(null);
+  const testPollRef = useRef<NodeJS.Timeout | null>(null);
+
   // ========== EFFECTS ==========
-  
+
   useEffect(() => {
     loadOrgs();
     setQueryHistory(salesforceApi.getQueryHistory());
     // Sync with backend connection status
     syncWithBackend();
+
+    // Cleanup polling intervals on unmount
+    return () => {
+      if (bulkPollRef.current) clearInterval(bulkPollRef.current);
+      if (testPollRef.current) clearInterval(testPollRef.current);
+    };
   }, []);
 
   // ========== ORG MANAGEMENT ==========
@@ -406,18 +416,24 @@ export function SalesforceToolsPage() {
       const closedJob = await salesforceApi.closeBulkJob(job.id);
       setBulkJobStatus(closedJob);
       
-      // Poll for completion
-      const pollInterval = setInterval(async () => {
-        const status = await salesforceApi.getBulkJobStatus(job.id);
-        setBulkJobStatus(status);
-        
-        if (status.state === 'JobComplete' || status.state === 'Failed' || status.state === 'Aborted') {
-          clearInterval(pollInterval);
-          if (status.state === 'JobComplete') {
-            toast.success(`Bulk ${bulkOperation} complete! ${status.numberRecordsProcessed} processed, ${status.numberRecordsFailed} failed`);
-          } else {
-            toast.error(`Bulk job ${status.state}`);
+      // Poll for completion (stored in ref for cleanup on unmount)
+      if (bulkPollRef.current) clearInterval(bulkPollRef.current);
+      bulkPollRef.current = setInterval(async () => {
+        try {
+          const status = await salesforceApi.getBulkJobStatus(job.id);
+          setBulkJobStatus(status);
+
+          if (status.state === 'JobComplete' || status.state === 'Failed' || status.state === 'Aborted') {
+            if (bulkPollRef.current) clearInterval(bulkPollRef.current);
+            bulkPollRef.current = null;
+            if (status.state === 'JobComplete') {
+              toast.success(`Bulk ${bulkOperation} complete! ${status.numberRecordsProcessed} processed, ${status.numberRecordsFailed} failed`);
+            } else {
+              toast.error(`Bulk job ${status.state}`);
+            }
           }
+        } catch (e) {
+          // Continue polling on transient errors
         }
       }, 2000);
       
@@ -487,26 +503,28 @@ export function SalesforceToolsPage() {
       const jobId = await salesforceApi.runApexTests(selectedTestClasses);
       setTestRunId(jobId);
       
-      // Poll for results
-      const pollInterval = setInterval(async () => {
+      // Poll for results (stored in ref for cleanup on unmount)
+      if (testPollRef.current) clearInterval(testPollRef.current);
+      testPollRef.current = setInterval(async () => {
         try {
           const results = await salesforceApi.getApexTestResults(jobId);
           setTestResults(results);
-          
+
           const queueStatus = await salesforceApi.getApexTestQueueStatus(jobId);
-          const allComplete = queueStatus.records.every((q: any) => 
+          const allComplete = queueStatus.records.every((q: any) =>
             q.Status === 'Completed' || q.Status === 'Failed' || q.Status === 'Aborted'
           );
-          
+
           if (allComplete) {
-            clearInterval(pollInterval);
+            if (testPollRef.current) clearInterval(testPollRef.current);
+            testPollRef.current = null;
             setTestRunStatus('complete');
             const passed = results.filter(r => r.outcome === 'Pass').length;
             const failed = results.filter(r => r.outcome === 'Fail').length;
             toast.success(`Tests complete: ${passed} passed, ${failed} failed`);
           }
         } catch (e) {
-          // Continue polling
+          // Continue polling on transient errors
         }
       }, 3000);
       
@@ -940,7 +958,7 @@ export function SalesforceToolsPage() {
                                     <div className="font-medium text-foreground flex items-center gap-2">
                                       {org.name}
                                       {currentOrg?.id === org.id && (
-                                        <Badge className="bg-green-500/20 text-green-400 border-green-500/50 text-xs">
+                                        <Badge className="bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/50 text-xs">
                                           Active
                                         </Badge>
                                       )}
@@ -959,7 +977,7 @@ export function SalesforceToolsPage() {
                                       e.stopPropagation();
                                       handleRemoveOrg(org.id);
                                     }}
-                                    className="text-muted-foreground hover:text-red-400"
+                                    className="text-muted-foreground hover:text-red-600 dark:text-red-400"
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </Button>
@@ -1047,7 +1065,7 @@ export function SalesforceToolsPage() {
 
                 {/* Query Error */}
                 {queryError && (
-                  <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400">
+                  <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400">
                     <div className="flex items-start gap-2">
                       <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
                       <div>
@@ -1242,9 +1260,9 @@ export function SalesforceToolsPage() {
                           <div className="flex items-center justify-between">
                             <span className="text-muted-foreground">State</span>
                             <Badge className={
-                              bulkJobStatus.state === 'JobComplete' ? 'bg-green-500/20 text-green-400' :
-                              bulkJobStatus.state === 'Failed' ? 'bg-red-500/20 text-red-400' :
-                              'bg-yellow-500/20 text-yellow-400'
+                              bulkJobStatus.state === 'JobComplete' ? 'bg-green-500/20 text-green-600 dark:text-green-400' :
+                              bulkJobStatus.state === 'Failed' ? 'bg-red-500/20 text-red-600 dark:text-red-400' :
+                              'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
                             }>
                               {bulkJobStatus.state}
                             </Badge>
@@ -1255,7 +1273,7 @@ export function SalesforceToolsPage() {
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-muted-foreground">Failed</span>
-                            <span className="text-red-400">{bulkJobStatus.numberRecordsFailed}</span>
+                            <span className="text-red-600 dark:text-red-400">{bulkJobStatus.numberRecordsFailed}</span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-muted-foreground">Job ID</span>
@@ -1393,7 +1411,7 @@ export function SalesforceToolsPage() {
                   </CardHeader>
                   <CardContent>
                     {apiError ? (
-                      <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                      <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-sm">
                         {apiError}
                       </div>
                     ) : apiResponse ? (
@@ -1454,13 +1472,13 @@ export function SalesforceToolsPage() {
                               key={obj.name}
                               className={`p-2 rounded cursor-pointer transition-colors ${
                                 selectedObject === obj.name
-                                  ? 'bg-blue-500/20 text-blue-400'
+                                  ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400'
                                   : 'hover:bg-secondary/50 text-foreground'
                               }`}
                               onClick={() => loadObjectDescribe(obj.name)}
                             >
                               <div className="flex items-center gap-2">
-                                {obj.custom && <Badge variant="outline" className="text-[10px] px-1 text-blue-300 border-blue-500/50">C</Badge>}
+                                {obj.custom && <Badge variant="outline" className="text-[10px] px-1 text-blue-700 dark:text-blue-300 border-blue-500/50">C</Badge>}
                                 <span className="text-sm truncate">{obj.label}</span>
                               </div>
                               <div className="text-xs text-muted-foreground">{obj.name}</div>
@@ -1490,11 +1508,11 @@ export function SalesforceToolsPage() {
                         <div className="space-y-4">
                           {/* Object Info */}
                           <div className="flex flex-wrap gap-2">
-                            {objectDescribe.createable && <Badge className="bg-green-500/20 text-green-400">Createable</Badge>}
-                            {objectDescribe.updateable && <Badge className="bg-blue-500/20 text-blue-400">Updateable</Badge>}
-                            {objectDescribe.deletable && <Badge className="bg-red-500/20 text-red-400">Deletable</Badge>}
+                            {objectDescribe.createable && <Badge className="bg-green-500/20 text-green-600 dark:text-green-400">Createable</Badge>}
+                            {objectDescribe.updateable && <Badge className="bg-blue-500/20 text-blue-600 dark:text-blue-400">Updateable</Badge>}
+                            {objectDescribe.deletable && <Badge className="bg-red-500/20 text-red-600 dark:text-red-400">Deletable</Badge>}
                             {objectDescribe.queryable && <Badge className="bg-primary/20 text-primary">Queryable</Badge>}
-                            {objectDescribe.custom && <Badge className="bg-orange-500/20 text-orange-400">Custom</Badge>}
+                            {objectDescribe.custom && <Badge className="bg-orange-500/20 text-orange-600 dark:text-orange-400">Custom</Badge>}
                           </div>
 
                           {/* Fields Table */}
@@ -1514,17 +1532,17 @@ export function SalesforceToolsPage() {
                                     <td className="px-4 py-2 text-foreground">{field.label}</td>
                                     <td className="px-4 py-2 text-foreground font-mono text-xs">{field.name}</td>
                                     <td className="px-4 py-2">
-                                      <Badge variant="outline" className="text-xs text-cyan-300 border-cyan-500/50 bg-cyan-900/20">
+                                      <Badge variant="outline" className="text-xs text-cyan-700 dark:text-cyan-300 border-cyan-500/50 bg-cyan-100 dark:bg-cyan-900/20">
                                         {field.type}
                                         {field.length > 0 && `(${field.length})`}
                                       </Badge>
                                     </td>
                                     <td className="px-4 py-2">
                                       <div className="flex flex-wrap gap-1">
-                                        {!field.nillable && <Badge className="bg-red-500/20 text-red-400 text-[10px]">Req</Badge>}
+                                        {!field.nillable && <Badge className="bg-red-500/20 text-red-600 dark:text-red-400 text-[10px]">Req</Badge>}
                                         {field.unique && <Badge className="bg-primary/20 text-primary text-[10px]">Unique</Badge>}
-                                        {field.externalId && <Badge className="bg-yellow-500/20 text-yellow-400 text-[10px]">ExtId</Badge>}
-                                        {field.custom && <Badge className="bg-orange-500/20 text-orange-400 text-[10px]">Custom</Badge>}
+                                        {field.externalId && <Badge className="bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-[10px]">ExtId</Badge>}
+                                        {field.custom && <Badge className="bg-orange-500/20 text-orange-600 dark:text-orange-400 text-[10px]">Custom</Badge>}
                                       </div>
                                     </td>
                                   </tr>
@@ -1689,8 +1707,8 @@ export function SalesforceToolsPage() {
                         <CardTitle className="text-foreground">Test Results</CardTitle>
                         {testRunStatus !== 'idle' && (
                           <Badge className={
-                            testRunStatus === 'running' ? 'bg-yellow-500/20 text-yellow-400' :
-                            'bg-green-500/20 text-green-400'
+                            testRunStatus === 'running' ? 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400' :
+                            'bg-green-500/20 text-green-600 dark:text-green-400'
                           }>
                             {testRunStatus === 'running' ? 'Running...' : 'Complete'}
                           </Badge>
@@ -1712,9 +1730,9 @@ export function SalesforceToolsPage() {
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   {result.outcome === 'Pass' ? (
-                                    <CheckCircle className="w-4 h-4 text-green-400" />
+                                    <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                                   ) : (
-                                    <X className="w-4 h-4 text-red-400" />
+                                    <X className="w-4 h-4 text-red-600 dark:text-red-400" />
                                   )}
                                   <span className="text-foreground font-medium">
                                     {result.apexClass?.name}.{result.methodName}
@@ -1723,7 +1741,7 @@ export function SalesforceToolsPage() {
                                 <span className="text-muted-foreground text-sm">{result.runTime}ms</span>
                               </div>
                               {result.message && (
-                                <div className="mt-2 text-sm text-red-400">{result.message}</div>
+                                <div className="mt-2 text-sm text-red-600 dark:text-red-400">{result.message}</div>
                               )}
                             </div>
                           ))}
@@ -1793,22 +1811,22 @@ export function SalesforceToolsPage() {
                               <tr key={idx} className="border-t border-border hover:bg-secondary/50">
                                 <td className="px-4 py-2 text-foreground">{perm.objectName}</td>
                                 <td className="px-4 py-2 text-center">
-                                  {perm.canCreate ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
+                                  {perm.canCreate ? <Check className="w-4 h-4 text-green-600 dark:text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
                                 </td>
                                 <td className="px-4 py-2 text-center">
-                                  {perm.canRead ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
+                                  {perm.canRead ? <Check className="w-4 h-4 text-green-600 dark:text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
                                 </td>
                                 <td className="px-4 py-2 text-center">
-                                  {perm.canEdit ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
+                                  {perm.canEdit ? <Check className="w-4 h-4 text-green-600 dark:text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
                                 </td>
                                 <td className="px-4 py-2 text-center">
-                                  {perm.canDelete ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
+                                  {perm.canDelete ? <Check className="w-4 h-4 text-green-600 dark:text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
                                 </td>
                                 <td className="px-4 py-2 text-center">
-                                  {perm.canViewAll ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
+                                  {perm.canViewAll ? <Check className="w-4 h-4 text-green-600 dark:text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
                                 </td>
                                 <td className="px-4 py-2 text-center">
-                                  {perm.canModifyAll ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
+                                  {perm.canModifyAll ? <Check className="w-4 h-4 text-green-600 dark:text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
                                 </td>
                               </tr>
                             ))}
@@ -1914,7 +1932,7 @@ export function SalesforceToolsPage() {
                         {seedingProgress && (
                           <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
                             <div className="flex items-center justify-between mb-2">
-                              <span className="text-blue-400">Inserting records...</span>
+                              <span className="text-blue-600 dark:text-blue-400">Inserting records...</span>
                               <span className="text-foreground">{seedingProgress.current} / {seedingProgress.total}</span>
                             </div>
                             <div className="h-2 bg-secondary rounded-full overflow-hidden">
@@ -2012,7 +2030,7 @@ export function SalesforceToolsPage() {
                             className="flex items-center justify-between p-2 rounded bg-input/50"
                           >
                             <span className="text-sm text-foreground">{field.label}</span>
-                            <Badge variant="outline" className="text-[10px] text-cyan-300 border-cyan-500/50">
+                            <Badge variant="outline" className="text-[10px] text-cyan-700 dark:text-cyan-300 border-cyan-500/50">
                               {field.type}
                             </Badge>
                           </div>

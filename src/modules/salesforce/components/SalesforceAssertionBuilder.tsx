@@ -504,16 +504,16 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
                         ? result.passed
                           ? 'bg-green-500/10 border-green-500/30'
                           : 'bg-red-500/10 border-red-500/30'
-                        : 'bg-slate-900/50 border-slate-700/50'
+                        : 'bg-slate-100 dark:bg-slate-900/50 border-slate-700/50'
                     }`}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-3">
                         {result && (
                           result.passed ? (
-                            <CheckCircle className="w-5 h-5 text-green-400 mt-0.5" />
+                            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5" />
                           ) : (
-                            <AlertCircle className="w-5 h-5 text-red-400 mt-0.5" />
+                            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5" />
                           )
                         )}
                         <div>
@@ -524,7 +524,7 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
                             {assertion.fieldName && `.${assertion.fieldName}`}
                           </div>
                           {result && (
-                            <div className={`text-sm mt-2 ${result.passed ? 'text-green-400' : 'text-red-400'}`}>
+                            <div className={`text-sm mt-2 ${result.passed ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                               {result.message}
                             </div>
                           )}
@@ -537,7 +537,7 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
                         variant="ghost"
                         size="sm"
                         onClick={() => removeAssertion(assertion.id)}
-                        className="text-slate-400 hover:text-red-400"
+                        className="text-slate-400 hover:text-red-600 dark:hover:text-red-400"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>

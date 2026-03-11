@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Nexus Exploratory is unused. Router registration commented out in main.py.
 """
 API endpoints for Real Exploratory Testing Service (Blaze)
 

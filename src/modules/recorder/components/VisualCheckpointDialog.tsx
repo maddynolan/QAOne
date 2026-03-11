@@ -49,7 +49,7 @@ export default function VisualCheckpointDialog({
 
         <div className="space-y-4 py-4">
           <div className="p-3 bg-violet-500/10 rounded-lg border border-violet-500/30">
-            <p className="text-xs text-violet-300 mb-1">Current Page</p>
+            <p className="text-xs text-violet-700 dark:text-violet-300 mb-1">Current Page</p>
             <p className="text-sm text-foreground truncate">{currentUrl}</p>
           </div>
 

@@ -224,33 +224,6 @@ class SSIMCalculator:
     """
 
     @staticmethod
-    def _uniform_filter(arr: 'np.ndarray', size: int) -> 'np.ndarray':
-        """Apply uniform (box) filter using cumulative sums for O(n) performance."""
-        # Pad the array
-        pad = size // 2
-        padded = np.pad(arr, pad, mode='reflect')
-
-        # Cumulative sum along rows then columns
-        cumsum = padded.cumsum(axis=0).cumsum(axis=1)
-
-        h, w = arr.shape
-        # Use integral image formula for sum in each window
-        result = np.zeros_like(arr)
-        for i in range(h):
-            for j in range(w):
-                r1, c1 = i, j
-                r2, c2 = i + size - 1, j + size - 1
-                result[i, j] = cumsum[r2, c2]
-                if r1 > 0:
-                    result[i, j] -= cumsum[r1 - 1, c2]
-                if c1 > 0:
-                    result[i, j] -= cumsum[r2, c1 - 1]
-                if r1 > 0 and c1 > 0:
-                    result[i, j] += cumsum[r1 - 1, c1 - 1]
-
-        return result / (size * size)
-
-    @staticmethod
     def compute_ssim(img1: 'Image.Image', img2: 'Image.Image', window_size: int = 11) -> float:
         """
         Compute windowed SSIM between two images.
@@ -992,8 +965,11 @@ Be strict about layout and structural changes but tolerant of:
     
     def _safe_filename(self, name: str) -> str:
         """Convert to safe filename"""
+        if not name or not name.strip():
+            raise ValueError("test_name must not be empty")
         import re
         safe = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+        safe = safe.strip('_') or 'unnamed'
         return safe[:100]
     
     # ==================== Baseline Management ====================

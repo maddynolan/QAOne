@@ -156,8 +156,8 @@ export default function AutomateTabContent({
       {selectedActionIndices.size > 0 && (
         <div className="px-3 py-2 bg-blue-500/10 border-b border-blue-500/30 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CheckSquare className="h-4 w-4 text-blue-400" />
-            <span className="text-sm text-blue-300">
+            <CheckSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <span className="text-sm text-blue-700 dark:text-blue-300">
               {selectedActionIndices.size} recorded action{selectedActionIndices.size > 1 ? 's' : ''} selected
             </span>
           </div>
@@ -179,8 +179,8 @@ export default function AutomateTabContent({
       {recordForStepContext && (
         <div className="px-3 py-2 bg-purple-500/10 border-b border-purple-500/30">
           <div className="flex items-center gap-2 text-xs">
-            <Video className="h-3 w-3 text-purple-400 animate-pulse" />
-            <span className="text-purple-300">
+            <Video className="h-3 w-3 text-purple-600 dark:text-purple-400 animate-pulse" />
+            <span className="text-purple-700 dark:text-purple-300">
               Recording for: <strong>{recordForStepContext.stepName}</strong>
             </span>
           </div>
@@ -285,7 +285,7 @@ export default function AutomateTabContent({
                   {/* Legacy Automation Info */}
                   {!hasEnhancedLink && legacyAutomation?.data && (
                     <div className="mt-2 p-2 rounded bg-emerald-500/5 border border-emerald-500/20">
-                      <div className="flex items-center gap-1 text-xs text-emerald-400">
+                      <div className="flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400">
                         {legacyAutomation.type === 'recorded' ? <Video className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
                         <span className="truncate">{(legacyAutomation.data as any).description || (legacyAutomation.data as any).qword}</span>
                       </div>
@@ -297,7 +297,7 @@ export default function AutomateTabContent({
                 <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                   {/* Link hint when actions selected */}
                   {hasSelectedActions && (
-                    <Badge className="bg-blue-500/20 text-blue-400 text-[9px] px-2 animate-pulse">
+                    <Badge className="bg-blue-500/20 text-blue-700 dark:text-blue-400 text-[9px] px-2 animate-pulse">
                       Click to link
                     </Badge>
                   )}
@@ -308,7 +308,7 @@ export default function AutomateTabContent({
                       variant="ghost"
                       size="sm"
                       onClick={(e) => { e.stopPropagation(); skipCurrentStep(); }}
-                      className="h-7 px-2 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/20"
+                      className="h-7 px-2 text-xs text-amber-700 dark:text-amber-400 hover:text-amber-600 dark:hover:text-amber-300 hover:bg-amber-500/20"
                     >
                       Skip
                     </Button>

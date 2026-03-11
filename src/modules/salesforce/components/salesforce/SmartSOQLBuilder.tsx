@@ -307,7 +307,7 @@ export function SmartSOQLBuilder({
           )}
           
           {objectDescribe && (
-            <Badge variant="outline" className="h-6 px-2 text-[10px] border-blue-500/30 text-blue-400 shrink-0">
+            <Badge variant="outline" className="h-6 px-2 text-[10px] border-blue-500/30 text-blue-600 dark:text-blue-400 shrink-0">
               {objectDescribe.fields.length} fields
             </Badge>
           )}
@@ -325,7 +325,7 @@ export function SmartSOQLBuilder({
                 className="h-7 pl-7 text-xs bg-secondary border-border"
               />
             </div>
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px] text-blue-400" onClick={() => {
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px] text-blue-600 dark:text-blue-400" onClick={() => {
               setSelectedFields(new Set(['Id', 'Name', 'CreatedDate', 'LastModifiedDate'].filter(f => objectDescribe.fields.some(df => df.name === f))));
             }}>Common</Button>
             <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px] text-muted-foreground" onClick={() => setSelectedFields(new Set(['Id']))}>Clear</Button>
@@ -338,7 +338,7 @@ export function SmartSOQLBuilder({
         <div className="p-2 pb-16 space-y-2">
           {loadingDescribe && (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
+              <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
             </div>
           )}
 
@@ -417,7 +417,7 @@ export function SmartSOQLBuilder({
                           <Input value={cond.value} onChange={(e) => updateWhereCondition(cond.id, { value: e.target.value })} placeholder="Value" className="h-6 flex-1 text-[9px] bg-transparent border-border" />
                         )
                       )}
-                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-red-400" onClick={() => setWhereConditions(prev => prev.filter(c => c.id !== cond.id))}>
+                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-red-600 dark:hover:text-red-400" onClick={() => setWhereConditions(prev => prev.filter(c => c.id !== cond.id))}>
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
@@ -462,10 +462,10 @@ export function SmartSOQLBuilder({
                   </div>
                 </div>
                 {showRawEditor ? (
-                  <textarea value={rawQuery} onChange={(e) => setRawQuery(e.target.value)} className="w-full h-20 p-2 rounded text-[10px] font-mono bg-secondary border border-blue-500/20 text-blue-300 resize-none focus:outline-none" spellCheck={false} />
+                  <textarea value={rawQuery} onChange={(e) => setRawQuery(e.target.value)} className="w-full h-20 p-2 rounded text-[10px] font-mono bg-secondary border border-blue-500/20 text-blue-700 dark:text-blue-300 resize-none focus:outline-none" spellCheck={false} />
                 ) : (
                   <div className="p-2 rounded bg-secondary border border-border max-h-20 overflow-auto">
-                    <pre className="text-[10px] font-mono text-blue-300 whitespace-pre">{generatedQuery || 'Select an object and fields'}</pre>
+                    <pre className="text-[10px] font-mono text-blue-700 dark:text-blue-300 whitespace-pre">{generatedQuery || 'Select an object and fields'}</pre>
                   </div>
                 )}
               </div>
@@ -474,8 +474,8 @@ export function SmartSOQLBuilder({
               {queryError && (
                 <div className="p-2 rounded bg-red-500/10 border border-red-500/20">
                   <div className="flex items-start gap-2">
-                    <AlertCircle className="h-3.5 w-3.5 text-red-400 shrink-0 mt-0.5" />
-                    <p className="text-[10px] text-red-400">{queryError}</p>
+                    <AlertCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-red-600 dark:text-red-400">{queryError}</p>
                   </div>
                 </div>
               )}
@@ -523,7 +523,7 @@ export function SmartSOQLBuilder({
                                         toast.success(`Added step for ${recordName}`);
                                       }
                                     }}
-                                    className="h-5 px-1.5 text-[8px] rounded bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 flex items-center gap-0.5"
+                                    className="h-5 px-1.5 text-[8px] rounded bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/30 flex items-center gap-0.5"
                                     title="Add as step"
                                   >
                                     <Plus className="h-2.5 w-2.5" />
@@ -579,7 +579,7 @@ export function SmartSOQLBuilder({
               {isExecuting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
               Run
             </Button>
-            <Button size="sm" variant="outline" className="h-8 px-3 text-xs border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10" onClick={() => addAsStep('query')} disabled={!selectedObject}>
+            <Button size="sm" variant="outline" className="h-8 px-3 text-xs border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/10" onClick={() => addAsStep('query')} disabled={!selectedObject}>
               <Plus className="h-3.5 w-3.5 mr-1" />
               +Step
             </Button>

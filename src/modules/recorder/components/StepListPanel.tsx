@@ -111,11 +111,11 @@ export default function StepListPanel({
       <div className="px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">Traced Steps</span>
-          <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30 text-xs">
+          <Badge className="bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 border-cyan-500/30 text-xs">
             {actions.length}
           </Badge>
           {selectedActionIndices.size > 0 && (
-            <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
+            <Badge className="bg-purple-500/20 text-purple-700 dark:text-purple-400 border-purple-500/30 text-xs">
               {selectedActionIndices.size} selected
             </Badge>
           )}
@@ -176,7 +176,7 @@ export default function StepListPanel({
             </div>
             {selectedActionIndices.size > 0 && (
               <div className="flex items-center gap-2">
-                <span className="text-xs text-purple-300">Link to:</span>
+                <span className="text-xs text-purple-700 dark:text-purple-300">Link to:</span>
                 <Select
                   value={String(currentStepIndex)}
                   onValueChange={(v) => setCurrentStepIndex(parseInt(v))}
@@ -293,7 +293,7 @@ export default function StepListPanel({
                 )}
                 <div className={cn(
                   "flex items-center justify-center w-6 h-6 rounded text-xs font-mono shrink-0",
-                  isMultiSelected ? "bg-purple-500/30 text-purple-300" : "bg-white/5 text-muted-foreground"
+                  isMultiSelected ? "bg-purple-500/30 text-purple-700 dark:text-purple-300" : "bg-white/5 text-muted-foreground"
                 )}>
                   {String(index + 1).padStart(2, '0')}
                 </div>

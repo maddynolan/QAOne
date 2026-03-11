@@ -36,7 +36,11 @@ export type {
   ApiResponseSnapshot, ApiChainRunResult, ApiTestRun, ApiTestRunResult,
   ApiEnvironment, SidebarState, ApiTestingState, ApiTestingActions,
 } from './api-testing-types';
-import type { ApiTestingState, ApiTestingActions } from './api-testing-types';
+import type {
+  ApiTestingState, ApiTestingActions, KeyValuePair,
+  ApiWorkspace, ApiCollection, ApiFolder, ApiRequest, ApiChain,
+  ApiEnvironment, ApiTestRun,
+} from './api-testing-types';
 import {
   generateId, nowISO, DEBOUNCE_MS, ensureSidebarSets, ensureTestCaseSet,
   legacyPayloadToCollection, migrateLegacyData,

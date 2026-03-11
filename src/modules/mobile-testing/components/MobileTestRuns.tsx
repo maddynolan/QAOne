@@ -107,11 +107,11 @@ export default function MobileTestRuns() {
       {/* Stats Dashboard */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
-          { label: 'Total Runs', value: stats.total, icon: Activity, color: 'sky' },
-          { label: 'Passed', value: stats.passed, icon: CheckCircle2, color: 'emerald' },
-          { label: 'Failed', value: stats.failed, icon: XCircle, color: 'red' },
-          { label: 'Pass Rate', value: `${stats.passRate}%`, icon: stats.passRate >= 80 ? TrendingUp : TrendingDown, color: stats.passRate >= 80 ? 'emerald' : 'amber' },
-          { label: 'Avg Duration', value: formatDuration(stats.avgDuration), icon: Zap, color: 'sky' },
+          { label: 'Total Runs', value: stats.total, icon: Activity, iconClass: 'text-sky-500' },
+          { label: 'Passed', value: stats.passed, icon: CheckCircle2, iconClass: 'text-emerald-500' },
+          { label: 'Failed', value: stats.failed, icon: XCircle, iconClass: 'text-red-500' },
+          { label: 'Pass Rate', value: `${stats.passRate}%`, icon: stats.passRate >= 80 ? TrendingUp : TrendingDown, iconClass: stats.passRate >= 80 ? 'text-emerald-500' : 'text-amber-500' },
+          { label: 'Avg Duration', value: formatDuration(stats.avgDuration), icon: Zap, iconClass: 'text-sky-500' },
         ].map((stat, idx) => (
           <div key={idx} className={cn(
             "rounded-xl border p-4",
@@ -119,7 +119,7 @@ export default function MobileTestRuns() {
           )}>
             <div className="flex items-center justify-between mb-2">
               <span className={cn("text-xs font-medium", isDark ? 'text-gray-400' : 'text-gray-500')}>{stat.label}</span>
-              <stat.icon className={cn("w-4 h-4", `text-${stat.color}-500`)} />
+              <stat.icon className={cn("w-4 h-4", stat.iconClass)} />
             </div>
             <div className={cn("text-2xl font-bold", isDark ? 'text-white' : 'text-gray-900')}>{stat.value}</div>
           </div>
@@ -375,7 +375,7 @@ export default function MobileTestRuns() {
               {/* Output */}
               <div className="mt-3">
                 <h4 className={cn("text-xs font-medium mb-2", isDark ? 'text-gray-400' : 'text-gray-600')}>Output</h4>
-                <div className={cn("rounded-lg p-2 font-mono text-[10px] max-h-48 overflow-y-auto", isDark ? 'bg-gray-950 text-gray-300' : 'bg-gray-900 text-gray-300')}>
+                <div className={cn("rounded-lg p-2 font-mono text-[10px] max-h-48 overflow-y-auto", isDark ? 'bg-gray-950 text-gray-300' : 'bg-gray-100 text-gray-700')}>
                   {selectedRun.output.map((line, idx) => (
                     <div key={idx} className="mb-0.5">{line}</div>
                   ))}

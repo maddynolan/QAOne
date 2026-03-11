@@ -1,3 +1,8 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# The old 8-agent registry system is unused. These schemas (AgentType,
+# AgentTaskRequest, AgentTaskResult) are still imported by orchestrator.py,
+# flowstral_agent_orchestrator.py, and test_runner_service.py — do NOT
+# remove until those consumers are migrated.
 """
 Agent Schemas - Standardized request/response models for agents
 Phase 1.2: Agent Orchestrator Enhancement

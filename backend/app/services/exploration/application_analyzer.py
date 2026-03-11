@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Part of the Autonomous Explorer / Flowmap system which is unused.
 """
 Application Analyzer
 Analyzes the application under test to understand its domain, purpose, and key flows.

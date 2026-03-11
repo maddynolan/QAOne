@@ -790,7 +790,7 @@ export default function TestRepository() {
     
     setShowDeleteConfirmDialog(false);
     setDeletingItem(null);
-  }, [deletingItem, deleteTestCaseFromAllSources]);
+  }, [deletingItem]);
 
   // Duplicate test handler
   const handleDuplicateTest = useCallback((node: TreeNode) => {
@@ -951,7 +951,7 @@ export default function TestRepository() {
       setSelectedNode(null);
       toast.success('Defect deleted');
     }
-  }, [activeTab, selectedTestIds, selectedNode, defects, deleteTestCaseFromAllSources]);
+  }, [activeTab, selectedTestIds, selectedNode, defects]);
 
   const handleKeyboardCopy = useCallback(() => {
     if (activeTab === 'repository') {

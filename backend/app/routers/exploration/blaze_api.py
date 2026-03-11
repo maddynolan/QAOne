@@ -1,3 +1,5 @@
+# DEPRECATED — Scheduled for removal (v3.20.0)
+# Blaze Explorer is unused. Router registration commented out in main.py.
 """
 Blaze API - Real Autonomous Exploratory Testing
 Finds actual defects on any website without AI dependencies

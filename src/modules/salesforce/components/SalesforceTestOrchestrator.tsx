@@ -525,7 +525,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
       <Card className="bg-card border-border">
         <CardHeader className="pb-3">
           <CardTitle className="text-foreground flex items-center gap-2">
-            <Search className="w-5 h-5 text-blue-400" />
+            <Search className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             Step 1: Discover Testable Items
           </CardTitle>
           <CardDescription>
@@ -556,11 +556,11 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
             
             {stats && (
               <div className="flex gap-3">
-                <Badge variant="outline" className="text-blue-400 border-blue-400/30">
+                <Badge variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-400/30">
                   <Shield className="w-3 h-3 mr-1" />
                   {stats.validationRules} Rules
                 </Badge>
-                <Badge variant="outline" className="text-green-400 border-green-400/30">
+                <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-400/30">
                   <Zap className="w-3 h-3 mr-1" />
                   {stats.flows} Flows
                 </Badge>
@@ -568,7 +568,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
                   <FileText className="w-3 h-3 mr-1" />
                   {stats.apexClasses} Apex
                 </Badge>
-                <Badge variant="outline" className="text-orange-400 border-orange-400/30">
+                <Badge variant="outline" className="text-orange-600 dark:text-orange-400 border-orange-400/30">
                   <GitBranch className="w-3 h-3 mr-1" />
                   {stats.triggers} Triggers
                 </Badge>
@@ -683,7 +683,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-foreground flex items-center gap-2">
-                <ListChecks className="w-5 h-5 text-green-400" />
+                <ListChecks className="w-5 h-5 text-green-600 dark:text-green-400" />
                 Step 3: Review & Execute ({generatedSuite.tests.length} Tests)
               </CardTitle>
               <div className="flex gap-2">
@@ -755,7 +755,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
                         size="sm"
                         variant="ghost"
                         onClick={() => onRunTest?.(test)}
-                        className="h-7 px-2 text-muted-foreground hover:text-green-400"
+                        className="h-7 px-2 text-muted-foreground hover:text-green-600 dark:hover:text-green-400"
                         title="Run this test"
                       >
                         <Play className="w-3.5 h-3.5" />
@@ -775,9 +775,9 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
           <CardHeader className="pb-3">
             <CardTitle className="text-foreground flex items-center gap-2">
               {crudResults.success ? (
-                <CheckCircle className="w-5 h-5 text-green-400" />
+                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
               ) : (
-                <XCircle className="w-5 h-5 text-red-400" />
+                <XCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
               )}
               CRUD Test Results - {selectedObject}
             </CardTitle>
@@ -795,9 +795,9 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
                 >
                   <div className="flex items-center gap-2">
                     {step.success ? (
-                      <CheckCircle className="w-4 h-4 text-green-400" />
+                      <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                     ) : (
-                      <XCircle className="w-4 h-4 text-red-400" />
+                      <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
                     )}
                     <span className="font-medium text-foreground">{step.action}</span>
                     {step.recordId && (
@@ -807,7 +807,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
                     )}
                   </div>
                   {step.error && (
-                    <p className="text-sm text-red-400 mt-1">{step.error}</p>
+                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">{step.error}</p>
                   )}
                   {step.data && (
                     <pre className="text-xs text-muted-foreground mt-2 overflow-x-auto">
@@ -830,9 +830,9 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
           className="h-16 flex-col gap-1 text-foreground border-border hover:border-green-500/50 hover:bg-green-500/10"
         >
           {isRunningCrud ? (
-            <Loader2 className="w-5 h-5 text-green-400 animate-spin" />
+            <Loader2 className="w-5 h-5 text-green-600 dark:text-green-400 animate-spin" />
           ) : (
-            <Target className="w-5 h-5 text-green-400" />
+            <Target className="w-5 h-5 text-green-600 dark:text-green-400" />
           )}
           <span className="text-xs">Run CRUD Test</span>
         </Button>
@@ -842,7 +842,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
           disabled={!isConnected}
           className="h-16 flex-col gap-1 text-foreground border-border hover:border-blue-500/50 hover:bg-blue-500/10"
         >
-          <TestTube className="w-5 h-5 text-blue-400" />
+          <TestTube className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           <span className="text-xs">Test API</span>
         </Button>
         <Button

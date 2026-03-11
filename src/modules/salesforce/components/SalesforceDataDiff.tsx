@@ -331,7 +331,7 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
                       variant="ghost"
                       size="sm"
                       onClick={() => removeSnapshot(snapshot.id)}
-                      className="text-slate-400 hover:text-red-400"
+                      className="text-slate-400 hover:text-red-600 dark:hover:text-red-400"
                     >
                       <Minus className="w-4 h-4" />
                     </Button>
@@ -383,16 +383,16 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
             {/* Summary */}
             <div className="grid grid-cols-4 gap-4 mb-4">
               <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
-                <div className="text-2xl font-bold text-green-400">{diffResult.added.length}</div>
-                <div className="text-xs text-green-400">Added</div>
+                <div className="text-2xl font-bold text-green-600 dark:text-green-400">{diffResult.added.length}</div>
+                <div className="text-xs text-green-600 dark:text-green-400">Added</div>
               </div>
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-center">
-                <div className="text-2xl font-bold text-red-400">{diffResult.removed.length}</div>
-                <div className="text-xs text-red-400">Removed</div>
+                <div className="text-2xl font-bold text-red-600 dark:text-red-400">{diffResult.removed.length}</div>
+                <div className="text-xs text-red-600 dark:text-red-400">Removed</div>
               </div>
               <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-center">
-                <div className="text-2xl font-bold text-yellow-400">{diffResult.modified.length}</div>
-                <div className="text-xs text-yellow-400">Modified</div>
+                <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{diffResult.modified.length}</div>
+                <div className="text-xs text-yellow-600 dark:text-yellow-400">Modified</div>
               </div>
               <div className="p-3 rounded-lg bg-secondary border border-border text-center">
                 <div className="text-2xl font-bold text-slate-400">{diffResult.unchanged}</div>
@@ -405,7 +405,7 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
               {/* Added Records */}
               {diffResult.added.length > 0 && (
                 <div className="space-y-1">
-                  <div className="text-sm font-medium text-green-400 flex items-center gap-2">
+                  <div className="text-sm font-medium text-green-600 dark:text-green-400 flex items-center gap-2">
                     <Plus className="w-4 h-4" />
                     Added Records ({diffResult.added.length})
                   </div>
@@ -420,7 +420,7 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
               {/* Removed Records */}
               {diffResult.removed.length > 0 && (
                 <div className="space-y-1">
-                  <div className="text-sm font-medium text-red-400 flex items-center gap-2">
+                  <div className="text-sm font-medium text-red-600 dark:text-red-400 flex items-center gap-2">
                     <Minus className="w-4 h-4" />
                     Removed Records ({diffResult.removed.length})
                   </div>
@@ -435,7 +435,7 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
               {/* Modified Records */}
               {diffResult.modified.length > 0 && (
                 <div className="space-y-1">
-                  <div className="text-sm font-medium text-yellow-400 flex items-center gap-2">
+                  <div className="text-sm font-medium text-yellow-600 dark:text-yellow-400 flex items-center gap-2">
                     <RefreshCw className="w-4 h-4" />
                     Modified Records ({diffResult.modified.length})
                   </div>
@@ -449,12 +449,12 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
                         onClick={() => toggleRecordExpanded(mod.id)}
                       >
                         {expandedRecords.has(mod.id) ? (
-                          <ChevronDown className="w-4 h-4 text-yellow-400" />
+                          <ChevronDown className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
                         ) : (
-                          <ChevronRight className="w-4 h-4 text-yellow-400" />
+                          <ChevronRight className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
                         )}
                         <span className="text-xs font-mono text-slate-300">{mod.id}</span>
-                        <Badge variant="outline" className="text-[10px] text-orange-300 border-orange-500/50">
+                        <Badge variant="outline" className="text-[10px] text-orange-700 dark:text-orange-300 border-orange-500/50">
                           {mod.changedFields.length} field(s) changed
                         </Badge>
                       </div>
@@ -463,10 +463,10 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
                           {mod.changedFields.map(field => (
                             <div key={field} className="text-xs">
                               <span className="text-slate-400">{field}:</span>
-                              <span className="text-red-400 line-through ml-2">
+                              <span className="text-red-600 dark:text-red-400 line-through ml-2">
                                 {JSON.stringify(mod.before[field])}
                               </span>
-                              <span className="text-green-400 ml-2">
+                              <span className="text-green-600 dark:text-green-400 ml-2">
                                 {JSON.stringify(mod.after[field])}
                               </span>
                             </div>

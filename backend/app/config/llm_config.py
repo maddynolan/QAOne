@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Air-gapped mode - blocks all external LLM calls
 AIR_GAPPED_MODE = os.getenv("AIR_GAPPED_MODE", "false").lower() == "true"
 
-# Local services disabled by default (DGX not ready)
+# DEPRECATED (v3.20.0) — Local services disabled by default (DGX not ready, never deployed)
 LOCAL_OLLAMA_ENABLED = os.getenv("ENABLE_OLLAMA_SERVICE", "false").lower() == "true"
 LOCAL_VLLM_ENABLED = os.getenv("ENABLE_VLLM_SERVICE", "false").lower() == "true"
 
@@ -43,8 +43,11 @@ else:
 # Provider-specific configuration
 LLM_CONFIG = {
     # ============================================================================
-    # LOCAL SERVICES - DISABLED (DGX not ready)
-    # Set ENABLE_OLLAMA_SERVICE=true or ENABLE_VLLM_SERVICE=true when ready
+    # DEPRECATED — Scheduled for removal (v3.20.0)
+    # LOCAL SERVICES - DISABLED (DGX not ready, never deployed)
+    # Kept for config compatibility; will be removed when local LLM support
+    # is redesigned. Set ENABLE_OLLAMA_SERVICE=true or ENABLE_VLLM_SERVICE=true
+    # if you need to test locally.
     # ============================================================================
     "local_ollama": {
         "url": os.getenv("OLLAMA_URL", "http://localhost:11434"),

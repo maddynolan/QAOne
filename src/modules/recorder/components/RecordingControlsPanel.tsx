@@ -281,10 +281,10 @@ export default function RecordingControlsPanel({
           <div className="p-2 bg-purple-500/10 border border-purple-500/30 rounded-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-purple-400" />
-                <span className="text-sm font-medium text-purple-300">Automating:</span>
+                <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                <span className="text-sm font-medium text-purple-700 dark:text-purple-300">Automating:</span>
                 <span className="text-sm text-foreground truncate max-w-[200px]">{selectedTestCase.name}</span>
-                <Badge className="bg-purple-500/20 text-purple-400 text-[10px]">
+                <Badge className="bg-purple-500/20 text-purple-700 dark:text-purple-400 text-[10px]">
                   {selectedTestCase.steps?.length || 0} steps
                 </Badge>
               </div>
@@ -433,8 +433,8 @@ export default function RecordingControlsPanel({
           <div className="px-4 py-2.5 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                <Link2 className="h-4 w-4 text-purple-400" />
-                <span className="text-sm font-medium text-purple-300">Automating:</span>
+                <Link2 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                <span className="text-sm font-medium text-purple-700 dark:text-purple-300">Automating:</span>
               </div>
 
               {/* Progress indicator */}
@@ -447,7 +447,7 @@ export default function RecordingControlsPanel({
                     }}
                   />
                 </div>
-                <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
+                <Badge className="bg-purple-500/20 text-purple-700 dark:text-purple-400 border-purple-500/30 text-xs">
                   {Object.keys(stepLinks).length || Object.keys(stepAutomation).length}/{selectedTestCase.steps?.length || 0}
                 </Badge>
               </div>
@@ -458,7 +458,7 @@ export default function RecordingControlsPanel({
               variant="outline"
               size="sm"
               onClick={() => setRightPanelTab('automate')}
-              className="h-7 px-3 text-xs border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
+              className="h-7 px-3 text-xs border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
             >
               <Layers className="h-3 w-3 mr-1.5" />
               View All Steps
@@ -473,7 +473,7 @@ export default function RecordingControlsPanel({
                 {String(currentStepIndex + 1).padStart(2, '0')}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-purple-200 truncate">
+                <p className="text-sm font-medium text-purple-700 dark:text-purple-200 truncate">
                   {selectedTestCase.steps[currentStepIndex].name || selectedTestCase.steps[currentStepIndex].description || `Step ${currentStepIndex + 1}`}
                 </p>
                 <p className="text-[10px] text-muted-foreground truncate">
@@ -502,7 +502,7 @@ export default function RecordingControlsPanel({
                     }
                   }
                 }}
-                className="h-6 px-2 text-xs text-purple-400 hover:bg-purple-500/20"
+                className="h-6 px-2 text-xs text-purple-600 dark:text-purple-400 hover:bg-purple-500/20"
               >
                 Next Step
                 <ChevronRight className="h-3 w-3 ml-1" />
@@ -514,8 +514,8 @@ export default function RecordingControlsPanel({
           {recordForStepContext && (
             <div className="px-3 py-2 bg-blue-500/10 border-t border-blue-500/30">
               <div className="flex items-center gap-2 text-xs">
-                <Video className="h-3 w-3 text-blue-400 animate-pulse" />
-                <span className="text-blue-300">
+                <Video className="h-3 w-3 text-blue-600 dark:text-blue-400 animate-pulse" />
+                <span className="text-blue-700 dark:text-blue-300">
                   Recording for: <strong>{recordForStepContext.stepName}</strong>
                 </span>
               </div>

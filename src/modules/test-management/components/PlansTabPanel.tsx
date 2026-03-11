@@ -82,15 +82,15 @@ export function PlansTabPanel({
               const totalTests = plan.testCaseIds.length + linkedSuites.reduce((acc, s) => acc + s.testCaseIds.length, 0);
 
               return (
-                <Card key={plan.id} className="bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 hover:border-blue-500/50 dark:hover:border-amber-500/30 transition-all">
+                <Card key={plan.id} className="bg-secondary/50 border-border hover:border-blue-500/50 dark:hover:border-amber-500/30 transition-all">
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-gray-900 dark:text-white">{plan.name}</h3>
+                          <h3 className="font-semibold text-foreground">{plan.name}</h3>
                           <Badge className={cn(
                             "text-xs",
-                            plan.status === 'draft' && "bg-gray-500/10 text-gray-500 dark:text-gray-400",
+                            plan.status === 'draft' && "bg-gray-500/10 text-muted-foreground",
                             plan.status === 'ready' && "bg-blue-500/10 text-blue-400",
                             plan.status === 'in-progress' && "bg-amber-500/10 text-blue-600 dark:text-primary",
                             plan.status === 'completed' && "bg-green-500/10 text-green-400"
@@ -102,11 +102,11 @@ export function PlansTabPanel({
                           <p className="text-sm text-muted-foreground mb-2">{plan.description}</p>
                         )}
                         <div className="flex flex-wrap items-center gap-3 text-xs">
-                          <span className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                          <span className="flex items-center gap-1 text-muted-foreground">
                             <FileText className="w-3 h-3" />
                             {totalTests} tests
                           </span>
-                          <span className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                          <span className="flex items-center gap-1 text-muted-foreground">
                             <Layers className="w-3 h-3" />
                             {plan.suiteIds.length} suites
                           </span>
@@ -136,11 +136,11 @@ export function PlansTabPanel({
                         </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 dark:text-gray-400">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
                               <MoreVertical className="w-4 h-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border">
+                          <DropdownMenuContent align="end" className="bg-popover border-border">
                             <DropdownMenuItem
                               className="text-foreground focus:bg-secondary"
                               onClick={() => onEditPlan(plan)}

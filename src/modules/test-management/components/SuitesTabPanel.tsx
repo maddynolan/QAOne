@@ -57,11 +57,11 @@ export function SuitesTabPanel({
         ) : (
           <div className="grid gap-4">
             {suites.map((suite) => (
-              <Card key={suite.id} className="bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 hover:border-blue-500/50 dark:hover:border-amber-500/30 transition-all">
+              <Card key={suite.id} className="bg-secondary/50 border-border hover:border-blue-500/50 dark:hover:border-amber-500/30 transition-all">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 dark:text-white">{suite.name}</h3>
+                      <h3 className="font-semibold text-foreground">{suite.name}</h3>
                       {suite.description && (
                         <p className="text-sm text-muted-foreground mt-1">{suite.description}</p>
                       )}
@@ -97,11 +97,11 @@ export function SuitesTabPanel({
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 dark:text-gray-400">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
                             <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border">
+                        <DropdownMenuContent align="end" className="bg-popover border-border">
                           <DropdownMenuItem
                             className="text-foreground focus:bg-secondary"
                             onClick={() => onEditSuite(suite)}

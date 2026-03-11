@@ -541,7 +541,7 @@ export default function MobileDeviceLab() {
               <span className="text-gray-500">Start log capture to see device logs ({selectedPlatform === 'ios' ? 'syslog' : 'logcat'})...</span>
             ) : (
               deviceLogs.filter(line => !logFilter || line.toLowerCase().includes(logFilter.toLowerCase())).map((line, idx) => (
-                <div key={idx} className="mb-0.5 hover:bg-gray-800/50">
+                <div key={idx} className={cn("mb-0.5", isDark ? "hover:bg-gray-800/50" : "hover:bg-gray-200/70")}>
                   {line.toLowerCase().includes('error') ? (
                     <span className="text-red-400">{line}</span>
                   ) : line.toLowerCase().includes('warn') ? (
