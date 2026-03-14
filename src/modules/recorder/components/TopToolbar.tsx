@@ -6,7 +6,7 @@
 
 import React from "react";
 import {
-  Play, Download, Settings, Code,
+  Play, Download, Settings,
   ChevronDown, Layers, Bug,
   Activity, Zap,
   RotateCcw, Eye, Scan, Gauge,
@@ -14,13 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 interface TopToolbarProps {
@@ -41,7 +34,7 @@ interface TopToolbarProps {
   capturedNetworkRequests: any[];
   exportCapturedAsPostman: () => void;
   exportCapturedAsHAR: () => void;
-  handleExport: (format: string) => void;
+  handleExport?: (format: string) => void;
   playbackSpeed: string;
   setPlaybackSpeed: (speed: any) => void;
   highlightElements: boolean;
@@ -65,7 +58,6 @@ export default function TopToolbar({
   capturedNetworkRequests,
   exportCapturedAsPostman,
   exportCapturedAsHAR,
-  handleExport,
   playbackSpeed,
   setPlaybackSpeed,
   highlightElements,
@@ -89,10 +81,6 @@ export default function TopToolbar({
       <div className="flex items-center gap-2 shrink-0">
         <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground">
           <Settings className="h-3.5 w-3.5 mr-1.5" />
-        </Button>
-        <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground">
-          <Code className="h-3.5 w-3.5 mr-1.5" />
-          Code
         </Button>
         {/* Run / Debug Dropdown */}
         <Popover open={showRunMenu} onOpenChange={setShowRunMenu}>
@@ -270,20 +258,7 @@ export default function TopToolbar({
             </Button>
           </>
         )}
-        <Select onValueChange={handleExport}>
-          <SelectTrigger className="h-8 w-[100px] text-xs bg-transparent">
-            <Download className="h-3.5 w-3.5 mr-1" />
-            <SelectValue placeholder="Export" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="playwright" className="text-xs">Playwright</SelectItem>
-            <SelectItem value="cypress" className="text-xs">Cypress</SelectItem>
-            <SelectItem value="selenium" className="text-xs">Selenium</SelectItem>
-            <SelectItem value="robot" className="text-xs">Robot Framework</SelectItem>
-            <SelectItem value="json" className="text-xs">JSON</SelectItem>
-            <SelectItem value="csv" className="text-xs">CSV</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Export menu removed — use Builder to export test cases */}
       </div>
     </div>
   );

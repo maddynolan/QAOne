@@ -54,7 +54,7 @@ function HeroSection() {
             Test everything.
           </h1>
           <p className="text-lg sm:text-xl text-slate-600 max-w-2xl leading-relaxed mb-8">
-            Flowstral records your browser sessions and turns them into Playwright tests.
+            Flowstral records your browser sessions and turns them into reliable automated tests.
             Then run those tests for performance, visual regression, accessibility, and API coverage
             -- all from one platform.
           </p>
@@ -92,65 +92,43 @@ function HeroSection() {
           </div>
         </div>
 
-        {/* Right side: compact code preview */}
-        <div className="hidden lg:block absolute right-6 top-1/2 -translate-y-1/2 w-[420px]">
-          <div className="bg-slate-900 rounded-xl border border-slate-700 shadow-2xl overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-700">
-              <div className="w-3 h-3 rounded-full bg-red-500/70" />
-              <div className="w-3 h-3 rounded-full bg-amber-500/70" />
-              <div className="w-3 h-3 rounded-full bg-green-500/70" />
-              <span className="ml-3 text-xs text-slate-500 font-mono">login-flow.spec.ts</span>
+        {/* Right side: recording step list UI mockup */}
+        <div className="hidden lg:block absolute right-6 top-1/2 -translate-y-1/2 w-[400px]">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-slate-50">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-sm font-semibold text-slate-700">Recording: login-flow</span>
+              </div>
+              <span className="text-xs text-slate-400">5 steps</span>
             </div>
-            <div className="p-5 font-mono text-[13px] leading-relaxed">
-              <div className="text-slate-500">// Auto-generated from recording</div>
-              <div className="mt-2">
-                <span className="text-violet-400">test</span>
-                <span className="text-slate-300">(</span>
-                <span className="text-emerald-400">'user can log in'</span>
-                <span className="text-slate-300">, </span>
-                <span className="text-violet-400">async</span>
-                <span className="text-slate-300"> ({'{'}page{'}'}) =&gt; {'{'}</span>
+            {/* Steps */}
+            <div className="p-3 space-y-1">
+              {[
+                { num: '01', label: 'Navigate to /login', icon: Globe },
+                { num: '02', label: 'Fill "Email" \u2192 user@co.com', icon: Layers },
+                { num: '03', label: 'Fill "Password" \u2192 \u2022\u2022\u2022\u2022\u2022\u2022', icon: Lock },
+                { num: '04', label: 'Click "Sign In"', icon: MousePointer },
+                { num: '05', label: 'Verify text "Dashboard"', icon: CheckCircle2 },
+              ].map((step) => (
+                <div key={step.num} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                  <span className="text-xs font-mono text-slate-400 w-5">{step.num}</span>
+                  <step.icon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="text-sm text-slate-700">{step.label}</span>
+                </div>
+              ))}
+            </div>
+            {/* Footer */}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-xs text-emerald-600 font-medium">Recording...</span>
               </div>
-              <div className="ml-4 mt-1">
-                <span className="text-slate-500">await</span>
-                <span className="text-blue-400"> page</span>
-                <span className="text-slate-300">.goto(</span>
-                <span className="text-emerald-400">'/login'</span>
-                <span className="text-slate-300">);</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">5 steps captured</span>
               </div>
-              <div className="ml-4">
-                <span className="text-slate-500">await</span>
-                <span className="text-blue-400"> page</span>
-                <span className="text-slate-300">.fill(</span>
-                <span className="text-emerald-400">'#email'</span>
-                <span className="text-slate-300">, </span>
-                <span className="text-emerald-400">'user@co.com'</span>
-                <span className="text-slate-300">);</span>
-              </div>
-              <div className="ml-4">
-                <span className="text-slate-500">await</span>
-                <span className="text-blue-400"> page</span>
-                <span className="text-slate-300">.fill(</span>
-                <span className="text-emerald-400">'#password'</span>
-                <span className="text-slate-300">, </span>
-                <span className="text-emerald-400">'********'</span>
-                <span className="text-slate-300">);</span>
-              </div>
-              <div className="ml-4">
-                <span className="text-slate-500">await</span>
-                <span className="text-blue-400"> page</span>
-                <span className="text-slate-300">.click(</span>
-                <span className="text-emerald-400">'button[type=submit]'</span>
-                <span className="text-slate-300">);</span>
-              </div>
-              <div className="ml-4">
-                <span className="text-slate-500">await</span>
-                <span className="text-violet-400"> expect</span>
-                <span className="text-slate-300">(page).toHaveURL(</span>
-                <span className="text-emerald-400">'/dashboard'</span>
-                <span className="text-slate-300">);</span>
-              </div>
-              <div className="text-slate-300">{'}'});</div>
             </div>
           </div>
         </div>
@@ -169,13 +147,13 @@ function HowItWorksSection() {
       number: '01',
       title: 'Record',
       description: 'Use the desktop app or Chrome extension to trace your browser interactions. Flowstral captures clicks, form fills, navigation, and network requests automatically.',
-      detail: 'Generates Playwright scripts with self-healing selectors',
+      detail: 'Self-healing element recognition that adapts to UI changes',
     },
     {
       number: '02',
       title: 'Build & Extend',
       description: 'Edit steps visually with 59 step types. Add assertions, data generators, conditional logic, and reusable modules -- no code required.',
-      detail: 'Or write code directly if you prefer',
+      detail: 'Drag-and-drop visual test builder',
     },
     {
       number: '03',
@@ -231,8 +209,8 @@ function CapabilitiesSection() {
     {
       icon: MousePointer,
       title: 'Browser Testing',
-      description: 'Record sessions, generate Playwright scripts, run across Chromium/Firefox/WebKit. Self-healing selectors fix themselves when the UI changes.',
-      specifics: ['Playwright code generation', 'Cross-browser (3 engines)', '4-layer self-healing chain'],
+      description: 'Record sessions, build tests visually, run across Chromium, Firefox, and WebKit. Self-healing selectors fix themselves when the UI changes.',
+      specifics: ['Smart element recognition', 'Cross-browser (3 engines)', '4-layer self-healing chain'],
       href: '/products/smart-recorder',
     },
     {

@@ -164,7 +164,7 @@ const demoSteps = [
       'Self-healing locators that adapt to changes'
     ],
     icon: Compass,
-    color: 'fuchsia'
+    color: 'teal'
   },
   {
     id: 'mobile',
@@ -198,10 +198,10 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
     amber: { bg: 'bg-amber-500', text: 'text-amber-600', border: 'border-amber-300', light: 'bg-amber-50' },
     blue: { bg: 'bg-blue-500', text: 'text-blue-600', border: 'border-blue-300', light: 'bg-blue-50' },
     emerald: { bg: 'bg-emerald-500', text: 'text-emerald-600', border: 'border-emerald-300', light: 'bg-emerald-50' },
-    violet: { bg: 'bg-violet-500', text: 'text-violet-600', border: 'border-violet-300', light: 'bg-violet-50' },
-    rose: { bg: 'bg-rose-500', text: 'text-rose-600', border: 'border-rose-300', light: 'bg-rose-50' },
+    violet: { bg: 'bg-teal-500', text: 'text-teal-600', border: 'border-teal-300', light: 'bg-teal-50' },
+    rose: { bg: 'bg-slate-500', text: 'text-slate-600', border: 'border-slate-300', light: 'bg-slate-50' },
     cyan: { bg: 'bg-cyan-500', text: 'text-cyan-600', border: 'border-cyan-300', light: 'bg-cyan-50' },
-    fuchsia: { bg: 'bg-fuchsia-500', text: 'text-fuchsia-600', border: 'border-fuchsia-300', light: 'bg-fuchsia-50' },
+    fuchsia: { bg: 'bg-teal-500', text: 'text-teal-600', border: 'border-teal-300', light: 'bg-teal-50' },
     sky: { bg: 'bg-sky-500', text: 'text-sky-600', border: 'border-sky-300', light: 'bg-sky-50' },
   };
 
@@ -247,7 +247,7 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
           </div>
           <div className="flex items-center gap-2">
             <button className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 flex items-center gap-1.5">
-              <Code className="w-3.5 h-3.5" /> Code
+              <Eye className="w-3.5 h-3.5" /> Steps
             </button>
             <button className="px-3 py-1.5 text-xs bg-emerald-500 hover:bg-emerald-600 rounded-lg text-white flex items-center gap-1.5">
               <Play className="w-3.5 h-3.5" /> Run
@@ -356,7 +356,7 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
                 <Badge className="bg-emerald-100 text-emerald-700 text-[9px]">● Buttons 21</Badge>
                 <Badge className="bg-blue-100 text-blue-700 text-[9px]">● Links 0</Badge>
                 <Badge className="bg-amber-100 text-amber-700 text-[9px]">● Inputs 0</Badge>
-                <Badge className="bg-violet-100 text-violet-700 text-[9px]">● Headings 1</Badge>
+                <Badge className="bg-teal-100 text-teal-700 text-[9px]">● Headings 1</Badge>
               </div>
             </div>
 
@@ -487,7 +487,7 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
               <div className="mt-2 flex flex-wrap gap-1">
                 <Badge className="text-[8px] bg-emerald-100 text-emerald-700 border-0">✓ Schema Valid</Badge>
                 <Badge className="text-[8px] bg-blue-100 text-blue-700 border-0">✓ Headers OK</Badge>
-                <Badge className="text-[8px] bg-violet-100 text-violet-700 border-0">✓ No SQLi</Badge>
+                <Badge className="text-[8px] bg-teal-100 text-teal-700 border-0">✓ No SQLi</Badge>
               </div>
             )}
           </div>
@@ -507,7 +507,7 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
                   key={idx}
                   className={cn(
                     "flex-1 rounded-t transition-all duration-300",
-                    isPlaying && idx <= animationStep * 2 ? "bg-gradient-to-t from-rose-500 to-rose-400" : "bg-slate-200"
+                    isPlaying && idx <= animationStep * 2 ? "bg-teal-500" : "bg-slate-200"
                   )}
                   style={{ height: `${isPlaying ? height : 20}%` }}
                 />
@@ -574,13 +574,13 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
         return (
           <div className="h-full bg-white rounded-lg p-3 overflow-hidden border border-slate-200">
             {/* Goal Input */}
-            <div className="flex items-center gap-2 mb-3 p-2 bg-fuchsia-50 rounded-lg border border-fuchsia-200">
-              <Target className="w-4 h-4 text-fuchsia-500" />
-              <span className="text-xs text-fuchsia-700 font-medium">
+            <div className="flex items-center gap-2 mb-3 p-2 bg-teal-50 rounded-lg border border-teal-200">
+              <Target className="w-4 h-4 text-teal-500" />
+              <span className="text-xs text-teal-700 font-medium">
                 {isPlaying ? '"Test user login with invalid credentials"' : 'Enter your test goal...'}
               </span>
               {isPlaying && (
-                <Badge className="ml-auto text-[8px] bg-fuchsia-500 text-white border-0 animate-pulse">
+                <Badge className="ml-auto text-[8px] bg-teal-500 text-white border-0 animate-pulse">
                   AI Processing
                 </Badge>
               )}
@@ -664,7 +664,7 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
               <div className="flex-shrink-0">
                 <div className="w-24 h-44 bg-slate-900 rounded-xl p-1 relative">
                   <div className="absolute top-2 left-1/2 -translate-x-1/2 w-8 h-1 bg-slate-700 rounded-full" />
-                  <div className="w-full h-full bg-gradient-to-b from-sky-100 to-white rounded-lg overflow-hidden flex flex-col">
+                  <div className="w-full h-full bg-slate-50 rounded-lg overflow-hidden flex flex-col">
                     <div className="h-4 bg-sky-500 flex items-center justify-center">
                       <span className="text-[6px] text-white font-medium">app.example.com</span>
                     </div>
@@ -938,7 +938,7 @@ export default function DemoPage() {
                     "w-14 h-14 rounded-full shadow-lg",
                     isPlaying 
                       ? "bg-slate-100 text-slate-900 hover:bg-slate-200" 
-                      : "bg-violet-600 text-white hover:bg-violet-700"
+                      : "bg-teal-600 text-white hover:bg-teal-700"
                   )}
                 >
                   {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" />}
@@ -1012,11 +1012,11 @@ export default function DemoPage() {
                 className={cn(
                   "p-4 rounded-xl border transition-all text-left",
                   currentStep === idx
-                    ? "bg-violet-50 border-violet-300 text-violet-700 shadow-sm"
+                    ? "bg-teal-50 border-teal-300 text-teal-700 shadow-sm"
                     : "bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                 )}
               >
-                <s.icon className={cn("w-5 h-5 mb-2", currentStep === idx ? "text-violet-500" : "text-slate-400")} />
+                <s.icon className={cn("w-5 h-5 mb-2", currentStep === idx ? "text-teal-500" : "text-slate-400")} />
                 <p className="text-sm font-medium truncate">{s.title}</p>
               </button>
             ))}

@@ -459,6 +459,10 @@ const App = () => {
                 <Route path="/triage" element={<Navigate to="/test-cases" replace />} />
                 {/* /projects handled in main routes */}
                 <Route path="/onboarding" element={<Navigate to="/recorder" replace />} />
+
+                {/* Marketing URL redirects — prevent 404 for common typed URLs */}
+                <Route path="/features" element={<Navigate to="/" replace />} />
+                <Route path="/smart-recorder" element={<Navigate to="/products/smart-recorder" replace />} />
                 
                 {/* ═══════════════════════════════════════════════════════════
                     404 - CATCH ALL

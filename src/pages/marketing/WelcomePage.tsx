@@ -68,12 +68,12 @@ export default function WelcomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-50 via-white to-blue-50">
+    <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-sm border-b border-slate-200/50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
               <span className="text-white font-bold text-lg">F</span>
             </div>
             <span className="text-xl font-bold text-slate-800">Flowstral</span>
@@ -186,7 +186,7 @@ export default function WelcomePage() {
               <Button
                 size="lg"
                 onClick={() => navigate('/dashboard')}
-                className="w-full h-14 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/20"
+                className="w-full h-14 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl"
               >
                 <Globe className="w-5 h-5 mr-2" />
                 Launch Web App
@@ -199,7 +199,7 @@ export default function WelcomePage() {
                   // Trigger download
                   window.location.href = platforms[selectedPlatform].url;
                 }}
-                className="w-full h-14 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold rounded-xl shadow-lg shadow-emerald-500/20"
+                className="w-full h-14 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-xl"
               >
                 <Download className="w-5 h-5 mr-2" />
                 Download for {platforms[selectedPlatform].name}
@@ -254,22 +254,22 @@ export default function WelcomePage() {
           {/* Browser Extension */}
           <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 mb-8">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
-                <Chrome className="w-6 h-6 text-violet-600" />
+              <div className="w-12 h-12 rounded-xl bg-teal-100 flex items-center justify-center flex-shrink-0">
+                <Chrome className="w-6 h-6 text-teal-600" />
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <h2 className="text-lg font-semibold text-slate-900">
                     Browser Extension
                   </h2>
-                  <Badge className="bg-violet-100 text-violet-700 border-0 text-xs">Optional</Badge>
+                  <Badge className="bg-teal-100 text-teal-700 border-0 text-xs">Optional</Badge>
                 </div>
                 <p className="text-slate-600 mb-4">
                   Install the Chrome extension for quick recording directly in your browser without the desktop app.
                 </p>
                 <Button
                   variant="outline"
-                  className="border-violet-200 text-violet-700 hover:bg-violet-50"
+                  className="border-teal-200 text-teal-700 hover:bg-teal-50"
                   onClick={() => window.open('https://chrome.google.com/webstore/detail/flowstral', '_blank')}
                 >
                   <Chrome className="w-4 h-4 mr-2" />

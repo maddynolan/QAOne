@@ -72,7 +72,7 @@ const pageConfigs: Record<string, {
     subtitle: 'Developer Docs',
     description: 'Complete API documentation with examples, authentication guides, and SDK references for integrating Flowstral into your workflow.',
     icon: Code2,
-    gradient: 'from-violet-500 to-purple-500',
+    gradient: 'from-slate-600 to-slate-700',
     cta: { label: 'View Docs', action: '/auth' }
   },
   'tutorials': {
@@ -96,7 +96,7 @@ const pageConfigs: Record<string, {
     subtitle: 'Join the Conversation',
     description: 'Connect with other QA professionals, share tips, ask questions, and help shape the future of Flowstral.',
     icon: Users,
-    gradient: 'from-pink-500 to-rose-500',
+    gradient: 'from-teal-500 to-teal-600',
     cta: { label: 'Join Discord', action: '/contact' }
   },
   'careers': {
@@ -104,7 +104,7 @@ const pageConfigs: Record<string, {
     subtitle: 'Coming Soon',
     description: 'We\'re growing! Our careers page is currently under construction. Check back soon for exciting opportunities to join our team and help revolutionize QA automation.',
     icon: Building2,
-    gradient: 'from-indigo-500 to-violet-500',
+    gradient: 'from-slate-500 to-slate-600',
     cta: { label: 'Contact Us Instead', action: '/contact' }
   },
   'partners': {
