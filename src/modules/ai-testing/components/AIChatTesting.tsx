@@ -28,7 +28,8 @@ import {
   Sparkles,
   Zap,
   RefreshCw,
-  Settings
+  Settings,
+  Save,
 } from 'lucide-react';
 
 // Types
@@ -342,23 +343,69 @@ Would you like me to re-run with these fixes applied?`
         throw new Error('Failed to get explanation');
       }
     } catch (err) {
-      // Fallback to basic analysis
-      setChatMessages(prev => [...prev, { 
-        role: 'ai', 
+      // Fallback to generic failure analysis
+      const errorMsg = failedStep?.error || 'Element not found';
+      let suggestions = '';
+
+      if (errorMsg.toLowerCase().includes('not found') || errorMsg.toLowerCase().includes('no match')) {
+        suggestions = `Possible causes:
+1. The element selector does not match the actual DOM structure
+2. The element has not loaded yet (timing issue)
+3. The page structure changed since the test was designed
+4. The element is inside an iframe or shadow DOM
+
+Suggested fixes:
+1. Try more generic selectors (getByRole, getByText, getByLabel)
+2. Add explicit waits for element visibility
+3. Check if the element is in an iframe
+4. Use data-testid attributes if available`;
+      } else if (errorMsg.toLowerCase().includes('timeout')) {
+        suggestions = `Possible causes:
+1. The page is loading slowly
+2. A network request is blocking rendering
+3. JavaScript has not finished executing
+4. The element is hidden or conditionally rendered
+
+Suggested fixes:
+1. Increase the timeout duration
+2. Wait for network idle state before interacting
+3. Check element visibility before clicking
+4. Add retry logic with exponential backoff`;
+      } else if (errorMsg.toLowerCase().includes('denied') || errorMsg.toLowerCase().includes('blocked')) {
+        suggestions = `Possible causes:
+1. Security challenge (CAPTCHA, bot detection) was triggered
+2. IP address is blocked or rate-limited
+3. Authentication session expired
+4. The application blocks automated browser access
+
+Suggested fixes:
+1. Use a stealth browser configuration
+2. Whitelist your IP in the application settings
+3. Use API-based authentication before UI testing
+4. Add delays between actions to avoid rate limiting`;
+      } else {
+        suggestions = `Possible causes:
+1. The selector may have changed
+2. The page may not have loaded completely
+3. The element may be dynamically rendered
+4. There may be a timing or state issue
+
+Suggested fixes:
+1. Update the selector to match the current DOM
+2. Add waits for element visibility
+3. Check if the element is in an iframe
+4. Try using text-based or role-based selectors`;
+      }
+
+      setChatMessages(prev => [...prev, {
+        role: 'ai',
         content: `The test failed at: **${failedStep?.action} "${failedStep?.target}"**
 
-Error: ${failedStep?.error || 'Element not found'}
+Error: ${errorMsg}
 
-This typically happens because:
-1. The element selector doesn't match the actual page
-2. The element hasn't loaded yet (timing issue)
-3. The page structure changed
-4. Access was denied or blocked (CAPTCHA/security)
+${suggestions}
 
-Looking at your screenshot, it shows "Access Denied" - Salesforce may be blocking automated access. Try:
-1. Use a Salesforce sandbox with less security restrictions
-2. Whitelist your IP in Salesforce Setup
-3. Use the Salesforce API instead of UI automation`
+Would you like me to re-run this test with AI-generated fixes?`
       }]);
     }
   };
@@ -381,6 +428,54 @@ Looking at your screenshot, it shows "Access Denied" - Salesforce may be blockin
     a.href = url;
     a.download = `ai-test-report-${Date.now()}.json`;
     a.click();
+  };
+
+  const [savingTestCase, setSavingTestCase] = useState<string | null>(null);
+
+  const saveAsTestCase = async (test: TestResult) => {
+    setSavingTestCase(test.id);
+    try {
+      const testCase = {
+        title: test.name,
+        description: test.description || `AI-generated test: ${input}`,
+        steps: test.steps.map((s, i) => ({
+          step_number: i + 1,
+          action: s.action,
+          expected_result: s.success ? 'Pass' : `Fail: ${s.error || 'Unknown'}`,
+          test_data: s.value || '',
+          selector: s.target,
+        })),
+        tags: ['ai-generated', 'flowpilot'],
+        priority: 'medium',
+        status: 'draft',
+      };
+
+      const response = await fetch(`${API_BASE}/test-cases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testCase),
+      });
+
+      if (response.ok) {
+        setChatMessages(prev => [...prev, {
+          role: 'ai',
+          content: `Saved "${test.name}" as a test case. You can find it in the Test Repository.`,
+        }]);
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setChatMessages(prev => [...prev, {
+          role: 'ai',
+          content: `Failed to save test case: ${errData.detail || response.statusText}`,
+        }]);
+      }
+    } catch (err: any) {
+      setChatMessages(prev => [...prev, {
+        role: 'ai',
+        content: `Failed to save: ${err.message || 'Network error'}`,
+      }]);
+    } finally {
+      setSavingTestCase(null);
+    }
   };
 
   const passedCount = results.filter(r => r.status === 'passed').length;
@@ -655,38 +750,59 @@ Looking at your screenshot, it shows "Access Denied" - Salesforce may be blockin
                         </div>
                       )}
                       
-                      {/* Actions for failed tests */}
-                      {result.status === 'failed' && (
-                        <div className="flex gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              askAboutFailure(result);
-                            }}
-                          >
-                            <MessageSquare className="w-4 h-4 mr-2" />
-                            Why did this fail?
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            disabled={isRerunning === result.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              rerunWithFix(result);
-                            }}
-                          >
-                            {isRerunning === result.id ? (
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            ) : (
-                              <RefreshCw className="w-4 h-4 mr-2" />
-                            )}
-                            {isRerunning === result.id ? 'Re-running...' : 'Re-run with AI fix'}
-                          </Button>
-                        </div>
-                      )}
+                      {/* Test Actions */}
+                      <div className="flex gap-2 flex-wrap">
+                        {/* Save as Test Case — available for all tests */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={savingTestCase === result.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            saveAsTestCase(result);
+                          }}
+                        >
+                          {savingTestCase === result.id ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Save className="w-4 h-4 mr-2" />
+                          )}
+                          {savingTestCase === result.id ? 'Saving...' : 'Save as Test Case'}
+                        </Button>
+
+                        {/* Failure-specific actions */}
+                        {result.status === 'failed' && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                askAboutFailure(result);
+                              }}
+                            >
+                              <MessageSquare className="w-4 h-4 mr-2" />
+                              Why did this fail?
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={isRerunning === result.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                rerunWithFix(result);
+                              }}
+                            >
+                              {isRerunning === result.id ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              ) : (
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                              )}
+                              {isRerunning === result.id ? 'Re-running...' : 'Re-run with AI fix'}
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

@@ -4,60 +4,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { 
-  MousePointer, Play, CheckCircle2, ArrowRight, Lightbulb, 
+import {
+  MousePointer, Play, CheckCircle2, ArrowRight, Lightbulb,
   Zap, Target, Clock, Shield, Eye, Type, Lock, Globe,
   Layers, RefreshCw,
   Database
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { MarketingHeader } from '@/components/MarketingHeader';
 import { cn } from '@/lib/utils';
-
-// Shared Header Component
-function MarketingHeader() {
-  const navigate = useNavigate();
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  return (
-    <header className={cn(
-      "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
-      scrolled ? "bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200/50" : "bg-white/80 backdrop-blur-sm"
-    )}>
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-8">
-          <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
-              <span className="text-white font-bold text-lg">F</span>
-            </div>
-            <span className="text-xl font-bold text-slate-900">Flowstral</span>
-          </Link>
-          <nav className="hidden md:flex items-center gap-6">
-            <Link to="/#features" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Features</Link>
-            <Link to="/pricing" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Pricing</Link>
-            <Link to="/compare/katalon" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Compare</Link>
-            <Link to="/blog" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Blog</Link>
-            <Link to="/about" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">About</Link>
-          </nav>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
-            Sign In
-          </Button>
-          <Button className="bg-slate-900 hover:bg-slate-800 text-white font-medium" onClick={() => navigate('/signup')}>
-            Start Free <ArrowRight className="w-4 h-4 ml-1" />
-          </Button>
-        </div>
-      </div>
-    </header>
-  );
-}
 
 // How It Works Step Component
 function HowItWorksStep({ step, title, description, isActive, icon: Icon }: { 
@@ -157,7 +113,7 @@ export default function SmartRecorderPage() {
                 <Button
                   size="lg"
                   onClick={() => navigate('/signup')}
-                  className="h-12 px-8 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl"
+                  className="h-12 px-8 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl"
                 >
                   Try Smart Trace <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
@@ -306,7 +262,7 @@ export default function SmartRecorderPage() {
           <Button
             size="lg"
             onClick={() => navigate('/signup')}
-            className="h-14 px-10 bg-white text-slate-900 hover:bg-slate-100 font-semibold rounded-xl"
+            className="h-14 px-10 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl"
           >
             Start Free Trial <ArrowRight className="w-5 h-5 ml-2" />
           </Button>

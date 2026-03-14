@@ -12,7 +12,7 @@
  * All agents stream real results via SSE or polling.
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAI } from '@/contexts/AIContext';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,21 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { API_BASE_URL } from '@/lib/api-config';
 import {
   Compass,
@@ -50,6 +65,9 @@ import {
   ExternalLink,
   Copy,
   Save,
+  Clock,
+  History,
+  Trash2,
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -117,6 +135,65 @@ interface FlowmapResult {
   pages: CapabilityPage[];
   llm_analysis?: any;
   total_defects: number;
+}
+
+// ─── Settings & History Types ────────────────────────────────────
+
+interface FlowpilotSettings {
+  model: string;
+  headless: boolean;
+  maxSteps: number;
+  timeout: number;
+}
+
+const DEFAULT_SETTINGS: FlowpilotSettings = {
+  model: 'gpt-4o-mini',
+  headless: true,
+  maxSteps: 20,
+  timeout: 30,
+};
+
+const SETTINGS_KEY = 'flowstral-ai-settings';
+const HISTORY_KEY = 'flowstral-ai-test-history';
+const MAX_HISTORY_ENTRIES = 50;
+
+interface HistoryEntry {
+  id: string;
+  timestamp: string;
+  instruction: string;
+  agentId: AgentId;
+  results: TestResult[];
+  passed: number;
+  failed: number;
+  total: number;
+  duration: number;
+}
+
+function loadSettings(): FlowpilotSettings {
+  try {
+    const stored = localStorage.getItem(SETTINGS_KEY);
+    if (stored) return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+  } catch { /* ignore */ }
+  return { ...DEFAULT_SETTINGS };
+}
+
+function saveSettings(settings: FlowpilotSettings) {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* ignore */ }
+}
+
+function loadHistory(): HistoryEntry[] {
+  try {
+    const stored = localStorage.getItem(HISTORY_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch { /* ignore */ }
+  return [];
+}
+
+function saveHistory(history: HistoryEntry[]) {
+  try {
+    const trimmed = history.slice(0, MAX_HISTORY_ENTRIES);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
+  } catch { /* ignore */ }
 }
 
 type AgentId = 'flowmap' | 'explorer' | 'self-healer' | 'generator';
@@ -234,9 +311,20 @@ export default function FlowpilotPage() {
   // Flowmap results
   const [flowmapResult, setFlowmapResult] = useState<FlowmapResult | null>(null);
 
+  // Settings state
+  const [settings, setSettings] = useState<FlowpilotSettings>(loadSettings);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // History state
+  const [history, setHistory] = useState<HistoryEntry[]>(loadHistory);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
+
   // Refs
   const abortControllerRef = useRef<AbortController | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Persist settings when they change
+  useEffect(() => { saveSettings(settings); }, [settings]);
 
   const colors = getColors(selectedAgent.color, theme);
 
@@ -334,8 +422,11 @@ export default function FlowpilotPage() {
     setTestResults([]);
     setLiveScreenshot(null);
 
-    await streamSSE(`${API_BASE_URL}/api/ai-testing/start`, { instruction });
-  }, [goal, targetUrl, streamSSE]);
+    await streamSSE(`${API_BASE_URL}/api/ai-testing/start`, {
+      instruction,
+      headless: settings.headless,
+    });
+  }, [goal, targetUrl, streamSSE, settings.headless]);
 
   // ─── Execute: Self-Healer Agent (SSE with fix) ─────────────────
 
@@ -360,12 +451,16 @@ export default function FlowpilotPage() {
           steps: failedTest.steps,
           screenshot: failedTest.screenshot,
         },
+        headless: settings.headless,
       });
     } else {
       // No prior failures — just run normally with extra healing emphasis
-      await streamSSE(`${API_BASE_URL}/api/ai-testing/start`, { instruction });
+      await streamSSE(`${API_BASE_URL}/api/ai-testing/start`, {
+        instruction,
+        headless: settings.headless,
+      });
     }
-  }, [goal, targetUrl, testResults, streamSSE]);
+  }, [goal, targetUrl, testResults, streamSSE, settings.headless]);
 
   // ─── Execute: Explorer Agent (Polling) ─────────────────────────
 
@@ -477,6 +572,37 @@ export default function FlowpilotPage() {
       }
     } finally {
       setIsProcessing(false);
+
+      // Save to history after test completion (for generator / self-healer)
+      if (selectedAgent.id === 'generator' || selectedAgent.id === 'self-healer') {
+        // Use a small timeout to allow last SSE events to be processed
+        setTimeout(() => {
+          setTestResults((currentResults) => {
+            if (currentResults.length > 0) {
+              const passed = currentResults.filter(r => r.status === 'passed').length;
+              const failed = currentResults.filter(r => r.status === 'failed').length;
+              const totalDuration = currentResults.reduce((sum, r) => sum + (r.duration || 0), 0);
+              const entry: HistoryEntry = {
+                id: `hist_${Date.now()}`,
+                timestamp: new Date().toISOString(),
+                instruction: goal + (targetUrl.trim() ? ` on ${targetUrl}` : ''),
+                agentId: selectedAgent.id,
+                results: currentResults.map(r => ({ ...r, screenshot: undefined })), // strip screenshots to save space
+                passed,
+                failed,
+                total: currentResults.length,
+                duration: totalDuration,
+              };
+              setHistory(prev => {
+                const updated = [entry, ...prev].slice(0, MAX_HISTORY_ENTRIES);
+                saveHistory(updated);
+                return updated;
+              });
+            }
+            return currentResults;
+          });
+        }, 500);
+      }
     }
   }, [selectedAgent, goal, targetUrl, executeGenerator, executeSelfHealer, executeExplorer, executeFlowmap]);
 
@@ -714,12 +840,88 @@ export default function FlowpilotPage() {
                     <Wand2 className="w-4 h-4 mr-2" /> Execute with {selectedAgent.name}
                   </Button>
                 )}
-                <Button
-                  variant="outline"
-                  className={cn(theme === 'light' ? "border-gray-200 hover:bg-gray-100" : "border-gray-700 hover:bg-gray-800")}
-                >
-                  <Settings className="w-4 h-4" />
-                </Button>
+                <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(theme === 'light' ? "border-gray-200 hover:bg-gray-100" : "border-gray-700 hover:bg-gray-800")}
+                    >
+                      <Settings className="w-4 h-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80" align="end">
+                    <div className="space-y-4">
+                      <h4 className="font-semibold text-sm">Agent Settings</h4>
+
+                      {/* Model Selection */}
+                      <div className="space-y-2">
+                        <Label className="text-xs">LLM Model</Label>
+                        <Select
+                          value={settings.model}
+                          onValueChange={(val) => setSettings(s => ({ ...s, model: val }))}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="gpt-4o-mini">gpt-4o-mini (fast, cheap)</SelectItem>
+                            <SelectItem value="gpt-4o">gpt-4o (balanced)</SelectItem>
+                            <SelectItem value="gpt-4-turbo">gpt-4-turbo (powerful)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Headless Toggle */}
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Headless Browser</Label>
+                        <Switch
+                          checked={settings.headless}
+                          onCheckedChange={(val) => setSettings(s => ({ ...s, headless: val }))}
+                        />
+                      </div>
+
+                      {/* Max Steps Slider */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">Max Steps</Label>
+                          <span className="text-xs text-muted-foreground">{settings.maxSteps}</span>
+                        </div>
+                        <Slider
+                          min={5}
+                          max={50}
+                          step={1}
+                          value={[settings.maxSteps]}
+                          onValueChange={([val]) => setSettings(s => ({ ...s, maxSteps: val }))}
+                        />
+                      </div>
+
+                      {/* Timeout Slider */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">Timeout (seconds)</Label>
+                          <span className="text-xs text-muted-foreground">{settings.timeout}s</span>
+                        </div>
+                        <Slider
+                          min={10}
+                          max={120}
+                          step={5}
+                          value={[settings.timeout]}
+                          onValueChange={([val]) => setSettings(s => ({ ...s, timeout: val }))}
+                        />
+                      </div>
+
+                      {/* Reset Button */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs"
+                        onClick={() => setSettings({ ...DEFAULT_SETTINGS })}
+                      >
+                        Reset to Defaults
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           </div>
@@ -1082,6 +1284,135 @@ export default function FlowpilotPage() {
                       ? flowmapResult.llm_analysis
                       : JSON.stringify(flowmapResult.llm_analysis, null, 2)}
                   </pre>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Test History ────────────────────────────────────── */}
+          {history.length > 0 && (
+            <div className={cn(
+              "rounded-xl border overflow-hidden",
+              theme === 'light' ? "bg-white border-gray-200" : "bg-gray-900 border-gray-800"
+            )}>
+              <button
+                onClick={() => setHistoryExpanded(!historyExpanded)}
+                className={cn(
+                  "w-full p-4 flex items-center gap-3 text-left",
+                  theme === 'light' ? "hover:bg-gray-50" : "hover:bg-gray-800/50"
+                )}
+              >
+                <History className={cn("w-5 h-5", theme === 'light' ? 'text-gray-500' : 'text-gray-400')} />
+                <h3 className={cn("font-semibold flex-1", theme === 'light' ? 'text-gray-900' : 'text-white')}>
+                  Test History
+                </h3>
+                <Badge variant="outline" className="text-xs">{history.length} run{history.length > 1 ? 's' : ''}</Badge>
+                {historyExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+
+              {historyExpanded && (
+                <div className={cn("border-t", theme === 'light' ? 'border-gray-100' : 'border-gray-800')}>
+                  <div className="max-h-96 overflow-y-auto">
+                    {history.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className={cn(
+                          "p-4 border-b last:border-b-0 flex items-start gap-3",
+                          theme === 'light' ? 'border-gray-100 hover:bg-gray-50' : 'border-gray-800 hover:bg-gray-800/50'
+                        )}
+                      >
+                        {/* Status Indicator */}
+                        <div className="flex-shrink-0 mt-0.5">
+                          {entry.failed > 0 ? (
+                            <XCircle className="w-4 h-4 text-red-500" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          )}
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          <div className={cn(
+                            "text-sm font-medium truncate",
+                            theme === 'light' ? 'text-gray-900' : 'text-white'
+                          )}>
+                            {entry.instruction}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Clock className="w-3 h-3 text-gray-400" />
+                            <span className={cn("text-xs", theme === 'light' ? 'text-gray-400' : 'text-gray-500')}>
+                              {new Date(entry.timestamp).toLocaleString()}
+                            </span>
+                            <Badge variant="outline" className="text-[10px]">{entry.agentId}</Badge>
+                            <Badge className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 border-0">
+                              {entry.passed} passed
+                            </Badge>
+                            {entry.failed > 0 && (
+                              <Badge className="text-[10px] bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 border-0">
+                                {entry.failed} failed
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex gap-1 flex-shrink-0">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Parse instruction to extract URL and goal
+                              const parts = entry.instruction.split(' on ');
+                              if (parts.length > 1) {
+                                setGoal(parts[0]);
+                                setTargetUrl(parts.slice(1).join(' on '));
+                              } else {
+                                setGoal(entry.instruction);
+                              }
+                              const agent = agents.find(a => a.id === entry.agentId);
+                              if (agent) setSelectedAgent(agent);
+                            }}
+                          >
+                            <Play className="w-3 h-3 mr-1" /> Re-run
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Save the first test result as a test case
+                              if (entry.results.length > 0) {
+                                saveAsTestCase(entry.results[0]);
+                              }
+                            }}
+                          >
+                            <Save className="w-3 h-3 mr-1" /> Save
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Clear History */}
+                  <div className={cn(
+                    "p-3 border-t flex justify-end",
+                    theme === 'light' ? 'border-gray-100 bg-gray-50' : 'border-gray-800 bg-gray-900'
+                  )}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
+                      onClick={() => {
+                        setHistory([]);
+                        saveHistory([]);
+                      }}
+                    >
+                      <Trash2 className="w-3 h-3 mr-1" /> Clear History
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

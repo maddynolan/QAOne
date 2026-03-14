@@ -2,59 +2,13 @@
  * About Us Page
  */
 
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { 
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
   ArrowRight, Users, Target, Heart, Building2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
-
-// Shared Header
-function MarketingHeader() {
-  const navigate = useNavigate();
-  const [scrolled, setScrolled] = useState(false);
-
-  React.useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  return (
-    <header className={cn(
-      "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
-      scrolled ? "bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200/50" : "bg-white/80 backdrop-blur-sm"
-    )}>
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-8">
-          <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
-              <span className="text-white font-bold text-lg">F</span>
-            </div>
-            <span className="text-xl font-bold text-slate-900">Flowstral</span>
-          </Link>
-          <nav className="hidden md:flex items-center gap-6">
-            <Link to="/#features" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Features</Link>
-            <Link to="/pricing" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Pricing</Link>
-            <Link to="/compare/katalon" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Compare</Link>
-            <Link to="/blog" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Blog</Link>
-            <Link to="/about" className="text-sm text-blue-600 font-semibold">About</Link>
-          </nav>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
-            Sign In
-          </Button>
-          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => navigate('/signup')}>
-            Start Free <ArrowRight className="w-4 h-4 ml-1" />
-          </Button>
-        </div>
-      </div>
-    </header>
-  );
-}
+import { MarketingHeader } from '@/components/MarketingHeader';
 
 const values = [
   { icon: Target, title: 'Quality First', desc: 'Every bug that reaches production is a user experience we failed to protect. We obsess over quality.' },
@@ -203,7 +157,7 @@ export default function AboutPage() {
             <Button
               size="lg"
               onClick={() => navigate('/signup')}
-              className="h-12 px-8 bg-white text-slate-900 hover:bg-slate-100 font-semibold rounded-xl"
+              className="h-12 px-8 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl"
             >
               Get Started Free <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
@@ -211,7 +165,7 @@ export default function AboutPage() {
               size="lg"
               variant="outline"
               onClick={() => navigate('/contact')}
-              className="h-12 px-8 border-slate-600 text-white hover:bg-slate-800 rounded-xl"
+              className="h-12 px-8 border-slate-500 text-white hover:bg-slate-800 rounded-xl"
             >
               <Building2 className="w-5 h-5 mr-2" /> Talk to Sales
             </Button>

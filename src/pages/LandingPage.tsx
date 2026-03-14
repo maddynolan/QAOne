@@ -23,12 +23,12 @@ import {
   Smartphone, Wifi, Compass,
   Mail, Phone, MapPin,
   Twitter, Linkedin, Github, Youtube,
-  SlidersHorizontal, Plug
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { LandingPluginsProvider, useLandingPlugins, type LandingPlugins, type PluginKey, pluginMetadata } from '@/contexts/LandingPluginsContext';
+import { MarketingHeader } from '@/components/MarketingHeader';
+import { LandingPluginsProvider, useLandingPlugins, type PluginKey } from '@/contexts/LandingPluginsContext';
 
 // ===================================================================
 // HERO
@@ -48,22 +48,25 @@ function HeroSection() {
 
       <div className="relative max-w-7xl mx-auto px-6 pt-24 pb-16 w-full">
         <div className="max-w-3xl">
+          <Badge className="mb-4 bg-emerald-50 text-emerald-700 border border-emerald-200 text-sm px-3 py-1">
+            Zero Code Required
+          </Badge>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 leading-[1.1] tracking-tight mb-6">
             Record once.{' '}
             <br className="hidden sm:block" />
             Test everything.
           </h1>
           <p className="text-lg sm:text-xl text-slate-600 max-w-2xl leading-relaxed mb-8">
-            Flowstral records your browser sessions and turns them into reliable automated tests.
-            Then run those tests for performance, visual regression, accessibility, and API coverage
-            -- all from one platform.
+            Flowstral records your browser sessions and turns them into reliable automated tests —
+            no code required. Run those tests for performance, visual regression, accessibility,
+            and API coverage — all from one platform.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 mb-12">
             <Button
               size="lg"
               onClick={() => { trackCTAClick('start_free', '/'); navigate('/signup'); }}
-              className="h-12 px-8 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-lg"
+              className="h-12 px-8 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg"
             >
               Start Free
               <ArrowRight className="w-4 h-4 ml-2" />
@@ -210,7 +213,7 @@ function CapabilitiesSection() {
       icon: MousePointer,
       title: 'Browser Testing',
       description: 'Record sessions, build tests visually, run across Chromium, Firefox, and WebKit. Self-healing selectors fix themselves when the UI changes.',
-      specifics: ['Smart element recognition', 'Cross-browser (3 engines)', '4-layer self-healing chain'],
+      specifics: ['Smart element recognition', 'Cross-browser (3 engines)', 'Multi-layer self-healing'],
       href: '/products/smart-recorder',
     },
     {
@@ -328,16 +331,16 @@ function SelfHealingSection() {
               Your tests break. We fix them automatically.
             </h2>
             <p className="text-slate-600 leading-relaxed mb-8">
-              When a UI changes and a selector breaks, Flowstral's 4-layer healing chain
-              finds a working alternative before you even notice. No manual maintenance.
+              When a UI changes and a selector breaks, Flowstral's multi-layer healing engine
+              finds a working alternative before you even notice. Stops at the first success — no manual maintenance.
             </p>
 
             <div className="space-y-4">
               {[
-                { layer: 'Knowledge Base', speed: '< 1ms', description: 'Looks up previously-healed selectors from past runs' },
-                { layer: 'Deterministic', speed: '< 1ms', description: 'Generates alternative CSS/XPath selectors from element attributes' },
-                { layer: 'Vision AI', speed: '2-5s', description: 'Analyzes a screenshot to locate the element visually' },
-                { layer: 'OCR Fallback', speed: '~500ms', description: 'Finds elements by their visible text content' },
+                { layer: 'Selector Cache', speed: '< 1ms', description: 'Instant lookup of previously-healed selectors from past successful fixes' },
+                { layer: 'Smart Variants', speed: '< 1ms', description: 'Generates alternative CSS, XPath, and Playwright locators from element attributes' },
+                { layer: 'Vision AI', speed: '2-5s', description: 'GPT-4 Vision analyzes a screenshot to visually locate the element (opt-in)' },
+                { layer: 'OCR Fallback', speed: '~500ms', description: 'Finds elements by their visible text using OCR when other methods fail' },
               ].map((item, idx) => (
                 <div key={idx} className="flex items-start gap-4 p-4 bg-white rounded-lg border border-slate-200">
                   <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 text-sm font-bold text-slate-500">
@@ -427,7 +430,7 @@ function CTASection() {
           <Button
             size="lg"
             onClick={() => { trackCTAClick('get_started_free', '/'); navigate('/signup'); }}
-            className="h-12 px-8 bg-white text-slate-900 hover:bg-slate-100 font-medium rounded-lg"
+            className="h-12 px-8 bg-emerald-500 hover:bg-emerald-400 text-white font-medium rounded-lg"
           >
             Get Started Free
           </Button>
@@ -435,7 +438,7 @@ function CTASection() {
             size="lg"
             variant="outline"
             onClick={() => { trackCTAClick('schedule_demo', '/'); navigate('/contact'); }}
-            className="h-12 px-8 border-slate-600 text-slate-300 hover:bg-slate-800 rounded-lg"
+            className="h-12 px-8 border-slate-500 text-white hover:bg-slate-800 rounded-lg"
           >
             Talk to Sales
           </Button>
@@ -453,147 +456,7 @@ function CTASection() {
   );
 }
 
-// ===================================================================
-// HEADER
-// ===================================================================
-
-function Header() {
-  const navigate = useNavigate();
-  const [scrolled, setScrolled] = useState(false);
-  const [pluginsOpen, setPluginsOpen] = useState(false);
-  const { plugins, setPlugin, isLicensed, license } = useLandingPlugins();
-
-  useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  useEffect(() => {
-    if (!pluginsOpen) return;
-    const close = () => setPluginsOpen(false);
-    window.addEventListener('click', close);
-    return () => window.removeEventListener('click', close);
-  }, [pluginsOpen]);
-
-  const pluginOptions: { key: PluginKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { key: 'api', label: 'API Testing', icon: Globe },
-    { key: 'perf', label: 'Performance', icon: Activity },
-    { key: 'a11y', label: 'Accessibility', icon: Accessibility },
-    { key: 'mobile', label: 'Mobile Testing', icon: Smartphone },
-  ];
-
-  return (
-    <header className={cn(
-      "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
-      scrolled
-        ? "bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200/50"
-        : "bg-white/80 backdrop-blur-sm"
-    )}>
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-8">
-          <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center">
-              <span className="text-white font-bold text-sm">F</span>
-            </div>
-            <span className="text-lg font-bold text-slate-900">Flowstral</span>
-          </Link>
-          <nav className="hidden md:flex items-center gap-6">
-            <a href="#features" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">Features</a>
-            <span onClick={() => navigate('/pricing')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors cursor-pointer">Pricing</span>
-            <span onClick={() => navigate('/compare/katalon')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors cursor-pointer">Compare</span>
-            <span onClick={() => navigate('/blog')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors cursor-pointer">Blog</span>
-            <span onClick={() => navigate('/download')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors cursor-pointer">Download</span>
-            <span onClick={() => navigate('/about')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors cursor-pointer">About</span>
-          </nav>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Plugin customizer */}
-          <div className="relative">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-slate-500 hover:text-slate-900 gap-1.5"
-              onClick={(e) => { e.stopPropagation(); setPluginsOpen((v) => !v); }}
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-              <span className="hidden sm:inline">Customize</span>
-              <Plug className="w-3.5 h-3.5" />
-            </Button>
-            {pluginsOpen && (
-              <div
-                className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-slate-200 bg-white shadow-lg py-3 z-50"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500 uppercase">Show on landing</span>
-                  <Badge className="text-[10px] bg-slate-100 text-slate-600 border-0">
-                    {license.tier.charAt(0).toUpperCase() + license.tier.slice(1)}
-                  </Badge>
-                </div>
-                <div className="px-2 py-1 space-y-0.5">
-                  {pluginOptions.map(({ key, label, icon: Icon }) => {
-                    const licensed = isLicensed(key);
-                    const requiredTier = pluginMetadata[key].tier;
-
-                    return (
-                      <label
-                        key={key}
-                        className={cn(
-                          "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
-                          licensed
-                            ? "hover:bg-slate-50 cursor-pointer"
-                            : "opacity-60 cursor-not-allowed"
-                        )}
-                        title={licensed ? `Toggle ${label}` : `Requires ${requiredTier} license or higher`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={plugins[key]}
-                          onChange={(e) => licensed && setPlugin(key, e.target.checked)}
-                          disabled={!licensed}
-                          className={cn("rounded border-slate-300", !licensed && "opacity-50")}
-                        />
-                        <Icon className={cn("w-4 h-4", licensed ? "text-slate-400" : "text-slate-300")} />
-                        <span className={cn("text-sm flex-1", licensed ? "text-slate-700" : "text-slate-400")}>{label}</span>
-                        {!licensed && (
-                          <div className="flex items-center gap-1">
-                            <Lock className="w-3 h-3 text-amber-500" />
-                            <span className="text-[10px] text-amber-600 font-medium uppercase">{requiredTier}</span>
-                          </div>
-                        )}
-                      </label>
-                    );
-                  })}
-                </div>
-                {license.tier !== 'enterprise' && (
-                  <div className="px-4 pt-3 mt-2 border-t border-slate-100">
-                    <Button
-                      size="sm"
-                      className="w-full bg-slate-900 text-white text-xs hover:bg-slate-800"
-                      onClick={() => navigate('/pricing')}
-                    >
-                      Upgrade to unlock all features
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          <Button variant="ghost" className="text-slate-600 hover:text-slate-900" onClick={() => { trackCTAClick('sign_in', '/'); navigate('/signin'); }}>
-            Sign In
-          </Button>
-          <Button
-            className="bg-slate-900 hover:bg-slate-800 text-white"
-            onClick={() => { trackCTAClick('start_free', '/'); navigate('/signup'); }}
-          >
-            Start Free
-          </Button>
-        </div>
-      </div>
-    </header>
-  );
-}
+// Header: uses shared MarketingHeader component (see src/components/MarketingHeader.tsx)
 
 // ===================================================================
 // FOOTER
@@ -721,7 +584,7 @@ function Footer() {
 function LandingPageContent() {
   return (
     <div className="min-h-screen bg-white">
-      <Header />
+      <MarketingHeader />
       <main>
         <HeroSection />
         <HowItWorksSection />
