@@ -28,7 +28,7 @@ function MarketingHeader() {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
               <span className="text-white font-bold text-lg">F</span>
             </div>
             <span className="text-xl font-bold text-slate-800">Flowstral</span>
@@ -45,7 +45,7 @@ function MarketingHeader() {
           <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
             Sign In
           </Button>
-          <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => navigate('/signup')}>
+          <Button className="bg-slate-900 hover:bg-slate-800" onClick={() => navigate('/signup')}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -226,7 +226,7 @@ export default function TermsPage() {
             {/* Main Content */}
             <div className="lg:col-span-3 space-y-12">
               {/* Introduction */}
-              <div className="p-8 bg-gradient-to-br from-blue-50 to-violet-50 rounded-2xl border border-blue-100">
+              <div className="p-8 bg-slate-50 rounded-2xl border border-slate-200">
                 <h2 className="text-xl font-bold text-slate-900 mb-4">Agreement Overview</h2>
                 <p className="text-slate-700 leading-relaxed">
                   These Terms of Service ("Terms") constitute a legally binding agreement between you and Flowstral Inc. ("Flowstral," "we," "us," or "our") governing your access to and use of the Flowstral platform and services. By accessing or using our Service, you agree to be bound by these Terms. If you do not agree, you may not access or use the Service.

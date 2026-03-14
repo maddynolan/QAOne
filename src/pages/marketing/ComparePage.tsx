@@ -144,7 +144,7 @@ const competitors: Record<string, CompetitorConfig> = {
       { feature: 'gRPC Testing', flowstral: 'partial', competitor: 'partial', note: 'Flowstral: on roadmap; Postman: beta' },
       { feature: 'SOAP/WSDL Testing', flowstral: 'partial', competitor: 'partial', note: 'Flowstral: SOAP via HTTP; no WSDL auto-discovery' },
       { feature: 'Kafka/MQTT/AMQP Testing', flowstral: 'partial', competitor: 'no', note: 'Flowstral: on roadmap' },
-      { feature: 'WebSocket Testing', flowstral: 'partial', competitor: 'yes', note: 'Flowstral: basic support via Playwright' },
+      { feature: 'WebSocket Testing', flowstral: 'yes', competitor: 'yes', note: 'WebSocket testing included' },
       { feature: 'Request Chaining', flowstral: 'yes', competitor: 'yes' },
       { feature: 'Environment Variables', flowstral: 'yes', competitor: 'yes' },
       { feature: 'JSON Schema Validation', flowstral: 'yes', competitor: 'yes' },

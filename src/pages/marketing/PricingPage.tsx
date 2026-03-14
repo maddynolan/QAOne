@@ -66,12 +66,12 @@ function MarketingHeader() {
 // 8 Testing Packs
 const testingPacks = [
   { name: 'Automation', icon: TestTube, color: 'blue', desc: 'Record, build & run tests' },
-  { name: 'Flowpilot', icon: Compass, color: 'fuchsia', desc: 'AI exploratory testing (Preview)', isNew: true },
+  { name: 'Flowpilot', icon: Compass, color: 'teal', desc: 'AI exploratory testing (Preview)', isNew: true },
   { name: 'Mobile', icon: Smartphone, color: 'sky', desc: '40+ devices & throttling', isNew: true },
   { name: 'Performance', icon: Gauge, color: 'orange', desc: 'Load & stress testing' },
   { name: 'API', icon: Code, color: 'emerald', desc: 'REST, GraphQL & more' },
-  { name: 'Visual', icon: Eye, color: 'purple', desc: 'Visual regression testing' },
-  { name: 'Accessibility', icon: Accessibility, color: 'pink', desc: 'WCAG compliance' },
+  { name: 'Visual', icon: Eye, color: 'slate', desc: 'Visual regression testing' },
+  { name: 'Accessibility', icon: Accessibility, color: 'teal', desc: 'WCAG compliance' },
   { name: 'Salesforce', icon: Cloud, color: 'cyan', desc: '20+ native SF tools' },
 ];
 
@@ -157,8 +157,8 @@ const comparisonSections = [
   {
     title: 'Flowpilot Pack',
     icon: Compass,
-    iconBg: 'bg-fuchsia-50',
-    iconColor: 'text-fuchsia-700',
+    iconBg: 'bg-teal-50',
+    iconColor: 'text-teal-700',
     isNew: true,
     rows: [
       { feature: 'AI Test Generation from Requirements', free: false, enterprise: true },
@@ -189,8 +189,8 @@ const comparisonSections = [
   {
     title: 'Visual Testing Pack',
     icon: Eye,
-    iconBg: 'bg-purple-50',
-    iconColor: 'text-purple-700',
+    iconBg: 'bg-slate-50',
+    iconColor: 'text-slate-700',
     rows: [
       { feature: 'Visual Comparisons', free: '100/mo', enterprise: 'Unlimited' },
       { feature: 'Pixel Perfect Mode', free: true, enterprise: true },
@@ -205,8 +205,8 @@ const comparisonSections = [
   {
     title: 'Accessibility Pack',
     icon: Accessibility,
-    iconBg: 'bg-pink-50',
-    iconColor: 'text-pink-700',
+    iconBg: 'bg-teal-50',
+    iconColor: 'text-teal-700',
     rows: [
       { feature: 'WCAG 2.1 AA Scanning (axe-core)', free: true, enterprise: true },
       { feature: 'WCAG 2.1 AAA Scanning', free: false, enterprise: true },

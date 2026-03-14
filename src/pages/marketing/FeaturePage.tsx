@@ -94,8 +94,8 @@ const featureConfigs: Record<string, {
     tagline: 'Complete Test Lifecycle',
     description: 'Manage your entire test lifecycle in one place. Test Cases, Suites, Plans, Releases, Runs, and Defects - all connected with full traceability.',
     icon: ClipboardCheck,
-    gradient: 'from-violet-500 to-purple-500',
-    bgGradient: 'from-violet-50 to-purple-50',
+    gradient: 'from-slate-600 to-slate-700',
+    bgGradient: 'from-slate-50 to-slate-100',
     features: [
       { icon: FileText, title: '6 Integrated Modules', desc: 'Test Cases, Suites, Plans, Releases, Runs, and Defects in one platform.' },
       { icon: Users, title: 'Manual + Automated', desc: 'Execute the same test case manually or automated - unified coverage tracking.' },
@@ -111,8 +111,8 @@ const featureConfigs: Record<string, {
     tagline: 'Multi-Protocol, Security-First',
     description: 'Test REST, GraphQL, and SOAP APIs in one place. Chain requests, validate schemas, and automatically scan for security vulnerabilities.',
     icon: Globe,
-    gradient: 'from-pink-500 to-rose-500',
-    bgGradient: 'from-pink-50 to-rose-50',
+    gradient: 'from-teal-500 to-teal-600',
+    bgGradient: 'from-teal-50 to-slate-50',
     features: [
       { icon: Globe, title: 'Multi-Protocol Support', desc: 'REST, GraphQL, and SOAP APIs - all in one testing interface.' },
       { icon: Layers, title: 'Request Chaining', desc: 'Chain API calls together, passing data between requests dynamically.' },
@@ -145,8 +145,8 @@ const featureConfigs: Record<string, {
     tagline: 'Catch Every Pixel',
     description: 'Detect visual regressions with 6 comparison modes. Pixel-perfect validation with smart diff visualization and baseline management.',
     icon: Eye,
-    gradient: 'from-indigo-500 to-violet-500',
-    bgGradient: 'from-indigo-50 to-violet-50',
+    gradient: 'from-slate-700 to-slate-800',
+    bgGradient: 'from-slate-50 to-white',
     features: [
       { icon: Eye, title: '6 Comparison Modes', desc: 'Strict pixel, layout, content, anti-alias, ignore colors, and ignore zones.' },
       { icon: Layers, title: 'Baseline Management', desc: 'Easily update baselines when intentional changes are made.' },
@@ -213,8 +213,8 @@ const featureConfigs: Record<string, {
     tagline: 'Goal-Based Agentic Testing',
     description: 'The first QA platform with Flowpilot — autonomous AI agents that understand goals, explore intelligently, and test purposefully. Let Flowpilot discover bugs while you sleep.',
     icon: Compass,
-    gradient: 'from-fuchsia-500 to-pink-500',
-    bgGradient: 'from-fuchsia-50 to-pink-50',
+    gradient: 'from-teal-600 to-emerald-600',
+    bgGradient: 'from-teal-50 to-emerald-50',
     features: [
       { icon: Map, title: 'Flowmap Explorer', desc: 'Visualize and explore all possible user journeys. Discover untested paths automatically.' },
       { icon: Compass, title: 'Autonomous Explorer', desc: 'AI-powered exploration that finds edge cases and bugs without human guidance.' },

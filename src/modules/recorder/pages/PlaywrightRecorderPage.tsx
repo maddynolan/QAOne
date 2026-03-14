@@ -2937,17 +2937,17 @@ const handleExportToBuilder = async () => {
     
     // Salesforce-specific action types
     if (type.startsWith('sf-navigate') || type.includes('navigateto')) return <Globe className={`${size} text-blue-400`} />;
-    if (type === 'sf-global-search' || type.includes('search')) return <Search className={`${size} text-purple-400`} />;
+    if (type === 'sf-global-search' || type.includes('search')) return <Search className={`${size} text-teal-500`} />;
     if (type === 'sf-app-launcher') return <LayoutGrid className={`${size} text-cyan-400`} />;
     if (type === 'sf-wait' || type.includes('wait')) return <RefreshCw className={`${size} text-amber-400`} />;
     if (type.startsWith('sf-click')) return <Hand className={`${size} text-emerald-400`} />;
     
     // Standard action types
     if (type.includes('goto') || type.includes('nav')) return <Globe className={`${size} text-blue-400`} />;
-    if (type.includes('fill')) return <PenLine className={`${size} text-purple-400`} />;
+    if (type.includes('fill')) return <PenLine className={`${size} text-teal-500`} />;
     if (type.includes('click')) return <Hand className={`${size} text-emerald-400`} />;
     if (type.includes('assert')) return <Eye className={`${size} text-cyan-400`} />;
-    if (type.includes('screenshot')) return <Eye className={`${size} text-pink-400`} />;
+    if (type.includes('screenshot')) return <Eye className={`${size} text-slate-500`} />;
     return <CircleDot className={`${size} text-muted-foreground`} />;
   };
 
@@ -2969,7 +2969,7 @@ const handleExportToBuilder = async () => {
     <div className="h-full bg-background text-foreground flex flex-col overflow-hidden">
       {/* ============ RE-RECORD BANNER (from Builder) ============ */}
       {showRerecordBanner && rerecordContext && (
-        <div className="shrink-0 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-4 py-2 flex items-center justify-between">
+        <div className="shrink-0 bg-slate-800 text-white px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Video className="h-4 w-4" />
             <div className="text-sm">
@@ -2999,7 +2999,7 @@ const handleExportToBuilder = async () => {
             </Button>
             <Button
               size="sm"
-              className="h-7 text-xs bg-white text-purple-600 hover:bg-white/90"
+              className="h-7 text-xs bg-white text-teal-600 hover:bg-white/90"
               disabled={actions.length === 0}
               onClick={() => {
                 // Save the re-recorded step and return to builder
@@ -3338,7 +3338,7 @@ const handleExportToBuilder = async () => {
             <div className="space-y-2">
               <Button
                 onClick={performMerge} 
-                className="w-full h-10 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                className="w-full h-10 bg-teal-600 hover:bg-teal-700"
               >
                 <Merge className="h-4 w-4 mr-2" />
                 Merge {actions.length} Actions into "{selectedTestCase.name?.slice(0, 20)}..."
@@ -3348,7 +3348,7 @@ const handleExportToBuilder = async () => {
               </p>
             </div>
           ) : (
-            <Button onClick={handleSaveAsNew} className="w-full h-10 bg-gradient-to-r from-emerald-500 to-emerald-600">
+            <Button onClick={handleSaveAsNew} className="w-full h-10 bg-emerald-600 hover:bg-emerald-700">
               <Save className="h-4 w-4 mr-2" />
               Save as New Test Case
             </Button>
