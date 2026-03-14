@@ -3,11 +3,11 @@
  *
  * REAL implementation connected to backend APIs:
  * - Generator/Self-Healer: Uses /api/ai-testing/start (AgenticOrchestrator v2.0)
- *   → Real Playwright browser, real DOM scanning, real LLM instruction parsing
- * - Explorer: Uses /api/blaze/start (BlazeExplorer)
- *   → Real autonomous crawling, defect detection, no AI dependency
+ *   -> Real Playwright browser, real DOM scanning, real LLM instruction parsing
+ * - Explorer: Uses /api/blaze/start-stream (BlazeExplorer v2.0)
+ *   -> SSE streaming, concurrent crawling, auth support, axe-core, defect screenshots
  * - Flowmap: Uses /api/exploration/start (AutonomousExplorer)
- *   → Real BFS site crawling, capability mapping, LLM-enhanced analysis
+ *   -> Real BFS site crawling, capability mapping, LLM-enhanced analysis
  *
  * All agents stream real results via SSE or polling.
  */
@@ -50,9 +50,14 @@ import {
   ExternalLink,
   Copy,
   Save,
+  Lock,
+  Layers,
+  Clock,
+  FileText,
+  Download,
 } from 'lucide-react';
 
-// ─── Types ──────────────────────────────────────────────────────────
+// ---- Types ----
 
 interface TestStep {
   action: string;
@@ -80,23 +85,47 @@ interface TestResult {
 }
 
 interface ExplorationDefect {
+  id?: string;
   type: string;
   severity: string;
-  url: string;
+  title?: string;
   description: string;
+  page_url?: string;
+  url?: string;
   element?: string;
   screenshot?: string;
+  wcag_criterion?: string;
+  evidence?: Record<string, any>;
 }
 
 interface ExplorationResult {
   session_id: string;
-  status: 'running' | 'completed' | 'error';
+  status: 'running' | 'completed' | 'error' | 'stopped';
   progress: number;
   pages_visited: number;
   defects_found: number;
   defects: ExplorationDefect[];
   current_activity: string;
   duration: number;
+  pages_queued?: number;
+  summary?: Record<string, any>;
+  generated_tests?: GeneratedTestSuite | null;
+}
+
+interface GeneratedTestSuite {
+  test_count: number;
+  tests: Array<{
+    title: string;
+    description: string;
+    steps: any[];
+    tags: string[];
+    priority: string;
+  }>;
+  summary: {
+    smoke_tests: number;
+    form_tests: number;
+    regression_tests: number;
+  };
 }
 
 interface CapabilityPage {
@@ -119,6 +148,23 @@ interface FlowmapResult {
   total_defects: number;
 }
 
+interface ExplorerConfig {
+  authType: 'none' | 'cookie' | 'bearer' | 'basic' | 'form_login';
+  bearerToken: string;
+  cookieJson: string;
+  basicUsername: string;
+  basicPassword: string;
+  loginUrl: string;
+  loginUsername: string;
+  loginPassword: string;
+  usernameSelector: string;
+  passwordSelector: string;
+  submitSelector: string;
+  maxPages: number;
+  maxDepth: number;
+  concurrency: number;
+}
+
 type AgentId = 'flowmap' | 'explorer' | 'self-healer' | 'generator';
 
 interface SSEEvent {
@@ -133,14 +179,14 @@ interface SSEEvent {
   intent?: any;
 }
 
-// ─── Agent Definitions ──────────────────────────────────────────────
+// ---- Agent Definitions ----
 
 const agents = [
   {
     id: 'generator' as AgentId,
     name: 'Generator',
     icon: Sparkles,
-    description: 'Test from natural language — real browser automation with AI healing',
+    description: 'Test from natural language -- real browser automation with AI healing',
     features: ['NLP Input', 'Real Browser', 'Auto-Heal', 'Vision AI'],
     color: 'amber',
     endpoint: 'ai-testing',
@@ -149,8 +195,8 @@ const agents = [
     id: 'explorer' as AgentId,
     name: 'Explorer',
     icon: Compass,
-    description: 'Autonomous crawling — finds real defects without AI dependency',
-    features: ['Auto-Crawl', 'Bug Detection', 'Accessibility', 'Security'],
+    description: 'Autonomous crawling -- finds real defects with axe-core and heuristics',
+    features: ['Concurrent Crawl', 'axe-core A11y', 'Auth Support', 'Test Generation'],
     color: 'violet',
     endpoint: 'blaze',
   },
@@ -158,7 +204,7 @@ const agents = [
     id: 'flowmap' as AgentId,
     name: 'Flowmap',
     icon: Map,
-    description: 'Map app capabilities — pages, entities, forms, and user journeys',
+    description: 'Map app capabilities -- pages, entities, forms, and user journeys',
     features: ['Site Map', 'Entity Discovery', 'Coverage Gaps', 'LLM Analysis'],
     color: 'fuchsia',
     endpoint: 'exploration',
@@ -174,7 +220,7 @@ const agents = [
   },
 ];
 
-// ─── Color Helpers ──────────────────────────────────────────────────
+// ---- Color Helpers ----
 
 function getColors(color: string, theme: string) {
   const map: Record<string, any> = {
@@ -206,13 +252,13 @@ function getColors(color: string, theme: string) {
   return map[color] || map.amber;
 }
 
-// ─── Main Component ─────────────────────────────────────────────────
+// ---- Main Component ----
 
 export default function FlowpilotPage() {
   const { theme } = useTheme();
   const { config: aiConfig } = useAI();
   const aiAvailable = aiConfig.enabled && aiConfig.hasApiKey;
-  const [selectedAgent, setSelectedAgent] = useState(agents[0]); // Start with Generator
+  const [selectedAgent, setSelectedAgent] = useState(agents[0]);
   const [goal, setGoal] = useState('');
   const [targetUrl, setTargetUrl] = useState('');
 
@@ -230,6 +276,24 @@ export default function FlowpilotPage() {
 
   // Exploration results (Explorer)
   const [explorationResult, setExplorationResult] = useState<ExplorationResult | null>(null);
+  const [showExplorerConfig, setShowExplorerConfig] = useState(false);
+  const [explorerSessionId, setExplorerSessionId] = useState<string | null>(null);
+  const [explorerConfig, setExplorerConfig] = useState<ExplorerConfig>({
+    authType: 'none',
+    bearerToken: '',
+    cookieJson: '',
+    basicUsername: '',
+    basicPassword: '',
+    loginUrl: '',
+    loginUsername: '',
+    loginPassword: '',
+    usernameSelector: '#username',
+    passwordSelector: '#password',
+    submitSelector: "button[type='submit']",
+    maxPages: 50,
+    maxDepth: 5,
+    concurrency: 3,
+  });
 
   // Flowmap results
   const [flowmapResult, setFlowmapResult] = useState<FlowmapResult | null>(null);
@@ -240,7 +304,7 @@ export default function FlowpilotPage() {
 
   const colors = getColors(selectedAgent.color, theme);
 
-  // ─── SSE Stream Reader (Generator / Self-Healer) ───────────────
+  // ---- SSE Stream Reader (Generator / Self-Healer) ----
 
   const streamSSE = useCallback(async (url: string, body: any) => {
     const controller = new AbortController();
@@ -297,7 +361,7 @@ export default function FlowpilotPage() {
       }
       case 'intent':
         if (event.data) {
-          setCurrentStep(`Detected: ${event.data.url || 'app'} — ${event.data.actions || 0} actions planned`);
+          setCurrentStep(`Detected: ${event.data.url || 'app'} -- ${event.data.actions || 0} actions planned`);
         }
         break;
       case 'step':
@@ -322,34 +386,28 @@ export default function FlowpilotPage() {
     }
   }, []);
 
-  // ─── Execute: Generator Agent (SSE) ────────────────────────────
+  // ---- Execute: Generator Agent (SSE) ----
 
   const executeGenerator = useCallback(async () => {
-    // Build instruction string — if URL is provided, include it
     let instruction = goal;
     if (targetUrl.trim()) {
       instruction = `${goal} on ${targetUrl}`;
     }
-
     setTestResults([]);
     setLiveScreenshot(null);
-
     await streamSSE(`${API_BASE_URL}/api/ai-testing/start`, { instruction });
   }, [goal, targetUrl, streamSSE]);
 
-  // ─── Execute: Self-Healer Agent (SSE with fix) ─────────────────
+  // ---- Execute: Self-Healer Agent (SSE with fix) ----
 
   const executeSelfHealer = useCallback(async () => {
-    // Self-Healer re-runs with fixes — use the goal as instruction
     let instruction = goal;
     if (targetUrl.trim()) {
       instruction = `${goal} on ${targetUrl}`;
     }
-
     setTestResults([]);
     setLiveScreenshot(null);
 
-    // If there are previous failed results, include them for enhanced re-run
     const failedTests = testResults.filter(t => t.status === 'failed');
     if (failedTests.length > 0) {
       const failedTest = failedTests[0];
@@ -362,65 +420,162 @@ export default function FlowpilotPage() {
         },
       });
     } else {
-      // No prior failures — just run normally with extra healing emphasis
       await streamSSE(`${API_BASE_URL}/api/ai-testing/start`, { instruction });
     }
   }, [goal, targetUrl, testResults, streamSSE]);
 
-  // ─── Execute: Explorer Agent (Polling) ─────────────────────────
+  // ---- Execute: Explorer Agent (SSE Streaming) ----
 
   const executeExplorer = useCallback(async () => {
     const url = targetUrl.trim() || 'https://example.com';
     setExplorationResult(null);
+    setExplorerSessionId(null);
 
-    const response = await fetch(`${API_BASE_URL}/api/blaze/start`, {
+    // Build auth config
+    let auth: any = undefined;
+    if (explorerConfig.authType !== 'none') {
+      auth = { type: explorerConfig.authType };
+      if (explorerConfig.authType === 'bearer') {
+        auth.token = explorerConfig.bearerToken;
+      } else if (explorerConfig.authType === 'cookie') {
+        auth.cookies = explorerConfig.cookieJson;
+      } else if (explorerConfig.authType === 'basic') {
+        auth.username = explorerConfig.basicUsername;
+        auth.password = explorerConfig.basicPassword;
+      } else if (explorerConfig.authType === 'form_login') {
+        auth.login_url = explorerConfig.loginUrl;
+        auth.username = explorerConfig.loginUsername;
+        auth.password = explorerConfig.loginPassword;
+        auth.username_selector = explorerConfig.usernameSelector;
+        auth.password_selector = explorerConfig.passwordSelector;
+        auth.submit_selector = explorerConfig.submitSelector;
+      }
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    const response = await fetch(`${API_BASE_URL}/api/blaze/start-stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         url,
-        max_pages: 20,
-        max_duration_minutes: 5,
+        max_pages: explorerConfig.maxPages,
+        max_depth: explorerConfig.maxDepth,
+        concurrency: explorerConfig.concurrency,
+        delay_ms: 200,
         headless: true,
+        auth,
       }),
+      signal: controller.signal,
     });
 
     if (!response.ok) throw new Error(`Failed to start exploration: ${response.status}`);
 
-    const data = await response.json();
-    const sessionId = data.session_id;
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response stream');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const collectedDefects: ExplorationDefect[] = [];
+    let pagesVisited = 0;
+    let pagesQueued = 0;
+    let sessionId = '';
 
     setCurrentPhase('Exploring...');
-    setCurrentStep(`Session ${sessionId} started — crawling ${url}`);
+    setCurrentStep(`Crawling ${url} with ${explorerConfig.concurrency} concurrent browser(s)`);
 
-    // Poll for status
-    pollIntervalRef.current = setInterval(async () => {
-      try {
-        const statusRes = await fetch(`${API_BASE_URL}/api/blaze/status/${sessionId}`);
-        if (!statusRes.ok) return;
-        const status = await statusRes.json();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-        setExplorationResult(status);
-        setProgress(Math.round((status.progress || 0) * 100));
-        setCurrentStep(status.current_activity || `Visited ${status.pages_visited} pages`);
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop() || '';
 
-        if (status.status === 'completed' || status.status === 'error') {
-          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-          setCurrentPhase(status.status === 'completed' ? 'Complete' : 'Error');
-          setProgress(100);
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const event = JSON.parse(line.slice(6));
+
+          switch (event.type) {
+            case 'session':
+              sessionId = event.session_id;
+              setExplorerSessionId(sessionId);
+              break;
+
+            case 'page_visited':
+              pagesVisited++;
+              setCurrentStep(`Analyzing: ${event.url || ''}`);
+              setProgress(Math.min(95, (pagesVisited / explorerConfig.maxPages) * 100));
+              break;
+
+            case 'defect_found':
+              if (event.defect) {
+                collectedDefects.push(event.defect);
+                setExplorationResult(prev => ({
+                  session_id: sessionId,
+                  status: 'running',
+                  progress: Math.min(95, (pagesVisited / explorerConfig.maxPages) * 100),
+                  pages_visited: pagesVisited,
+                  defects_found: collectedDefects.length,
+                  defects: [...collectedDefects],
+                  current_activity: prev?.current_activity || '',
+                  duration: prev?.duration || 0,
+                  pages_queued: pagesQueued,
+                  generated_tests: null,
+                }));
+              }
+              break;
+
+            case 'progress':
+              pagesVisited = event.pages_visited || pagesVisited;
+              pagesQueued = event.pages_queued || pagesQueued;
+              setProgress(Math.min(95, (pagesVisited / explorerConfig.maxPages) * 100));
+              break;
+
+            case 'complete':
+              setCurrentPhase('Complete');
+              setProgress(100);
+              const summary = event.summary || {};
+              setExplorationResult({
+                session_id: sessionId,
+                status: 'completed',
+                progress: 100,
+                pages_visited: summary.pages_visited || pagesVisited,
+                defects_found: summary.total_defects || collectedDefects.length,
+                defects: event.defects || collectedDefects,
+                current_activity: 'Exploration complete',
+                duration: summary.duration_seconds || 0,
+                pages_queued: 0,
+                summary,
+                generated_tests: null,
+              });
+              break;
+
+            case 'error':
+              setError(event.error || 'Exploration error');
+              setCurrentPhase('Error');
+              break;
+
+            case 'stopped':
+              setCurrentPhase('Stopped');
+              break;
+          }
+        } catch (e) {
+          console.error('[Flowpilot Explorer] Failed to parse SSE event:', line);
         }
-      } catch {
-        // Polling error — ignore, will retry
       }
-    }, 2000);
-  }, [targetUrl]);
+    }
+  }, [targetUrl, explorerConfig]);
 
-  // ─── Execute: Flowmap Agent (REST) ─────────────────────────────
+  // ---- Execute: Flowmap Agent (REST) ----
 
   const executeFlowmap = useCallback(async () => {
     const url = targetUrl.trim() || 'https://example.com';
     setFlowmapResult(null);
     setCurrentPhase('Mapping application...');
-    setCurrentStep(`Crawling ${url} — discovering pages, entities, and actions`);
+    setCurrentStep(`Crawling ${url} -- discovering pages, entities, and actions`);
 
     const response = await fetch(`${API_BASE_URL}/api/exploration/start`, {
       method: 'POST',
@@ -443,7 +598,7 @@ export default function FlowpilotPage() {
     setCurrentStep(`Discovered ${data.total_pages || 0} pages`);
   }, [targetUrl]);
 
-  // ─── Main Execute Handler ──────────────────────────────────────
+  // ---- Main Execute Handler ----
 
   const handleExecute = useCallback(async () => {
     if (selectedAgent.id !== 'explorer' && selectedAgent.id !== 'flowmap' && !goal.trim()) return;
@@ -487,7 +642,49 @@ export default function FlowpilotPage() {
     setCurrentPhase('Stopped');
   }, []);
 
-  // ─── Save Test Case ────────────────────────────────────────────
+  // ---- Generate Test Suite ----
+
+  const handleGenerateTests = useCallback(async () => {
+    if (!explorerSessionId) return;
+    setCurrentStep('Generating test suite...');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/blaze/generate-tests/${explorerSessionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) throw new Error(`Failed to generate tests: ${response.status}`);
+
+      const data: GeneratedTestSuite = await response.json();
+      setExplorationResult(prev => prev ? { ...prev, generated_tests: data } : prev);
+      setCurrentStep(`Generated ${data.test_count} test cases (${data.summary.smoke_tests} smoke, ${data.summary.form_tests} form, ${data.summary.regression_tests} regression)`);
+    } catch (err: any) {
+      console.error('[Flowpilot] Failed to generate tests:', err);
+      setCurrentStep(`Test generation failed: ${err.message || 'Network error'}`);
+    }
+  }, [explorerSessionId]);
+
+  // ---- Save Generated Tests ----
+
+  const handleSaveAllTests = useCallback(async (tests: GeneratedTestSuite['tests']) => {
+    let savedCount = 0;
+    for (const test of tests) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/test-cases`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(test),
+        });
+        if (response.ok) savedCount++;
+      } catch (err) {
+        console.error('[Flowpilot] Failed to save test:', err);
+      }
+    }
+    setCurrentStep(`Saved ${savedCount}/${tests.length} test cases to repository`);
+  }, []);
+
+  // ---- Save Test Case ----
 
   const saveAsTestCase = useCallback(async (test: TestResult) => {
     try {
@@ -524,7 +721,7 @@ export default function FlowpilotPage() {
     }
   }, [goal]);
 
-  // ─── Determine if execute button is enabled ────────────────────
+  // ---- Determine if execute button is enabled ----
 
   const agentNeedsAI = selectedAgent.id === 'generator' || selectedAgent.id === 'self-healer';
   const canExecute = (() => {
@@ -534,7 +731,7 @@ export default function FlowpilotPage() {
     return !!goal.trim();
   })();
 
-  // ─── Render ────────────────────────────────────────────────────
+  // ---- Render ----
 
   return (
     <div className={cn("min-h-screen p-6", theme === 'light' ? 'bg-gray-50' : 'bg-gray-950')}>
@@ -549,7 +746,7 @@ export default function FlowpilotPage() {
               Flowpilot
             </h1>
             <p className={cn("text-sm", theme === 'light' ? 'text-gray-500' : 'text-gray-400')}>
-              AI-powered testing agents — real browser automation, real defect detection
+              AI-powered testing agents -- real browser automation, real defect detection
             </p>
           </div>
           <Badge className="ml-auto bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white border-0">
@@ -687,6 +884,207 @@ export default function FlowpilotPage() {
                 </div>
               )}
 
+              {/* Explorer Configuration Panel */}
+              {selectedAgent.id === 'explorer' && (
+                <div>
+                  <button
+                    onClick={() => setShowExplorerConfig(!showExplorerConfig)}
+                    className={cn(
+                      "flex items-center gap-2 text-sm font-medium w-full py-2",
+                      theme === 'light' ? 'text-gray-700 hover:text-gray-900' : 'text-gray-300 hover:text-white'
+                    )}
+                  >
+                    <Settings className="w-4 h-4" />
+                    Explorer Configuration
+                    {showExplorerConfig ? <ChevronUp className="w-4 h-4 ml-auto" /> : <ChevronDown className="w-4 h-4 ml-auto" />}
+                  </button>
+
+                  {showExplorerConfig && (
+                    <div className={cn(
+                      "mt-2 p-4 rounded-lg border space-y-4",
+                      theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-gray-800 border-gray-700'
+                    )}>
+                      {/* Crawl Settings */}
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <label className={cn("text-xs font-medium mb-1 block", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>
+                            Max Pages ({explorerConfig.maxPages})
+                          </label>
+                          <input
+                            type="range"
+                            min={10}
+                            max={500}
+                            step={10}
+                            value={explorerConfig.maxPages}
+                            onChange={(e) => setExplorerConfig(prev => ({ ...prev, maxPages: parseInt(e.target.value) }))}
+                            className="w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className={cn("text-xs font-medium mb-1 block", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>
+                            Max Depth ({explorerConfig.maxDepth})
+                          </label>
+                          <input
+                            type="range"
+                            min={1}
+                            max={10}
+                            value={explorerConfig.maxDepth}
+                            onChange={(e) => setExplorerConfig(prev => ({ ...prev, maxDepth: parseInt(e.target.value) }))}
+                            className="w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className={cn("text-xs font-medium mb-1 block", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>
+                            Concurrency ({explorerConfig.concurrency})
+                          </label>
+                          <input
+                            type="range"
+                            min={1}
+                            max={10}
+                            value={explorerConfig.concurrency}
+                            onChange={(e) => setExplorerConfig(prev => ({ ...prev, concurrency: parseInt(e.target.value) }))}
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Auth Configuration */}
+                      <div>
+                        <label className={cn("text-xs font-medium mb-1 block", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>
+                          <Lock className="w-3 h-3 inline mr-1" />
+                          Authentication
+                        </label>
+                        <select
+                          value={explorerConfig.authType}
+                          onChange={(e) => setExplorerConfig(prev => ({ ...prev, authType: e.target.value as any }))}
+                          className={cn(
+                            "w-full rounded-md border px-3 py-2 text-sm",
+                            theme === 'light' ? 'bg-white border-gray-200' : 'bg-gray-900 border-gray-600 text-gray-200'
+                          )}
+                        >
+                          <option value="none">None</option>
+                          <option value="bearer">Bearer Token</option>
+                          <option value="cookie">Cookie</option>
+                          <option value="basic">Basic Auth</option>
+                          <option value="form_login">Form Login</option>
+                        </select>
+                      </div>
+
+                      {explorerConfig.authType === 'bearer' && (
+                        <div>
+                          <label className={cn("text-xs font-medium mb-1 block", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>
+                            Bearer Token
+                          </label>
+                          <Input
+                            type="password"
+                            value={explorerConfig.bearerToken}
+                            onChange={(e) => setExplorerConfig(prev => ({ ...prev, bearerToken: e.target.value }))}
+                            placeholder="eyJhbGciOiJIUzI1NiIs..."
+                            className={cn("text-sm", theme === 'light' ? "bg-white border-gray-200" : "bg-gray-900 border-gray-600")}
+                          />
+                        </div>
+                      )}
+
+                      {explorerConfig.authType === 'cookie' && (
+                        <div>
+                          <label className={cn("text-xs font-medium mb-1 block", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>
+                            Cookie JSON
+                          </label>
+                          <Textarea
+                            value={explorerConfig.cookieJson}
+                            onChange={(e) => setExplorerConfig(prev => ({ ...prev, cookieJson: e.target.value }))}
+                            placeholder={'[{"name": "session", "value": "abc123", "domain": "example.com", "path": "/"}]'}
+                            rows={3}
+                            className={cn("text-sm", theme === 'light' ? "bg-white border-gray-200" : "bg-gray-900 border-gray-600")}
+                          />
+                        </div>
+                      )}
+
+                      {explorerConfig.authType === 'basic' && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className={cn("text-xs font-medium mb-1 block", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>Username</label>
+                            <Input
+                              value={explorerConfig.basicUsername}
+                              onChange={(e) => setExplorerConfig(prev => ({ ...prev, basicUsername: e.target.value }))}
+                              className={cn("text-sm", theme === 'light' ? "bg-white border-gray-200" : "bg-gray-900 border-gray-600")}
+                            />
+                          </div>
+                          <div>
+                            <label className={cn("text-xs font-medium mb-1 block", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>Password</label>
+                            <Input
+                              type="password"
+                              value={explorerConfig.basicPassword}
+                              onChange={(e) => setExplorerConfig(prev => ({ ...prev, basicPassword: e.target.value }))}
+                              className={cn("text-sm", theme === 'light' ? "bg-white border-gray-200" : "bg-gray-900 border-gray-600")}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {explorerConfig.authType === 'form_login' && (
+                        <div className="space-y-3">
+                          <div>
+                            <label className={cn("text-xs font-medium mb-1 block", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>Login URL</label>
+                            <Input
+                              value={explorerConfig.loginUrl}
+                              onChange={(e) => setExplorerConfig(prev => ({ ...prev, loginUrl: e.target.value }))}
+                              placeholder="https://example.com/login"
+                              className={cn("text-sm", theme === 'light' ? "bg-white border-gray-200" : "bg-gray-900 border-gray-600")}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className={cn("text-xs font-medium mb-1 block", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>Username</label>
+                              <Input
+                                value={explorerConfig.loginUsername}
+                                onChange={(e) => setExplorerConfig(prev => ({ ...prev, loginUsername: e.target.value }))}
+                                className={cn("text-sm", theme === 'light' ? "bg-white border-gray-200" : "bg-gray-900 border-gray-600")}
+                              />
+                            </div>
+                            <div>
+                              <label className={cn("text-xs font-medium mb-1 block", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>Password</label>
+                              <Input
+                                type="password"
+                                value={explorerConfig.loginPassword}
+                                onChange={(e) => setExplorerConfig(prev => ({ ...prev, loginPassword: e.target.value }))}
+                                className={cn("text-sm", theme === 'light' ? "bg-white border-gray-200" : "bg-gray-900 border-gray-600")}
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <label className={cn("text-xs font-medium mb-1 block", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>Username Selector</label>
+                              <Input
+                                value={explorerConfig.usernameSelector}
+                                onChange={(e) => setExplorerConfig(prev => ({ ...prev, usernameSelector: e.target.value }))}
+                                className={cn("text-sm", theme === 'light' ? "bg-white border-gray-200" : "bg-gray-900 border-gray-600")}
+                              />
+                            </div>
+                            <div>
+                              <label className={cn("text-xs font-medium mb-1 block", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>Password Selector</label>
+                              <Input
+                                value={explorerConfig.passwordSelector}
+                                onChange={(e) => setExplorerConfig(prev => ({ ...prev, passwordSelector: e.target.value }))}
+                                className={cn("text-sm", theme === 'light' ? "bg-white border-gray-200" : "bg-gray-900 border-gray-600")}
+                              />
+                            </div>
+                            <div>
+                              <label className={cn("text-xs font-medium mb-1 block", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>Submit Selector</label>
+                              <Input
+                                value={explorerConfig.submitSelector}
+                                onChange={(e) => setExplorerConfig(prev => ({ ...prev, submitSelector: e.target.value }))}
+                                className={cn("text-sm", theme === 'light' ? "bg-white border-gray-200" : "bg-gray-900 border-gray-600")}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {agentNeedsAI && !aiAvailable && (
                 <div className={cn(
                   "p-3 rounded-lg border text-sm",
@@ -714,17 +1112,20 @@ export default function FlowpilotPage() {
                     <Wand2 className="w-4 h-4 mr-2" /> Execute with {selectedAgent.name}
                   </Button>
                 )}
-                <Button
-                  variant="outline"
-                  className={cn(theme === 'light' ? "border-gray-200 hover:bg-gray-100" : "border-gray-700 hover:bg-gray-800")}
-                >
-                  <Settings className="w-4 h-4" />
-                </Button>
+                {selectedAgent.id === 'explorer' && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowExplorerConfig(!showExplorerConfig)}
+                    className={cn(theme === 'light' ? "border-gray-200 hover:bg-gray-100" : "border-gray-700 hover:bg-gray-800")}
+                  >
+                    <Settings className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             </div>
           </div>
 
-          {/* ── Processing Status ──────────────────────────────── */}
+          {/* Processing Status */}
           {(isProcessing || currentPhase) && (
             <div className={cn(
               "rounded-xl border p-6",
@@ -772,7 +1173,7 @@ export default function FlowpilotPage() {
             </div>
           )}
 
-          {/* ── Error Display ──────────────────────────────────── */}
+          {/* Error Display */}
           {error && (
             <div className={cn(
               "rounded-xl border p-4 flex items-start gap-3",
@@ -786,7 +1187,7 @@ export default function FlowpilotPage() {
             </div>
           )}
 
-          {/* ── Generator / Self-Healer Results ────────────────── */}
+          {/* Generator / Self-Healer Results */}
           {testResults.length > 0 && (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
@@ -921,7 +1322,7 @@ export default function FlowpilotPage() {
             </div>
           )}
 
-          {/* ── Explorer Results ────────────────────────────────── */}
+          {/* Explorer Results */}
           {explorationResult && (
             <div className={cn(
               "rounded-xl border p-6",
@@ -932,10 +1333,20 @@ export default function FlowpilotPage() {
                 <h3 className={cn("font-semibold", theme === 'light' ? 'text-gray-900' : 'text-white')}>
                   Exploration Results
                 </h3>
+                {explorationResult.status === 'completed' && explorerSessionId && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleGenerateTests}
+                    className="ml-auto"
+                  >
+                    <FileText className="w-3 h-3 mr-1" /> Generate Test Suite
+                  </Button>
+                )}
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-4 gap-4 mb-6">
                 <div className={cn("p-4 rounded-lg", theme === 'light' ? 'bg-gray-50' : 'bg-gray-800')}>
                   <div className="text-2xl font-bold text-blue-500">{explorationResult.pages_visited}</div>
                   <div className={cn("text-xs", theme === 'light' ? 'text-gray-500' : 'text-gray-400')}>Pages Visited</div>
@@ -945,50 +1356,108 @@ export default function FlowpilotPage() {
                   <div className={cn("text-xs", theme === 'light' ? 'text-gray-500' : 'text-gray-400')}>Defects Found</div>
                 </div>
                 <div className={cn("p-4 rounded-lg", theme === 'light' ? 'bg-gray-50' : 'bg-gray-800')}>
-                  <div className="text-2xl font-bold text-emerald-500">{(explorationResult.duration / 1000).toFixed(0)}s</div>
+                  <div className="text-2xl font-bold text-emerald-500">
+                    {typeof explorationResult.duration === 'number' ? `${Math.round(explorationResult.duration)}s` : '0s'}
+                  </div>
                   <div className={cn("text-xs", theme === 'light' ? 'text-gray-500' : 'text-gray-400')}>Duration</div>
                 </div>
+                <div className={cn("p-4 rounded-lg", theme === 'light' ? 'bg-gray-50' : 'bg-gray-800')}>
+                  <div className="text-2xl font-bold text-violet-500">
+                    {explorationResult.summary?.max_depth_reached ?? '-'}
+                  </div>
+                  <div className={cn("text-xs", theme === 'light' ? 'text-gray-500' : 'text-gray-400')}>Max Depth</div>
+                </div>
               </div>
+
+              {/* Severity Breakdown */}
+              {explorationResult.summary?.by_severity && (
+                <div className="flex gap-2 mb-4">
+                  {Object.entries(explorationResult.summary.by_severity as Record<string, number>).map(([sev, count]) => (
+                    count > 0 && (
+                      <Badge key={sev} className={cn(
+                        "text-xs",
+                        sev === 'critical' ? "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400" :
+                        sev === 'high' ? "bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400" :
+                        sev === 'medium' ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400" :
+                        "bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-400",
+                        "border-0"
+                      )}>
+                        {sev}: {count}
+                      </Badge>
+                    )
+                  ))}
+                </div>
+              )}
 
               {/* Defect List */}
               {explorationResult.defects.length > 0 && (
                 <div className="space-y-3">
                   <h4 className={cn("text-sm font-medium", theme === 'light' ? 'text-gray-700' : 'text-gray-300')}>
-                    Defects Detected
+                    Defects Detected ({explorationResult.defects.length})
                   </h4>
-                  {explorationResult.defects.map((defect, idx) => (
+                  {explorationResult.defects.slice(0, 50).map((defect, idx) => (
                     <div
                       key={idx}
                       className={cn(
                         "p-3 rounded-lg border flex items-start gap-3",
                         defect.severity === 'critical' ? 'border-red-200 dark:border-red-500/30' :
                         defect.severity === 'high' ? 'border-orange-200 dark:border-orange-500/30' :
-                        'border-yellow-200 dark:border-yellow-500/30',
+                        defect.severity === 'medium' ? 'border-yellow-200 dark:border-yellow-500/30' :
+                        'border-gray-200 dark:border-gray-700',
                         theme === 'light' ? 'bg-white' : 'bg-gray-800'
                       )}
                     >
-                      <Badge className={cn(
-                        "text-[10px] flex-shrink-0",
-                        defect.severity === 'critical' ? "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400" :
-                        defect.severity === 'high' ? "bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400" :
-                        "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400",
-                        "border-0"
-                      )}>
-                        {defect.severity}
-                      </Badge>
+                      {/* Screenshot Thumbnail */}
+                      {defect.screenshot && (
+                        <button
+                          onClick={() => setLiveScreenshot(defect.screenshot!)}
+                          className="flex-shrink-0 w-16 h-12 rounded overflow-hidden border border-gray-200 dark:border-gray-600 hover:opacity-80"
+                        >
+                          <img
+                            src={`data:image/jpeg;base64,${defect.screenshot}`}
+                            alt="Defect screenshot"
+                            className="w-full h-full object-cover"
+                          />
+                        </button>
+                      )}
                       <div className="flex-1 min-w-0">
-                        <div className={cn("text-sm font-medium", theme === 'light' ? 'text-gray-800' : 'text-gray-200')}>
-                          {defect.description}
-                        </div>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge className={cn(
+                            "text-[10px] flex-shrink-0",
+                            defect.severity === 'critical' ? "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400" :
+                            defect.severity === 'high' ? "bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400" :
+                            defect.severity === 'medium' ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400" :
+                            "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400",
+                            "border-0"
+                          )}>
+                            {defect.severity}
+                          </Badge>
                           <Badge variant="outline" className="text-[10px]">{defect.type}</Badge>
-                          <span className={cn("text-xs truncate", theme === 'light' ? 'text-gray-400' : 'text-gray-500')}>
-                            {defect.url}
-                          </span>
+                          {defect.wcag_criterion && (
+                            <Badge variant="outline" className="text-[10px] border-blue-300 text-blue-600 dark:border-blue-500 dark:text-blue-400">
+                              {defect.wcag_criterion}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className={cn("text-sm font-medium", theme === 'light' ? 'text-gray-800' : 'text-gray-200')}>
+                          {defect.title || defect.description}
+                        </div>
+                        {defect.title && defect.description !== defect.title && (
+                          <div className={cn("text-xs mt-0.5", theme === 'light' ? 'text-gray-500' : 'text-gray-400')}>
+                            {defect.description}
+                          </div>
+                        )}
+                        <div className={cn("text-xs truncate mt-1", theme === 'light' ? 'text-gray-400' : 'text-gray-500')}>
+                          {defect.page_url || defect.url}
                         </div>
                       </div>
                     </div>
                   ))}
+                  {explorationResult.defects.length > 50 && (
+                    <p className={cn("text-xs text-center py-2", theme === 'light' ? 'text-gray-400' : 'text-gray-500')}>
+                      Showing 50 of {explorationResult.defects.length} defects
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1003,10 +1472,66 @@ export default function FlowpilotPage() {
                   </p>
                 </div>
               )}
+
+              {/* Generated Test Suite */}
+              {explorationResult.generated_tests && (
+                <div className={cn(
+                  "mt-6 p-4 rounded-lg border",
+                  theme === 'light' ? 'bg-blue-50 border-blue-200' : 'bg-blue-500/10 border-blue-500/30'
+                )}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <FileText className="w-4 h-4 text-blue-500" />
+                    <span className={cn("text-sm font-medium", theme === 'light' ? 'text-blue-700' : 'text-blue-400')}>
+                      Generated Test Suite ({explorationResult.generated_tests.test_count} tests)
+                    </span>
+                    <div className="ml-auto flex gap-2">
+                      <Badge className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 border-0">
+                        {explorationResult.generated_tests.summary.smoke_tests} smoke
+                      </Badge>
+                      <Badge className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 border-0">
+                        {explorationResult.generated_tests.summary.form_tests} form
+                      </Badge>
+                      <Badge className="text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400 border-0">
+                        {explorationResult.generated_tests.summary.regression_tests} regression
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {explorationResult.generated_tests.tests.slice(0, 20).map((test, idx) => (
+                      <div key={idx} className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded text-sm",
+                        theme === 'light' ? 'bg-white' : 'bg-gray-800'
+                      )}>
+                        <FileText className="w-3 h-3 flex-shrink-0 text-blue-500" />
+                        <span className={cn("flex-1 truncate", theme === 'light' ? 'text-gray-800' : 'text-gray-200')}>
+                          {test.title}
+                        </span>
+                        <Badge variant="outline" className="text-[10px]">{test.priority}</Badge>
+                      </div>
+                    ))}
+                    {explorationResult.generated_tests.tests.length > 20 && (
+                      <p className={cn("text-xs text-center py-1", theme === 'light' ? 'text-gray-400' : 'text-gray-500')}>
+                        ... and {explorationResult.generated_tests.tests.length - 20} more
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => handleSaveAllTests(explorationResult.generated_tests!.tests)}
+                      className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:opacity-90 text-white"
+                    >
+                      <Save className="w-3 h-3 mr-1" /> Save All to Repository
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* ── Flowmap Results ─────────────────────────────────── */}
+          {/* Flowmap Results */}
           {flowmapResult && (
             <div className={cn(
               "rounded-xl border p-6",

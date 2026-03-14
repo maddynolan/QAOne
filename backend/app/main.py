@@ -711,9 +711,9 @@ app.include_router(requirement_to_testcase_router)
 # from app.routers.exploration.nexus_exploratory_api import router as nexus_exploratory_router
 # app.include_router(nexus_exploratory_router)
 
-# DEPRECATED (v3.20.0) — Blaze Autonomous Exploratory Testing (unused)
-# from app.routers.exploration.blaze_api import router as blaze_router
-# app.include_router(blaze_router)
+# Blaze Autonomous Exploratory Testing — Enterprise v2.0
+from app.routers.exploration.blaze_api import router as blaze_router
+app.include_router(blaze_router)
 
 # AI Vision Self-Healing API (GPT-4 Vision powered)
 try:
