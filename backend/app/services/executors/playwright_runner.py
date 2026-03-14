@@ -176,8 +176,62 @@ except Exception as e:
             if self.playwright:
                 await self.playwright.stop()
 
-    async def run_test_case(self, test_case: TestCase) -> TestRunResult:
-        """Run a single test case"""
+    def _optimize_screenshot_for_streaming(self, screenshot_bytes: bytes) -> str:
+        """Optimize a screenshot for WebSocket streaming.
+
+        Converts PNG to JPEG at 70% quality and resizes to max 800px width
+        for efficient real-time streaming. Falls back to full PNG base64 if
+        PIL/Pillow is not available.
+
+        Returns base64-encoded string of the optimized image.
+        """
+        try:
+            from PIL import Image
+            import io
+            img = Image.open(io.BytesIO(screenshot_bytes))
+            # Resize to 800px width for thumbnail streaming
+            if img.width > 800:
+                ratio = 800 / img.width
+                img = img.resize((800, int(img.height * ratio)), Image.LANCZOS)
+            # Convert to RGB if RGBA (JPEG doesn't support alpha)
+            if img.mode == 'RGBA':
+                img = img.convert('RGB')
+            jpeg_buffer = io.BytesIO()
+            img.save(jpeg_buffer, format='JPEG', quality=70)
+            return base64.b64encode(jpeg_buffer.getvalue()).decode('utf-8')
+        except ImportError:
+            # PIL not available, fall back to full PNG
+            return base64.b64encode(screenshot_bytes).decode('utf-8')
+        except Exception as e:
+            logger.debug(f"Screenshot optimization failed, using raw PNG: {e}")
+            return base64.b64encode(screenshot_bytes).decode('utf-8')
+
+    async def _stream_screenshot(self, execution_id: str, step_number: int, screenshot_type: str, screenshot_bytes: bytes):
+        """Stream a screenshot via WebSocket if execution_id is provided.
+
+        Uses optimized JPEG for streaming efficiency. Never raises — failures
+        are silently logged so test execution is not interrupted.
+        """
+        try:
+            from app.services.execution_websocket_manager import execution_ws_manager
+            streaming_b64 = self._optimize_screenshot_for_streaming(screenshot_bytes)
+            await execution_ws_manager.send_screenshot(
+                execution_id, step_number, screenshot_type, streaming_b64
+            )
+        except Exception as e:
+            logger.debug(f"WebSocket screenshot streaming failed (non-fatal): {e}")
+
+    async def run_test_case(self, test_case: TestCase, execution_id: Optional[str] = None, **kwargs) -> TestRunResult:
+        """Run a single test case.
+
+        Args:
+            test_case: The test case to execute.
+            execution_id: Optional execution ID for real-time WebSocket streaming.
+                When provided, screenshots are streamed per-step via the
+                ExecutionWebSocketManager. The existing list-based screenshot
+                collection is always preserved regardless.
+            **kwargs: Additional keyword arguments (reserved for future use).
+        """
         # On Windows, use subprocess executor (works on Windows!)
         if hasattr(self, '_windows_mode') and self._windows_mode and hasattr(self, '_executor') and self._executor:
             logger.info("Using subprocess executor for Windows - this will work!")
@@ -220,9 +274,9 @@ except Exception as e:
         try:
             logs.append(f"Starting test: {test_case.title}")
 
-            for step in test_case.steps:
+            for step_index, step in enumerate(test_case.steps):
                 logs.append(f"Executing step: {step.action}")
-                
+
                 # Take screenshot before each step
                 if USE_SYNC_PLAYWRIGHT:
                     screenshot_bytes = await self._run_sync(lambda: self.page.screenshot(full_page=True))
@@ -230,6 +284,12 @@ except Exception as e:
                     screenshot_bytes = await self.page.screenshot(full_page=True)
                 screenshot_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
                 screenshots.append(screenshot_b64)
+
+                # Stream screenshot via WebSocket if execution_id provided
+                if execution_id:
+                    await self._stream_screenshot(
+                        execution_id, step_index + 1, "step", screenshot_bytes
+                    )
 
                 # Execute the step
                 await self._execute_step(step)
@@ -261,6 +321,12 @@ except Exception as e:
                     screenshot_bytes = await self.page.screenshot(full_page=True)
                 screenshot_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
                 screenshots.append(screenshot_b64)
+
+                # Stream failure screenshot via WebSocket
+                if execution_id:
+                    await self._stream_screenshot(
+                        execution_id, len(screenshots), "failure", screenshot_bytes
+                    )
             except:
                 pass
 
