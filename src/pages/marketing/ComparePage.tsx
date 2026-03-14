@@ -8,6 +8,7 @@
 import React, { useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { trackCTAClick, trackEvent } from '@/lib/web-analytics';
+import { MarketingHeader } from '@/components/MarketingHeader';
 import {
   ArrowRight, Check, X, Minus, Building2, Zap,
   Shield, Globe, Eye, Gauge, Smartphone, Accessibility,
@@ -298,34 +299,10 @@ export default function ComparePage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/50">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link to="/" className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
-                <span className="text-white font-bold text-lg">F</span>
-              </div>
-              <span className="text-xl font-bold text-slate-900">Flowstral</span>
-            </Link>
-            <nav className="hidden md:flex items-center gap-6">
-              <Link to="/pricing" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Pricing</Link>
-              <Link to="/compare/katalon" className="text-sm text-blue-600 font-semibold">Compare</Link>
-              <Link to="/blog" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Blog</Link>
-              <Link to="/about" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">About</Link>
-            </nav>
-          </div>
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" onClick={() => { trackCTAClick('sign_in', `/compare/${slug}`); navigate('/signin'); }}>Sign In</Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { trackCTAClick('start_free', `/compare/${slug}`); navigate('/signup'); }}>
-              Start Free <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
-          </div>
-        </div>
-      </header>
+      <MarketingHeader />
 
       {/* Tool Selector — visible at the top so visitors choose their comparison first */}
-      <section className="pt-8 pb-4 px-6 bg-slate-50 border-b border-slate-200">
+      <section className="pt-24 pb-4 px-6 bg-slate-50 border-b border-slate-200">
         <div className="max-w-5xl mx-auto">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 text-center">Compare Flowstral With</p>
           <div className="flex flex-wrap justify-center gap-2">

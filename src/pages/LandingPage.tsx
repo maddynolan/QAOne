@@ -27,6 +27,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { MarketingHeader } from '@/components/MarketingHeader';
 import { LandingPluginsProvider, useLandingPlugins, type PluginKey } from '@/contexts/LandingPluginsContext';
 
 // ===================================================================
@@ -455,58 +456,7 @@ function CTASection() {
   );
 }
 
-// ===================================================================
-// HEADER
-// ===================================================================
-
-function Header() {
-  const navigate = useNavigate();
-  const [scrolled, setScrolled] = useState(false);
-  useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  return (
-    <header className={cn(
-      "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
-      scrolled
-        ? "bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200/50"
-        : "bg-white/80 backdrop-blur-sm"
-    )}>
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-8">
-          <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center">
-              <span className="text-white font-bold text-sm">F</span>
-            </div>
-            <span className="text-lg font-bold text-slate-900">Flowstral</span>
-          </Link>
-          <nav className="hidden md:flex items-center gap-6">
-            <a href="#features" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">Features</a>
-            <span onClick={() => navigate('/pricing')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors cursor-pointer">Pricing</span>
-            <span onClick={() => navigate('/compare/katalon')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors cursor-pointer">Compare</span>
-            <span onClick={() => navigate('/blog')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors cursor-pointer">Blog</span>
-            <span onClick={() => navigate('/download')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors cursor-pointer">Download</span>
-            <span onClick={() => navigate('/about')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors cursor-pointer">About</span>
-          </nav>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" className="text-slate-600 hover:text-slate-900" onClick={() => { trackCTAClick('sign_in', '/'); navigate('/signin'); }}>
-            Sign In
-          </Button>
-          <Button
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            onClick={() => { trackCTAClick('start_free', '/'); navigate('/signup'); }}
-          >
-            Start Free
-          </Button>
-        </div>
-      </div>
-    </header>
-  );
-}
+// Header: uses shared MarketingHeader component (see src/components/MarketingHeader.tsx)
 
 // ===================================================================
 // FOOTER
@@ -634,7 +584,7 @@ function Footer() {
 function LandingPageContent() {
   return (
     <div className="min-h-screen bg-white">
-      <Header />
+      <MarketingHeader />
       <main>
         <HeroSection />
         <HowItWorksSection />
