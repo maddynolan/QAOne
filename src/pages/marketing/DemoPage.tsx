@@ -51,7 +51,7 @@ function MarketingHeader() {
           <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => { trackCTAClick('sign_in', '/demo'); navigate('/signin'); }}>
             Sign In
           </Button>
-          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => { trackCTAClick('start_free', '/demo'); navigate('/signup'); }}>
+          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { trackCTAClick('start_free', '/demo'); navigate('/signup'); }}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -1035,7 +1035,7 @@ export default function DemoPage() {
             <Button
               size="lg"
               onClick={() => { trackCTAClick('start_free_trial', '/demo'); navigate('/signup'); }}
-              className="h-12 px-8 bg-white text-slate-900 hover:bg-slate-100"
+              className="h-12 px-8 bg-emerald-500 hover:bg-emerald-400 text-white"
             >
               Start Free Trial <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
@@ -1043,7 +1043,7 @@ export default function DemoPage() {
               size="lg"
               variant="outline"
               onClick={() => { trackCTAClick('schedule_live_demo', '/demo'); navigate('/contact'); }}
-              className="h-12 px-8 border-slate-600 text-white hover:bg-slate-800"
+              className="h-12 px-8 border-slate-500 text-white hover:bg-slate-800"
             >
               Schedule Live Demo
             </Button>

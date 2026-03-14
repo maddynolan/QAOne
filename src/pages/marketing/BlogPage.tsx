@@ -128,7 +128,7 @@ export default function BlogPage() {
               <Button variant="ghost" onClick={() => navigate('/blog')}>
                 <ArrowLeft className="w-4 h-4 mr-1" /> All Posts
               </Button>
-              <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => navigate('/signup')}>
+              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => navigate('/signup')}>
                 Start Free <ArrowRight className="w-4 h-4 ml-1" />
               </Button>
             </div>
@@ -200,7 +200,7 @@ export default function BlogPage() {
           </nav>
           <div className="flex items-center gap-3">
             <Button variant="ghost" onClick={() => { trackCTAClick('sign_in', '/blog'); navigate('/signin'); }}>Sign In</Button>
-            <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => { trackCTAClick('start_free', '/blog'); navigate('/signup'); }}>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { trackCTAClick('start_free', '/blog'); navigate('/signup'); }}>
               Start Free <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
@@ -318,7 +318,7 @@ export default function BlogPage() {
             Free tier available. No credit card required.
           </p>
           <Button
-            className="h-12 px-8 rounded-xl text-lg font-semibold bg-white text-slate-900 hover:bg-slate-100"
+            className="h-12 px-8 rounded-xl text-lg font-semibold bg-emerald-500 hover:bg-emerald-400 text-white"
             onClick={() => { trackCTAClick('get_started_free', '/blog'); navigate('/signup'); }}
           >
             Get Started Free <ArrowRight className="w-5 h-5 ml-2" />

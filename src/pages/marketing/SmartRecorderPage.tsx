@@ -50,7 +50,7 @@ function MarketingHeader() {
           <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
             Sign In
           </Button>
-          <Button className="bg-slate-900 hover:bg-slate-800 text-white font-medium" onClick={() => navigate('/signup')}>
+          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium" onClick={() => navigate('/signup')}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -157,7 +157,7 @@ export default function SmartRecorderPage() {
                 <Button
                   size="lg"
                   onClick={() => navigate('/signup')}
-                  className="h-12 px-8 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl"
+                  className="h-12 px-8 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl"
                 >
                   Try Smart Trace <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
@@ -306,7 +306,7 @@ export default function SmartRecorderPage() {
           <Button
             size="lg"
             onClick={() => navigate('/signup')}
-            className="h-14 px-10 bg-white text-slate-900 hover:bg-slate-100 font-semibold rounded-xl"
+            className="h-14 px-10 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl"
           >
             Start Free Trial <ArrowRight className="w-5 h-5 ml-2" />
           </Button>

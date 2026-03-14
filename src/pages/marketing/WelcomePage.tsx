@@ -186,7 +186,7 @@ export default function WelcomePage() {
               <Button
                 size="lg"
                 onClick={() => navigate('/dashboard')}
-                className="w-full h-14 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl"
+                className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl"
               >
                 <Globe className="w-5 h-5 mr-2" />
                 Launch Web App

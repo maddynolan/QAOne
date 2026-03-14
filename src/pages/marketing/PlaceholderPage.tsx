@@ -41,7 +41,7 @@ function MarketingHeader() {
           <Button variant="ghost" onClick={() => navigate('/')}>
             <ArrowLeft className="w-4 h-4 mr-2" /> Back to Home
           </Button>
-          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => navigate('/signup')}>
+          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => navigate('/signup')}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -185,7 +185,7 @@ export default function PlaceholderPage() {
                 placeholder="Enter your email"
                 className="flex-1 px-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
               />
-              <Button className="px-6 bg-slate-900 hover:bg-slate-800 text-white">
+              <Button className="px-6 bg-emerald-600 hover:bg-emerald-700 text-white">
                 <Mail className="w-4 h-4 mr-2" /> Notify Me
               </Button>
             </div>

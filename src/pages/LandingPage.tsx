@@ -63,7 +63,7 @@ function HeroSection() {
             <Button
               size="lg"
               onClick={() => { trackCTAClick('start_free', '/'); navigate('/signup'); }}
-              className="h-12 px-8 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-lg"
+              className="h-12 px-8 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg"
             >
               Start Free
               <ArrowRight className="w-4 h-4 ml-2" />
@@ -427,7 +427,7 @@ function CTASection() {
           <Button
             size="lg"
             onClick={() => { trackCTAClick('get_started_free', '/'); navigate('/signup'); }}
-            className="h-12 px-8 bg-white text-slate-900 hover:bg-slate-100 font-medium rounded-lg"
+            className="h-12 px-8 bg-emerald-500 hover:bg-emerald-400 text-white font-medium rounded-lg"
           >
             Get Started Free
           </Button>
@@ -435,7 +435,7 @@ function CTASection() {
             size="lg"
             variant="outline"
             onClick={() => { trackCTAClick('schedule_demo', '/'); navigate('/contact'); }}
-            className="h-12 px-8 border-slate-600 text-slate-300 hover:bg-slate-800 rounded-lg"
+            className="h-12 px-8 border-slate-500 text-white hover:bg-slate-800 rounded-lg"
           >
             Talk to Sales
           </Button>
@@ -570,7 +570,7 @@ function Header() {
                   <div className="px-4 pt-3 mt-2 border-t border-slate-100">
                     <Button
                       size="sm"
-                      className="w-full bg-slate-900 text-white text-xs hover:bg-slate-800"
+                      className="w-full bg-emerald-600 text-white text-xs hover:bg-emerald-700"
                       onClick={() => navigate('/pricing')}
                     >
                       Upgrade to unlock all features
@@ -584,7 +584,7 @@ function Header() {
             Sign In
           </Button>
           <Button
-            className="bg-slate-900 hover:bg-slate-800 text-white"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white"
             onClick={() => { trackCTAClick('start_free', '/'); navigate('/signup'); }}
           >
             Start Free

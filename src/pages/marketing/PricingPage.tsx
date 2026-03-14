@@ -54,7 +54,7 @@ function MarketingHeader() {
           <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => { trackCTAClick('sign_in', '/pricing'); navigate('/signin'); }}>
             Sign In
           </Button>
-          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => { trackCTAClick('start_free', '/pricing'); navigate('/signup'); }}>
+          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { trackCTAClick('start_free', '/pricing'); navigate('/signup'); }}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -443,7 +443,7 @@ export default function PricingPage() {
 
               <div className="flex gap-3 mb-8">
                 <Button
-                  className="flex-1 h-12 rounded-xl font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-all"
+                  className="flex-1 h-12 rounded-xl font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-all"
                   onClick={() => { trackCTAClick('talk_to_sales', '/pricing'); navigate('/contact'); }}
                 >
                   Talk to Sales <ArrowRight className="w-4 h-4 ml-2" />
@@ -663,7 +663,7 @@ export default function PricingPage() {
                 <MessageSquare className="w-5 h-5 mr-2" /> Chat with Us
               </Button>
               <Button
-                className="h-12 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 text-white"
+                className="h-12 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
                 onClick={() => { trackCTAClick('contact_sales', '/pricing'); navigate('/contact'); }}
               >
                 <Mail className="w-5 h-5 mr-2" /> Contact Sales
@@ -709,14 +709,14 @@ export default function PricingPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
-              className="h-14 px-8 rounded-xl text-lg font-semibold bg-white text-slate-900 hover:bg-slate-100 transition-all"
+              className="h-14 px-8 rounded-xl text-lg font-semibold bg-emerald-500 hover:bg-emerald-400 text-white transition-all"
               onClick={() => { trackCTAClick('get_started_free_bottom', '/pricing'); navigate('/signup'); }}
             >
               Get Started Free <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
             <Button
               variant="outline"
-              className="h-14 px-8 rounded-xl text-lg font-semibold border-2 border-slate-600 text-white hover:bg-slate-800 transition-all"
+              className="h-14 px-8 rounded-xl text-lg font-semibold border-2 border-slate-500 text-white hover:bg-slate-800 transition-all"
               onClick={() => { trackCTAClick('talk_to_sales_bottom', '/pricing'); navigate('/contact'); }}
             >
               <Building2 className="w-5 h-5 mr-2" /> Talk to Sales

@@ -47,7 +47,7 @@ function MarketingHeader() {
           <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
             Sign In
           </Button>
-          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => navigate('/signup')}>
+          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => navigate('/signup')}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -203,7 +203,7 @@ export default function AboutPage() {
             <Button
               size="lg"
               onClick={() => navigate('/signup')}
-              className="h-12 px-8 bg-white text-slate-900 hover:bg-slate-100 font-semibold rounded-xl"
+              className="h-12 px-8 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl"
             >
               Get Started Free <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
@@ -211,7 +211,7 @@ export default function AboutPage() {
               size="lg"
               variant="outline"
               onClick={() => navigate('/contact')}
-              className="h-12 px-8 border-slate-600 text-white hover:bg-slate-800 rounded-xl"
+              className="h-12 px-8 border-slate-500 text-white hover:bg-slate-800 rounded-xl"
             >
               <Building2 className="w-5 h-5 mr-2" /> Talk to Sales
             </Button>

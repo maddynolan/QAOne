@@ -31,7 +31,7 @@ export default function DownloadPage() {
             <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => { trackCTAClick('sign_in', '/download'); navigate('/signin'); }}>
               Sign In
             </Button>
-            <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => { trackCTAClick('start_free', '/download'); navigate('/signup'); }}>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { trackCTAClick('start_free', '/download'); navigate('/signup'); }}>
               Start Free <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
@@ -75,7 +75,7 @@ export default function DownloadPage() {
             <Button
               size="lg"
               onClick={() => { trackCTAClick('create_account_download', '/download'); navigate('/signup'); }}
-              className="w-full h-14 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl"
+              className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl"
             >
               Create Free Account
               <ArrowRight className="w-5 h-5 ml-2" />

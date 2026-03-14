@@ -52,7 +52,7 @@ function MarketingHeader() {
           <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
             Sign In
           </Button>
-          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => navigate('/signup')}>
+          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => navigate('/signup')}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -287,7 +287,7 @@ export default function FeaturePage() {
               <Button
                 size="lg"
                 onClick={() => navigate('/signup')}
-                className="h-12 px-8 text-white font-semibold rounded-xl bg-slate-900 hover:bg-slate-800"
+                className="h-12 px-8 text-white font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700"
               >
                 Try It Free <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
@@ -334,7 +334,7 @@ export default function FeaturePage() {
           <Button
             size="lg"
             onClick={() => navigate('/signup')}
-            className="h-14 px-10 bg-white text-slate-800 hover:bg-slate-100 font-semibold rounded-xl"
+            className="h-14 px-10 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl"
           >
             Start Free Trial <ArrowRight className="w-5 h-5 ml-2" />
           </Button>

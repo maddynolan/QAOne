@@ -317,7 +317,7 @@ export default function ComparePage() {
           </div>
           <div className="flex items-center gap-3">
             <Button variant="ghost" onClick={() => { trackCTAClick('sign_in', `/compare/${slug}`); navigate('/signin'); }}>Sign In</Button>
-            <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => { trackCTAClick('start_free', `/compare/${slug}`); navigate('/signup'); }}>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { trackCTAClick('start_free', `/compare/${slug}`); navigate('/signup'); }}>
               Start Free <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
@@ -429,14 +429,14 @@ export default function ComparePage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
-              className="h-14 px-8 rounded-xl text-lg font-semibold bg-white text-slate-900 hover:bg-slate-100"
+              className="h-14 px-8 rounded-xl text-lg font-semibold bg-emerald-500 hover:bg-emerald-400 text-white"
               onClick={() => { trackCTAClick('get_started_free', `/compare/${slug}`); navigate('/signup'); }}
             >
               Try Flowstral Free <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
             <Button
               variant="outline"
-              className="h-14 px-8 rounded-xl text-lg font-semibold border-slate-600 text-white hover:bg-slate-800"
+              className="h-14 px-8 rounded-xl text-lg font-semibold border-slate-500 text-white hover:bg-slate-800"
               onClick={() => { trackCTAClick('talk_to_sales', `/compare/${slug}`); navigate('/contact'); }}
             >
               <Building2 className="w-5 h-5 mr-2" /> Talk to Sales

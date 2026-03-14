@@ -50,7 +50,7 @@ function MarketingHeader() {
           <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => { trackCTAClick('sign_in', '/contact'); navigate('/signin'); }}>
             Sign In
           </Button>
-          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => { trackCTAClick('start_free', '/contact'); navigate('/signup'); }}>
+          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { trackCTAClick('start_free', '/contact'); navigate('/signup'); }}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -258,7 +258,7 @@ export default function ContactPage() {
 
                   <Button
                     type="submit"
-                    className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl"
+                    className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl"
                   >
                     <Send className="w-4 h-4 mr-2" /> Send Message
                   </Button>

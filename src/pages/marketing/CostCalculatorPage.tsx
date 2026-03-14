@@ -169,7 +169,7 @@ export default function CostCalculatorPage() {
           </div>
           <div className="flex items-center gap-3">
             <Button variant="ghost" onClick={() => { trackCTAClick('sign_in', '/tools/cost-calculator'); navigate('/signin'); }}>Sign In</Button>
-            <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => { trackCTAClick('start_free', '/tools/cost-calculator'); navigate('/signup'); }}>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { trackCTAClick('start_free', '/tools/cost-calculator'); navigate('/signup'); }}>
               Start Free <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
@@ -306,7 +306,7 @@ export default function CostCalculatorPage() {
                 {/* CTA */}
                 <div className="flex flex-col sm:flex-row gap-3">
                   <Button
-                    className="flex-1 h-12 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl"
+                    className="flex-1 h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl"
                     onClick={() => { trackCTAClick('get_started_free', '/tools/cost-calculator'); navigate('/signup'); }}
                   >
                     Start Free — Replace {results.toolCount} Tools <ArrowRight className="w-5 h-5 ml-2" />
