@@ -68,7 +68,7 @@
 |---------|--------|---------|
 | **Vercel** | `app.flowstral.com` | Static frontend hosting with global CDN, SPA routing, security headers |
 | **Railway** | `api.flowstral.com` | FastAPI backend, WebSocket support, test execution workers, AI orchestration |
-| **Supabase** | `hgnqricmdqbreekmqpov.supabase.co` | PostgreSQL 16 database, JWT auth, file storage for test artifacts |
+| **Supabase** | `<YOUR_SUPABASE_PROJECT>.supabase.co` | PostgreSQL 16 database, JWT auth, file storage for test artifacts |
 | **Railway Redis** | Internal | Job queue (test execution), caching, session state |
 | **OpenAI** | External API | gpt-4o-mini for test generation, rewrites, AI self-healing |
 | **Anthropic** | External API (optional) | Claude for prompt caching, advanced reasoning |
@@ -77,10 +77,10 @@
 
 | Service | URL |
 |---------|-----|
-| Backend API | `https://qaone-production.up.railway.app` |
-| Supabase Project | `https://hgnqricmdqbreekmqpov.supabase.co` |
+| Backend API | `<YOUR_BACKEND_URL>` |
+| Supabase Project | `https://<YOUR_SUPABASE_PROJECT>.supabase.co` |
 | Frontend | Vercel deployment (configure custom domain) |
-| Health Check | `https://qaone-production.up.railway.app/health` |
+| Health Check | `<YOUR_BACKEND_URL>/health` |
 
 ---
 
@@ -120,11 +120,11 @@ From the Supabase dashboard, navigate to **Settings > API** and record:
 
 | Credential | Where to Find | Example |
 |------------|---------------|---------|
-| **Project URL** | Settings > API > Project URL | `https://hgnqricmdqbreekmqpov.supabase.co` |
+| **Project URL** | Settings > API > Project URL | `https://<YOUR_SUPABASE_PROJECT>.supabase.co` |
 | **Anon (public) key** | Settings > API > Project API keys > anon | `eyJhbGciOiJIUzI1NiIs...` |
 | **Service role key** | Settings > API > Project API keys > service_role | `eyJhbGciOiJIUzI1NiIs...` (keep secret) |
 | **Database URL** | Settings > Database > Connection string > URI | `postgresql://postgres:[password]@db.xxx.supabase.co:5432/postgres` |
-| **Project ID** | Settings > General | `hgnqricmdqbreekmqpov` |
+| **Project ID** | Settings > General | `<YOUR_SUPABASE_PROJECT_ID>` |
 
 **Important:** The service role key bypasses Row Level Security (RLS). Never expose it in frontend code. It is only used server-side (Railway backend).
 
@@ -139,7 +139,7 @@ The Flowstral schema is defined in 34 migration files under `supabase/migrations
 npm install -g supabase
 
 # Link to your project
-supabase link --project-ref hgnqricmdqbreekmqpov
+supabase link --project-ref <YOUR_SUPABASE_PROJECT_ID>
 
 # Push all migrations
 supabase db push
@@ -257,10 +257,10 @@ In the Railway backend service, go to **Variables** and add:
 
 ```env
 # Database (from Supabase Step 1.2)
-DATABASE_URL=postgresql://postgres:[YOUR_PASSWORD]@db.hgnqricmdqbreekmqpov.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres:[YOUR_PASSWORD]@db.<YOUR_SUPABASE_PROJECT>.supabase.co:5432/postgres
 
 # Supabase
-SUPABASE_URL=https://hgnqricmdqbreekmqpov.supabase.co
+SUPABASE_URL=https://<YOUR_SUPABASE_PROJECT>.supabase.co
 SUPABASE_ANON_KEY=[your-anon-key]
 SUPABASE_SERVICE_ROLE_KEY=[your-service-role-key]
 
@@ -416,9 +416,9 @@ VITE_API_BASE_URL=https://api.flowstral.com
 VITE_API_URL=https://api.flowstral.com
 
 # Supabase (public keys only -- safe for frontend)
-VITE_SUPABASE_URL=https://hgnqricmdqbreekmqpov.supabase.co
+VITE_SUPABASE_URL=https://<YOUR_SUPABASE_PROJECT>.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=[your-supabase-anon-key]
-VITE_SUPABASE_PROJECT_ID=hgnqricmdqbreekmqpov
+VITE_SUPABASE_PROJECT_ID=<YOUR_SUPABASE_PROJECT_ID>
 
 # Web Analytics (optional -- leave empty to disable)
 VITE_GA4_MEASUREMENT_ID=G-XXXXXXXXXX
@@ -510,7 +510,7 @@ The FastAPI backend configures CORS middleware in `backend/app/main.py` using th
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
 | `DATABASE_URL` | Yes | PostgreSQL connection string from Supabase | `postgresql://postgres:pw@db.xxx.supabase.co:5432/postgres` |
-| `SUPABASE_URL` | Yes | Supabase project URL | `https://hgnqricmdqbreekmqpov.supabase.co` |
+| `SUPABASE_URL` | Yes | Supabase project URL | `https://<YOUR_SUPABASE_PROJECT>.supabase.co` |
 | `SUPABASE_ANON_KEY` | Yes | Supabase anon/public key | `eyJhbGci...` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key (server-side only) | `eyJhbGci...` |
 | `REDIS_URL` | Recommended | Redis connection string (auto-set by Railway Redis add-on) | `redis://default:pw@host:6379` |
@@ -543,9 +543,9 @@ The FastAPI backend configures CORS middleware in `backend/app/main.py` using th
 |----------|----------|-------------|---------|
 | `VITE_API_BASE_URL` | Yes | Backend API base URL | `https://api.flowstral.com` |
 | `VITE_API_URL` | No | Alias for API base URL (fallback) | `https://api.flowstral.com` |
-| `VITE_SUPABASE_URL` | Yes | Supabase project URL | `https://hgnqricmdqbreekmqpov.supabase.co` |
+| `VITE_SUPABASE_URL` | Yes | Supabase project URL | `https://<YOUR_SUPABASE_PROJECT>.supabase.co` |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Yes | Supabase anon key (safe for frontend) | `eyJhbGci...` |
-| `VITE_SUPABASE_PROJECT_ID` | No | Supabase project ID | `hgnqricmdqbreekmqpov` |
+| `VITE_SUPABASE_PROJECT_ID` | No | Supabase project ID | `<YOUR_SUPABASE_PROJECT_ID>` |
 | `VITE_GA4_MEASUREMENT_ID` | No | Google Analytics 4 measurement ID | `G-XXXXXXXXXX` |
 | `VITE_CLARITY_PROJECT_ID` | No | Microsoft Clarity project ID | `abc123xyz` |
 | `VITE_CRISP_WEBSITE_ID` | No | Crisp live chat website ID | UUID from Crisp dashboard |
@@ -553,7 +553,7 @@ The FastAPI backend configures CORS middleware in `backend/app/main.py` using th
 **Note:** The frontend resolves `API_BASE_URL` with this fallback chain (defined in `src/lib/api-config.ts`):
 1. `VITE_API_BASE_URL`
 2. `VITE_API_URL`
-3. Hardcoded fallback: `https://qaone-production.up.railway.app`
+3. Hardcoded fallback: `<YOUR_BACKEND_URL>`
 
 ### Required Security Environment Variables
 
@@ -875,7 +875,7 @@ cat flowstral-desktop/package.json | grep version
 
 ```bash
 # Using pg_dump
-pg_dump "postgresql://postgres:[password]@db.hgnqricmdqbreekmqpov.supabase.co:5432/postgres" \
+pg_dump "postgresql://postgres:[password]@db.<YOUR_SUPABASE_PROJECT>.supabase.co:5432/postgres" \
   --format=custom \
   --file=flowstral-backup-$(date +%Y%m%d).dump
 
@@ -1419,7 +1419,7 @@ vercel --prod
 railway logs --service backend --tail
 
 # Run DB migrations
-supabase link --project-ref hgnqricmdqbreekmqpov && supabase db push
+supabase link --project-ref <YOUR_SUPABASE_PROJECT_ID> && supabase db push
 
 # Generate secrets
 python -c "import secrets; print(secrets.token_hex(32))"

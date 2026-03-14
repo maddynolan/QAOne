@@ -1,7 +1,7 @@
 # Backend API - Enterprise Deploy-ready
-# Python 3.10+, uvicorn. Use cloud LLM API keys (OpenAI/Anthropic); OLLAMA not used for SaaS.
+# Python 3.12+, uvicorn. Use cloud LLM API keys (OpenAI/Anthropic); OLLAMA not used for SaaS.
 
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 

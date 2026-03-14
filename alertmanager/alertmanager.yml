@@ -1,20 +1,25 @@
 # Alertmanager Configuration for Flowstral/QAAI Platform
 # Receives alerts from Prometheus and routes them to receivers.
 #
-# Configure via environment variables:
-#   ALERTMANAGER_WEBHOOK_URL  — Webhook receiver URL (Slack, PagerDuty, custom)
-#   SMTP_FROM                — Email sender address
-#   SMTP_SMARTHOST           — SMTP server (host:port)
-#   SMTP_AUTH_USERNAME       — SMTP username
-#   SMTP_AUTH_PASSWORD       — SMTP password
-#   ALERT_EMAIL_TO           — Email recipient for alerts
+# IMPORTANT: Alertmanager does NOT support shell-style ${VAR} env-var substitution.
+# You MUST replace all placeholder values below before deploying.
+# Alternatively, use a Docker entrypoint script with `envsubst` to template this file
+# at container startup from environment variables.
+#
+# Required values to replace:
+#   CHANGE_ME_smtp_from          — Email sender address (e.g., alerts@flowstral.com)
+#   CHANGE_ME_smtp_smarthost     — SMTP server host:port (e.g., smtp.gmail.com:587)
+#   CHANGE_ME_smtp_username      — SMTP authentication username
+#   CHANGE_ME_smtp_password      — SMTP authentication password
+#   CHANGE_ME_webhook_url        — Webhook receiver URL (Slack, PagerDuty, custom)
+#   CHANGE_ME_alert_email        — Email recipient for critical alerts
 
 global:
   resolve_timeout: 5m
-  smtp_from: '${SMTP_FROM:-alerts@flowstral.com}'
-  smtp_smarthost: '${SMTP_SMARTHOST:-smtp.gmail.com:587}'
-  smtp_auth_username: '${SMTP_AUTH_USERNAME:-}'
-  smtp_auth_password: '${SMTP_AUTH_PASSWORD:-}'
+  smtp_from: 'CHANGE_ME_smtp_from'
+  smtp_smarthost: 'CHANGE_ME_smtp_smarthost'
+  smtp_auth_username: 'CHANGE_ME_smtp_username'
+  smtp_auth_password: 'CHANGE_ME_smtp_password'
   smtp_require_tls: true
 
 # Templates for alert notifications
@@ -65,15 +70,15 @@ inhibit_rules:
 receivers:
   - name: 'default-webhook'
     webhook_configs:
-      - url: '${ALERTMANAGER_WEBHOOK_URL:-http://localhost:9095/webhook}'
+      - url: 'CHANGE_ME_webhook_url'
         send_resolved: true
 
   - name: 'critical-webhook'
     webhook_configs:
-      - url: '${ALERTMANAGER_WEBHOOK_URL:-http://localhost:9095/webhook}'
+      - url: 'CHANGE_ME_webhook_url'
         send_resolved: true
     email_configs:
-      - to: '${ALERT_EMAIL_TO:-ops@flowstral.com}'
+      - to: 'CHANGE_ME_alert_email'
         send_resolved: true
         headers:
           Subject: '[CRITICAL] Flowstral Alert: {{ .GroupLabels.alertname }}'

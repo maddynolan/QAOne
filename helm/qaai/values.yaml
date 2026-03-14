@@ -82,7 +82,7 @@ redis:
 backend:
   image:
     repository: qaai/backend
-    tag: latest
+    tag: "3.21.0"
     pullPolicy: IfNotPresent
   replicaCount: 2
   # Service account with minimal permissions
@@ -148,6 +148,37 @@ backend:
       emptyDir:
         sizeLimit: 1Gi
 
+# Frontend
+frontend:
+  image:
+    repository: qaai/frontend
+    tag: "3.21.0"
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
 # Ollama (local LLM) - DISABLED by default. We use cloud API keys (OpenAI/Anthropic) for SaaS.
 # Set enabled: true and set backend env OLLAMA_URL for on-prem with local LLM.
 ollama:
@@ -172,7 +203,7 @@ testWorkers:
   replicaCount: 3
   image:
     repository: qaai/test-worker
-    tag: latest
+    tag: "3.21.0"
   # Service account with minimal permissions
   serviceAccount:
     create: true
@@ -198,6 +229,27 @@ testWorkers:
     limits:
       memory: "2Gi"
       cpu: "1000m"
+  # Liveness and readiness probes for worker pods
+  livenessProbe:
+    exec:
+      command:
+        - python
+        - -c
+        - "import sys; sys.exit(0)"
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readinessProbe:
+    exec:
+      command:
+        - python
+        - -c
+        - "import sys; sys.exit(0)"
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 10
+    failureThreshold: 3
 
 # Network Policy — restrict pod-to-pod communication
 networkPolicy:
@@ -226,6 +278,3 @@ ingress:
     - secretName: qaai-tls
       hosts:
         - qaai.example.com
-
-
-

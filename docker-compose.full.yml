@@ -60,7 +60,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: qaai-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-}
+    command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
@@ -90,7 +90,7 @@ services:
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:?err}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?err}
       S3_BUCKET_NAME: ${S3_BUCKET_NAME:-qa-artifacts}
-      REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
@@ -162,7 +162,7 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-production}
       DATABASE_URL: postgresql://${POSTGRES_USER:-qaai}:${POSTGRES_PASSWORD:?err}@postgres:5432/${POSTGRES_DB:-qaai}
-      REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379
       WORKER_ID: worker-1
       WORKER_CAPACITY: ${WORKER_CAPACITY:-5}
     depends_on:

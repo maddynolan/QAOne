@@ -21,10 +21,18 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with (.Values.frontend).podSecurityContext | default .Values.securityDefaults.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: frontend
-          image: "{{ .Values.frontend.image.repository | default "qaai/frontend" }}:{{ .Values.frontend.image.tag | default "latest" }}"
-          imagePullPolicy: {{ .Values.frontend.image.pullPolicy | default "IfNotPresent" }}
+          image: "{{ (.Values.frontend).image.repository | default "qaai/frontend" }}:{{ (.Values.frontend).image.tag | default "3.21.0" }}"
+          imagePullPolicy: {{ (.Values.frontend).image.pullPolicy | default "IfNotPresent" }}
+          {{- with (.Values.frontend).containerSecurityContext | default .Values.securityDefaults.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             - name: http
               containerPort: 80
@@ -46,4 +54,4 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 3
           resources:
-            {{- toYaml (.Values.frontend.resources | default (dict "requests" (dict "memory" "256Mi" "cpu" "100m") "limits" (dict "memory" "512Mi" "cpu" "500m"))) | nindent 12 }}
+            {{- toYaml ((.Values.frontend).resources | default (dict "requests" (dict "memory" "256Mi" "cpu" "100m") "limits" (dict "memory" "512Mi" "cpu" "500m"))) | nindent 12 }}

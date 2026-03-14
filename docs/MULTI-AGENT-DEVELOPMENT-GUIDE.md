@@ -17,7 +17,7 @@ This guide documents the parallel development workflow used by QAAI — a system
 
 ---
 
-## 9 Feature Agent Teams
+## 10 Agent Teams
 
 | Team | Frontend | Backend | Key Page(s) | Scope |
 |------|----------|---------|-------------|-------|
@@ -30,6 +30,7 @@ This guide documents the parallel development workflow used by QAAI — a system
 | **Visual** | `src/modules/visual-testing/` | `routers/visual_testing/` | VisualTestingPage | Visual regression, 6 comparison modes, baselines |
 | **SF** | `src/modules/salesforce/` | `routers/salesforce/` | SalesforceToolsPage | Salesforce-specific testing, OAuth2, code generation |
 | **A11Y** | `src/modules/accessibility/` | `routers/accessibility/` | Accessibility | WCAG scanning, axe-core, reports, AI analysis |
+| **Deploy** | — | — | — | Docker, Helm, CI/CD, Nginx, monitoring, PgBouncer, Coolify, deployment docs |
 
 ---
 
@@ -200,6 +201,51 @@ Backend:
   backend/app/services/accessibility/accessibility_report_generator.py
 ```
 
+### Deploy Team
+```
+Docker:
+  Dockerfile.frontend                                # Frontend multi-stage build
+  backend/Dockerfile                                 # Backend API image
+  backend/Dockerfile.worker                          # Playwright worker image
+  docker-compose.yml                                 # Dev (PostgreSQL only)
+  docker-compose.full.yml                            # Full production stack
+  docker-compose.monitoring.yml                      # Standalone monitoring
+  docker-compose.air-gapped.yml                      # Air-gapped deployment
+
+Kubernetes:
+  helm/qaai/Chart.yaml                               # Helm chart metadata
+  helm/qaai/values.yaml                              # Chart values
+  helm/qaai/templates/                               # K8s templates (deployments, services, ingress, networkpolicy)
+
+CI/CD:
+  .github/workflows/ci.yml                           # Main CI pipeline
+  .github/workflows/deploy-coolify.yml               # Coolify CD pipeline
+  .github/workflows/deploy-production.yml            # Production deploy
+  .github/workflows/deploy-staging.yml               # Staging deploy
+  .github/workflows/security-scan.yml                # Security scanning
+  .github/workflows/openapi.yml                      # OpenAPI validation
+
+Nginx:
+  nginx/default.conf                                 # OWASP headers, rate limiting, proxy
+
+Monitoring:
+  prometheus/prometheus.yml                          # Prometheus scrape config
+  prometheus/alert_rules.yml                         # Alert rules
+  alertmanager/alertmanager.yml                      # Alertmanager config
+  grafana/datasources/prometheus.yml                 # Grafana datasource
+  grafana/dashboards/                                # Dashboard JSONs
+
+Deploy Configs:
+  deploy/pgbouncer/pgbouncer.ini                     # Connection pooling
+  deploy/coolify/README.md                           # Coolify setup guide
+  deploy/coolify/.env.example                        # Environment template
+
+Docs:
+  docs/SAAS-DEPLOYMENT-GUIDE.md
+  docs/ON-PREM-DEPLOYMENT-RUNBOOK.md
+  docs/DEPLOYMENT-AND-DATA-ARCHITECTURE.md
+```
+
 ---
 
 ## Standard Agent Prompt Template
@@ -284,13 +330,18 @@ gh release create vX.Y.Z ...
 
 ## Batch Strategy
 
-When working on all 9 modules:
+When working on all 10 teams:
 
-**Batch 1** (5 agents — largest modules first):
+**Batch 1** (5 agents — largest feature modules):
 - Record, Build, API, Perf, SF
 
-**Batch 2** (4 agents — remaining modules):
+**Batch 2** (4 agents — remaining feature modules):
 - Tests, Mobile, Visual, A11Y
+
+**Batch 3** (1 agent — infrastructure):
+- Deploy
+
+The Deploy agent runs separately because it touches cross-cutting infra files (Docker, Helm, CI/CD) that don't conflict with feature modules. It can also run in parallel with any feature batch if needed.
 
 This prevents overwhelming system resources while maintaining parallelism.
 
@@ -313,4 +364,5 @@ If two agents modify the same file:
 | Version | Date | Agents | Scope |
 |---------|------|--------|-------|
 | v3.19.0 | 2026-03-09 | 5 parallel | A11Y fix, Visual/Mobile/Perf/TestMgmt robustness |
-| v3.20.0 | TBD | 9 parallel | Full platform audit + dead code cleanup + enhancements |
+| v3.20.0 | 2026-03-14 | 9 parallel | Full platform audit + dead code cleanup + enhancements |
+| v3.21.0 | 2026-03-14 | 1 (Deploy) | 10th agent team + infrastructure audit (Docker, Helm, CI/CD, Nginx, monitoring) |

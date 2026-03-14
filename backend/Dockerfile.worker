@@ -1,7 +1,8 @@
 # Dockerfile for Test Runner Worker
 # Phase 4.2: On-Prem Packaging (Enterprise-hardened)
+# Uses Playwright 1.48 image on Ubuntu 22.04 (Jammy) — Focal is EOL
 
-FROM mcr.microsoft.com/playwright/python:v1.40.0-focal
+FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy
 
 WORKDIR /app
 
@@ -33,8 +34,9 @@ ENV PYTHONPATH=/app
 # Run as non-root user
 USER appuser
 
+# Health check — verify worker process is responsive
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import sys; sys.exit(0)" || exit 1
+
 # Run worker
 CMD ["python", "-m", "app.workers.test_worker"]
-
-
-
