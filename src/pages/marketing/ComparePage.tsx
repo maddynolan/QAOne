@@ -113,7 +113,7 @@ const competitors: Record<string, CompetitorConfig> = {
     ],
     switchReasons: [
       'Empower manual testers to create automated tests without code',
-      'Eliminate flaky tests with 4-layer AI self-healing',
+      'Eliminate flaky tests with multi-layer self-healing',
       'Replace 5+ separate tools with one platform',
       'Get built-in test management and reporting',
       'Stop spending engineering time on framework maintenance',
@@ -324,6 +324,29 @@ export default function ComparePage() {
         </div>
       </header>
 
+      {/* Tool Selector — visible at the top so visitors choose their comparison first */}
+      <section className="pt-8 pb-4 px-6 bg-slate-50 border-b border-slate-200">
+        <div className="max-w-5xl mx-auto">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 text-center">Compare Flowstral With</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {Object.entries(competitors).map(([key, c]) => (
+              <button
+                key={key}
+                onClick={() => navigate(`/compare/${key}`)}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-sm font-medium border transition-all",
+                  key === slug
+                    ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                    : "bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50"
+                )}
+              >
+                vs {c.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Hero */}
       <section className="py-16 px-6">
         <div className="max-w-4xl mx-auto text-center">
@@ -398,22 +421,6 @@ export default function ComparePage() {
                 <span className="text-sm text-slate-700">{reason}</span>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Other Comparisons */}
-      <section className="pb-16 px-6">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">Other Comparisons</h2>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(competitors)
-              .filter(([key]) => key !== slug)
-              .map(([key, c]) => (
-                <Button key={key} variant="outline" size="sm" onClick={() => navigate(`/compare/${key}`)}>
-                  vs {c.name}
-                </Button>
-              ))}
           </div>
         </div>
       </section>

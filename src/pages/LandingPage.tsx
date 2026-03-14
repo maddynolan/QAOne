@@ -48,15 +48,18 @@ function HeroSection() {
 
       <div className="relative max-w-7xl mx-auto px-6 pt-24 pb-16 w-full">
         <div className="max-w-3xl">
+          <Badge className="mb-4 bg-emerald-50 text-emerald-700 border border-emerald-200 text-sm px-3 py-1">
+            Zero Code Required
+          </Badge>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 leading-[1.1] tracking-tight mb-6">
             Record once.{' '}
             <br className="hidden sm:block" />
             Test everything.
           </h1>
           <p className="text-lg sm:text-xl text-slate-600 max-w-2xl leading-relaxed mb-8">
-            Flowstral records your browser sessions and turns them into reliable automated tests.
-            Then run those tests for performance, visual regression, accessibility, and API coverage
-            -- all from one platform.
+            Flowstral records your browser sessions and turns them into reliable automated tests —
+            no code required. Run those tests for performance, visual regression, accessibility,
+            and API coverage — all from one platform.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 mb-12">
@@ -210,7 +213,7 @@ function CapabilitiesSection() {
       icon: MousePointer,
       title: 'Browser Testing',
       description: 'Record sessions, build tests visually, run across Chromium, Firefox, and WebKit. Self-healing selectors fix themselves when the UI changes.',
-      specifics: ['Smart element recognition', 'Cross-browser (3 engines)', '4-layer self-healing chain'],
+      specifics: ['Smart element recognition', 'Cross-browser (3 engines)', 'Multi-layer self-healing'],
       href: '/products/smart-recorder',
     },
     {
@@ -328,16 +331,16 @@ function SelfHealingSection() {
               Your tests break. We fix them automatically.
             </h2>
             <p className="text-slate-600 leading-relaxed mb-8">
-              When a UI changes and a selector breaks, Flowstral's 4-layer healing chain
-              finds a working alternative before you even notice. No manual maintenance.
+              When a UI changes and a selector breaks, Flowstral's multi-layer healing engine
+              finds a working alternative before you even notice. Stops at the first success — no manual maintenance.
             </p>
 
             <div className="space-y-4">
               {[
-                { layer: 'Knowledge Base', speed: '< 1ms', description: 'Looks up previously-healed selectors from past runs' },
-                { layer: 'Deterministic', speed: '< 1ms', description: 'Generates alternative CSS/XPath selectors from element attributes' },
-                { layer: 'Vision AI', speed: '2-5s', description: 'Analyzes a screenshot to locate the element visually' },
-                { layer: 'OCR Fallback', speed: '~500ms', description: 'Finds elements by their visible text content' },
+                { layer: 'Selector Cache', speed: '< 1ms', description: 'Instant lookup of previously-healed selectors from past successful fixes' },
+                { layer: 'Smart Variants', speed: '< 1ms', description: 'Generates alternative CSS, XPath, and Playwright locators from element attributes' },
+                { layer: 'Vision AI', speed: '2-5s', description: 'GPT-4 Vision analyzes a screenshot to visually locate the element (opt-in)' },
+                { layer: 'OCR Fallback', speed: '~500ms', description: 'Finds elements by their visible text using OCR when other methods fail' },
               ].map((item, idx) => (
                 <div key={idx} className="flex items-start gap-4 p-4 bg-white rounded-lg border border-slate-200">
                   <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 text-sm font-bold text-slate-500">

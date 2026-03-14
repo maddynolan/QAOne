@@ -152,21 +152,6 @@ const demoSteps = [
     color: 'cyan'
   },
   {
-    id: 'flowpilot',
-    title: 'Flowpilot',
-    subtitle: 'Goal-based agentic testing',
-    description: 'Watch autonomous AI agents explore your app, find bugs, and generate tests from natural language goals.',
-    duration: 55,
-    highlights: [
-      'Describe goals in natural language',
-      'AI agents autonomously explore your app',
-      'Auto-generate test steps from discoveries',
-      'Self-healing locators that adapt to changes'
-    ],
-    icon: Compass,
-    color: 'teal'
-  },
-  {
     id: 'mobile',
     title: 'Mobile Testing',
     subtitle: 'Test on 50+ real devices',
@@ -570,73 +555,6 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
           </div>
         );
 
-      case 'flowpilot':
-        return (
-          <div className="h-full bg-white rounded-lg p-3 overflow-hidden border border-slate-200">
-            {/* Goal Input */}
-            <div className="flex items-center gap-2 mb-3 p-2 bg-teal-50 rounded-lg border border-teal-200">
-              <Target className="w-4 h-4 text-teal-500" />
-              <span className="text-xs text-teal-700 font-medium">
-                {isPlaying ? '"Test user login with invalid credentials"' : 'Enter your test goal...'}
-              </span>
-              {isPlaying && (
-                <Badge className="ml-auto text-[8px] bg-teal-500 text-white border-0 animate-pulse">
-                  AI Processing
-                </Badge>
-              )}
-            </div>
-
-            {/* Agent Activity */}
-            <div className="space-y-2 mb-3">
-              {[
-                { agent: 'Explorer', action: 'Scanning login page...', icon: Compass, status: animationStep > 0 },
-                { agent: 'Generator', action: 'Creating test steps...', icon: Code, status: animationStep > 2 },
-                { agent: 'Self-Healer', action: 'Optimizing locators...', icon: RefreshCw, status: animationStep > 4 },
-              ].map((item, idx) => (
-                <div
-                  key={idx}
-                  className={cn(
-                    "flex items-center gap-2 p-2 rounded-lg border transition-all",
-                    isPlaying && item.status 
-                      ? "bg-emerald-50 border-emerald-300" 
-                      : "bg-slate-50 border-slate-200"
-                  )}
-                >
-                  <item.icon className={cn(
-                    "w-4 h-4",
-                    isPlaying && item.status ? "text-emerald-500" : "text-slate-400"
-                  )} />
-                  <div className="flex-1">
-                    <div className="text-xs font-medium text-slate-700">{item.agent}</div>
-                    <div className="text-[10px] text-slate-500">{isPlaying && item.status ? item.action : 'Waiting...'}</div>
-                  </div>
-                  {isPlaying && item.status && (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Generated Steps */}
-            {isPlaying && animationStep > 3 && (
-              <div className="p-2 bg-slate-900 rounded-lg">
-                <div className="text-[9px] text-slate-400 mb-1">Generated Test Steps</div>
-                <div className="text-[10px] font-mono text-emerald-400 space-y-0.5">
-                  <div>1. Navigate to /login</div>
-                  <div>2. Fill username: "test@demo.com"</div>
-                  <div>3. Fill password: "wrong123"</div>
-                  <div className={cn(animationStep > 5 ? "opacity-100" : "opacity-0", "transition-opacity")}>
-                    4. Click "Sign In" button
-                  </div>
-                  <div className={cn(animationStep > 5 ? "opacity-100" : "opacity-0", "transition-opacity")}>
-                    5. Assert error: "Invalid credentials"
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        );
-
       case 'mobile':
         return (
           <div className="h-full bg-white rounded-lg p-3 overflow-hidden border border-slate-200">
@@ -825,7 +743,6 @@ const featureToStepMap: Record<string, string> = {
   'performance': 'performance',
   'dashboards': 'dashboards',
   'smart-recorder': 'recorder',
-  'flowpilot': 'flowpilot',
   'mobile-testing': 'mobile',
 };
 
@@ -1001,7 +918,7 @@ export default function DemoPage() {
           </div>
 
           {/* Step Navigation */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mt-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mt-8">
             {demoSteps.map((s, idx) => (
               <button
                 key={s.id}
