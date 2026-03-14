@@ -18,7 +18,7 @@
  *
  * @dependencies TestCaseExecution uses lucide-react icons, shadcn/ui Card, Badge, Button, Textarea
  */
-import { ArrowLeft, CheckCircle, XCircle, Clock, Camera, Bug, ChevronRight, ChevronLeft, SkipForward, ImageIcon, AlertCircle, Save, Home, Trash2, Eye, Globe, MousePointer, Type, Check, Target, List, Plus, Link, Search, Clipboard } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, Clock, Camera, Bug, ChevronRight, ChevronLeft, SkipForward, ImageIcon, AlertCircle, Save, Home, Trash2, Eye, Globe, MousePointer, Type, Check, Target, List, Plus, Link, Search, Clipboard, Monitor, ChevronDown, ChevronUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { API_BASE_URL } from '@/lib/api-config';
+import { useExecutionWebSocket, Screenshot } from '@/hooks/useExecutionWebSocket';
 
 // Standard severity and priority definitions following industry standards
 const SEVERITY_OPTIONS = [
@@ -220,6 +221,21 @@ export default function TestCaseExecution() {
   const [currentTestIndex, setCurrentTestIndex] = useState(0);
   const [showScreenshotPreview, setShowScreenshotPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Live Browser panel state
+  const [liveBrowserExpanded, setLiveBrowserExpanded] = useState(true);
+  const [selectedLiveScreenshot, setSelectedLiveScreenshot] = useState<number | null>(null);
+  const filmstripRef = useRef<HTMLDivElement | null>(null);
+
+  // WebSocket hook for real-time execution updates (screenshots, step progress)
+  const { progress: wsProgress, isConnected: wsConnected, connect: wsConnect, disconnect: wsDisconnect } = useExecutionWebSocket({
+    onScreenshot: (_step: number, _screenshot: Screenshot) => {
+      // Auto-scroll filmstrip to latest screenshot
+      if (filmstripRef.current) {
+        filmstripRef.current.scrollLeft = filmstripRef.current.scrollWidth;
+      }
+    }
+  });
 
   const testIds = testRun?.testCaseIds || (testRun?.testCaseId ? [testRun.testCaseId] : []);
 
@@ -840,6 +856,91 @@ export default function TestCaseExecution() {
               </Badge>
             </div>
           </div>
+
+          {/* Live Browser Panel — shows real-time screenshots streamed via WebSocket */}
+          {wsProgress.screenshots.length > 0 && (
+            <div className="flex-none border-b border-border">
+              <button
+                onClick={() => setLiveBrowserExpanded(!liveBrowserExpanded)}
+                className="w-full flex items-center justify-between px-4 py-2 hover:bg-muted/50 transition-colors"
+              >
+                <h3 className="text-sm font-medium flex items-center gap-2 text-foreground">
+                  <Monitor className="h-4 w-4 text-blue-500" />
+                  Live Browser
+                  <span className="text-xs text-muted-foreground">
+                    Step {wsProgress.screenshots[wsProgress.screenshots.length - 1]?.step || wsProgress.screenshots.length}
+                  </span>
+                  {wsConnected && (
+                    <span className="flex items-center gap-1 text-xs text-emerald-500">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Live
+                    </span>
+                  )}
+                </h3>
+                {liveBrowserExpanded ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </button>
+              {liveBrowserExpanded && (
+                <div className="px-4 pb-3">
+                  {/* Main screenshot viewer */}
+                  <div
+                    className="relative bg-muted rounded overflow-hidden mb-2 cursor-pointer"
+                    style={{ maxHeight: '280px' }}
+                    onClick={() => {
+                      const idx = selectedLiveScreenshot ?? wsProgress.screenshots.length - 1;
+                      const ss = wsProgress.screenshots[idx];
+                      if (ss?.base64) {
+                        setShowScreenshotPreview(`data:image/jpeg;base64,${ss.base64}`);
+                      }
+                    }}
+                  >
+                    <img
+                      src={`data:image/jpeg;base64,${
+                        (selectedLiveScreenshot !== null
+                          ? wsProgress.screenshots[selectedLiveScreenshot]?.base64
+                          : wsProgress.screenshots[wsProgress.screenshots.length - 1]?.base64) || ''
+                      }`}
+                      className="w-full h-full object-contain"
+                      alt={`Step ${
+                        selectedLiveScreenshot !== null
+                          ? wsProgress.screenshots[selectedLiveScreenshot]?.step
+                          : wsProgress.screenshots[wsProgress.screenshots.length - 1]?.step
+                      }`}
+                    />
+                  </div>
+                  {/* Filmstrip of all captured screenshots */}
+                  <div
+                    ref={filmstripRef}
+                    className="flex gap-1 overflow-x-auto pb-1"
+                  >
+                    {wsProgress.screenshots.map((ss, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setSelectedLiveScreenshot(idx)}
+                        className={cn(
+                          "flex-shrink-0 w-20 h-12 rounded border overflow-hidden transition-all",
+                          (selectedLiveScreenshot ?? wsProgress.screenshots.length - 1) === idx
+                            ? "border-primary ring-2 ring-primary/50"
+                            : "border-border hover:border-primary/40"
+                        )}
+                      >
+                        {ss.base64 && (
+                          <img
+                            src={`data:image/jpeg;base64,${ss.base64}`}
+                            className="w-full h-full object-cover"
+                            alt={`Step ${ss.step}`}
+                          />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Content Area with Tabs */}
           <div className="flex-1 overflow-hidden">
