@@ -689,7 +689,53 @@ Return ONLY the JSON array."""
                 ss = await loop.run_in_executor(self._executor, lambda: self._page.screenshot(type='png'))
                 yield {"type": "screenshot", "screenshot": base64.b64encode(ss).decode()}
             except:
-                pass
+                ss = None
+
+            # Optional per-step visual assertion
+            if ss and plan.get('visual_assertions_enabled'):
+                try:
+                    from app.services.automation.visual_testing_engine import (
+                        VisualTestingEngine, ComparisonOptions, ComparisonMode
+                    )
+                    engine = VisualTestingEngine()
+                    baseline_name = f"{tc.id}_step_{i}"
+                    baseline_path = engine.get_baseline(baseline_name)
+
+                    if baseline_path:
+                        from PIL import Image
+                        import io as _io
+                        baseline_img = Image.open(str(baseline_path))
+                        actual_img = Image.open(_io.BytesIO(ss))
+
+                        try:
+                            vis_mode = ComparisonMode(plan.get('visual_mode', 'anti_aliased'))
+                        except ValueError:
+                            vis_mode = ComparisonMode.ANTI_ALIASED
+
+                        options = ComparisonOptions(
+                            mode=vis_mode,
+                            threshold=plan.get('visual_threshold', 0.1),
+                            generate_diff=True
+                        )
+                        vr = engine.compare(baseline_path, ss, options, baseline_name)
+                        yield {
+                            "type": "visual_assertion", "step": i,
+                            "passed": vr.passed,
+                            "diff_percentage": vr.diff_percentage
+                        }
+                    else:
+                        engine.save_baseline(ss, baseline_name, {
+                            "source_test": tc.id,
+                            "step_index": i,
+                            "auto_created": True
+                        })
+                        yield {
+                            "type": "visual_assertion", "step": i,
+                            "passed": True,
+                            "message": "Baseline saved"
+                        }
+                except Exception as ve:
+                    logger.warning(f"Visual assertion error at step {i}: {ve}")
 
         tc.status = "passed" if all(s.success for s in tc.steps) else "failed"
         tc.duration = time.time() - start
