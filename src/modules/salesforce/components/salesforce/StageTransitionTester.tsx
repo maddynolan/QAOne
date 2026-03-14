@@ -8,7 +8,7 @@
  * - Any object with picklist-based stages
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -68,15 +68,20 @@ export function StageTransitionTester({
   // Test scenario
   const [selectedStages, setSelectedStages] = useState<string[]>([]);
   const [currentStageIndex, setCurrentStageIndex] = useState<number>(0);
-  
-  // Load object on change
+
+  // Ref for template stage-set timeout cleanup
+  const templateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timeout on unmount
   useEffect(() => {
-    if (selectedObject) {
-      loadObjectDescribe(selectedObject);
-    }
-  }, [selectedObject]);
-  
-  const loadObjectDescribe = async (objectName: string) => {
+    return () => {
+      if (templateTimeoutRef.current) {
+        clearTimeout(templateTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const loadObjectDescribe = useCallback(async (objectName: string) => {
     setLoading(true);
     try {
       const describe = await salesforceApi.describeSObject(objectName);
@@ -104,7 +109,14 @@ export function StageTransitionTester({
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedStages.length]);
+
+  // Load object on change
+  useEffect(() => {
+    if (selectedObject) {
+      loadObjectDescribe(selectedObject);
+    }
+  }, [selectedObject, loadObjectDescribe]);
   
   // Get color for stage
   const getStageColor = (stage: string, index: number, total: number) => {
@@ -450,8 +462,9 @@ export function StageTransitionTester({
                   key={i}
                   onClick={() => {
                     setSelectedObject(template.obj);
-                    // Need to wait for object to load
-                    setTimeout(() => setSelectedStages(template.stages), 500);
+                    // Need to wait for object to load — use ref for cleanup
+                    if (templateTimeoutRef.current) clearTimeout(templateTimeoutRef.current);
+                    templateTimeoutRef.current = setTimeout(() => setSelectedStages(template.stages), 500);
                   }}
                   className="flex items-center gap-2 p-2 rounded bg-secondary hover:bg-accent text-left transition-colors"
                 >

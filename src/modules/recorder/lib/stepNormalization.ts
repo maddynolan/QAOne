@@ -158,7 +158,9 @@ export const normalizeStepForPlayback = (action: RecordedAction): RecordedAction
     .replace(/\s+/g, ' ')
     .trim();
 
-  console.log(`[Normalize] "${originalText}" → "${normalizedText}", selectors:`, robustSelectors.slice(0, 3));
+  if (import.meta.env.DEV) {
+    console.log(`[Normalize] "${originalText}" \u2192 "${normalizedText}", selectors:`, robustSelectors.slice(0, 3));
+  }
 
   return {
     ...action,
@@ -204,7 +206,9 @@ export const isGarbageAction = (action: RecordedAction): boolean => {
 
   for (const pattern of garbagePatterns) {
     if (pattern.test(allText)) {
-      console.log(`[Normalize] FILTERED garbage action: "${desc.slice(0, 50)}..."`);
+      if (import.meta.env.DEV) {
+        console.log(`[Normalize] FILTERED garbage action: "${desc.slice(0, 50)}..."`);
+      }
       return true;
     }
   }

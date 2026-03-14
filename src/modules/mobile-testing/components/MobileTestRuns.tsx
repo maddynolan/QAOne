@@ -76,6 +76,7 @@ export default function MobileTestRuns() {
   const [filterStatus, setFilterStatus] = useState<TestRunStatus | 'all'>('all');
   const [filterPlatform, setFilterPlatform] = useState<'all' | 'ios' | 'android'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [reRunningId, setReRunningId] = useState<string | null>(null);
 
   const filteredRuns = useMemo(() => {
     let runs = [...testRuns];
@@ -264,16 +265,19 @@ export default function MobileTestRuns() {
                         {statusCfg.label}
                       </Badge>
                       <button
+                        disabled={reRunningId === run.id}
                         onClick={async (e) => {
                           e.stopPropagation();
+                          if (reRunningId) return;
                           const flow = flows.find(f => f.id === run.flow_id);
                           if (!flow) { toast.error('Flow not found — cannot re-run'); return; }
+                          setReRunningId(run.id);
                           toast.info(`Re-running: ${flow.name}`);
                           try {
                             const steps = flow.yaml.split('\n')
                               .filter((line: string) => line.trim().startsWith('-'))
                               .map((line: string) => ({ action: line.trim().substring(2) }));
-                            const deviceId = selectedDevice?.id || selectedDevice || run.device;
+                            const deviceId = selectedDevice || run.device;
                             const result = await mobile.runNativeTest(steps, flow.app_bundle_id, flow.platform, deviceId);
                             const startTime = new Date().toISOString();
                             addTestRun({
@@ -294,10 +298,12 @@ export default function MobileTestRuns() {
                               completed_at: new Date().toISOString(),
                             });
                           } catch (err: any) {
-                            toast.error(err.message || 'Re-run failed');
+                            toast.error(err?.message || 'Re-run failed');
+                          } finally {
+                            setReRunningId(null);
                           }
                         }}
-                        className={cn("p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-sky-500/20", isDark ? 'text-sky-400' : 'text-sky-500')}
+                        className={cn("p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-sky-500/20", isDark ? 'text-sky-400' : 'text-sky-500', reRunningId === run.id && 'opacity-100 animate-spin')}
                         title="Re-run"
                       >
                         <RefreshCw className="w-3 h-3" />

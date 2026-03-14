@@ -229,7 +229,7 @@ export default function MobileTestFlows() {
 
       toast[passed ? 'success' : 'error'](passed ? 'Test passed!' : `Test failed: ${result.error}`);
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(error?.message || 'Failed to run test flow');
     } finally {
       setIsRunningTest(false);
     }

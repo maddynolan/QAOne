@@ -2,7 +2,7 @@
  * AddOrgDialog - Dialog for connecting a new Salesforce org.
  * Supports three auth methods: Browser OAuth, Session ID, and manual credentials.
  */
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -45,17 +45,34 @@ export function AddOrgDialog({
   const [sessionInstanceUrl, setSessionInstanceUrl] = useState('');
   const [sessionIdValue, setSessionIdValue] = useState('');
 
+  // Refs for OAuth polling cleanup on unmount
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutIdRef = useRef<NodeJS.Timeout | null>(null);
+  const authWindowRef = useRef<Window | null>(null);
+
+  // Cleanup on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (timeoutIdRef.current) clearTimeout(timeoutIdRef.current);
+      authWindowRef.current?.close();
+    };
+  }, []);
+
+  const cleanup = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    if (timeoutIdRef.current) {
+      clearTimeout(timeoutIdRef.current);
+      timeoutIdRef.current = null;
+    }
+    setIsLoading(false);
+  }, [setIsLoading]);
+
   const handleBrowserLogin = async () => {
     setIsLoading(true);
-    let pollInterval: NodeJS.Timeout | null = null;
-    let timeoutId: NodeJS.Timeout | null = null;
-    let authWindow: Window | null = null;
-
-    const cleanup = () => {
-      if (pollInterval) clearInterval(pollInterval);
-      if (timeoutId) clearTimeout(timeoutId);
-      setIsLoading(false);
-    };
 
     try {
       // Determine domain for OAuth
@@ -84,9 +101,9 @@ export function AddOrgDialog({
       const data = await response.json();
 
       if (data.auth_url) {
-        authWindow = window.open(data.auth_url, 'salesforce_auth', 'width=600,height=700');
+        authWindowRef.current = window.open(data.auth_url, 'salesforce_auth', 'width=600,height=700');
 
-        if (!authWindow || authWindow.closed) {
+        if (!authWindowRef.current || authWindowRef.current.closed) {
           const copyUrl = await navigator.clipboard.writeText(data.auth_url).then(() => true).catch(() => false);
           if (copyUrl) {
             toast.success('URL copied! Paste it in your browser to login, then return here.');
@@ -98,10 +115,10 @@ export function AddOrgDialog({
         let pollCount = 0;
         const maxPolls = 60;
 
-        pollInterval = setInterval(async () => {
+        pollIntervalRef.current = setInterval(async () => {
           pollCount++;
 
-          if (authWindow?.closed) {
+          if (authWindowRef.current?.closed) {
             cleanup();
             toast.info('Login cancelled - window was closed');
             return;
@@ -109,7 +126,7 @@ export function AddOrgDialog({
 
           if (pollCount >= maxPolls) {
             cleanup();
-            authWindow?.close();
+            authWindowRef.current?.close();
             toast.error('Login timed out. Please try again.');
             return;
           }
@@ -120,14 +137,14 @@ export function AddOrgDialog({
 
             if (status.status === 'completed') {
               cleanup();
-              authWindow?.close();
+              authWindowRef.current?.close();
 
               const newOrg = salesforceApi.addOrg({
                 name: form.name || 'My Salesforce Org',
                 instanceUrl: status.instance_url,
                 loginUrl: status.instance_url,
                 username: 'oauth-user',
-                orgType: form.orgType as any,
+                orgType: form.orgType as 'production' | 'sandbox' | 'developer' | 'scratch',
                 color: form.color,
                 accessToken: status.access_token,
                 refreshToken: status.refresh_token,
@@ -139,14 +156,16 @@ export function AddOrgDialog({
               onOpenChange(false);
               toast.success('Connected via browser login!');
             }
-          } catch (e) {
-            // Continue polling
+          } catch (pollError) {
+            // Poll status check failed - continue polling; server may be temporarily unavailable
+            console.warn('OAuth poll check failed, retrying:', pollError);
           }
         }, 2000);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       cleanup();
-      toast.error(`OAuth failed: ${error.message}`);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`OAuth failed: ${message}`);
     }
   };
 
@@ -175,7 +194,7 @@ export function AddOrgDialog({
       instanceUrl: instanceUrl,
       loginUrl: instanceUrl,
       username: 'session-user',
-      orgType: form.orgType as any,
+      orgType: form.orgType as 'production' | 'sandbox' | 'developer' | 'scratch',
       color: form.color,
       accessToken: sessionId,
       refreshToken: '',
@@ -249,7 +268,11 @@ export function AddOrgDialog({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setIsLoading(false)}
+                  onClick={() => {
+                    cleanup();
+                    authWindowRef.current?.close();
+                    toast.info('Login cancelled');
+                  }}
                   className="text-red-600 dark:text-red-400 border-red-500/50 hover:bg-red-500/20"
                 >
                   Cancel

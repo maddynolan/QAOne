@@ -599,7 +599,7 @@ for y in range(screenshot.height):
                   <Label className="text-muted-foreground text-sm mb-2 block">Direction from Anchor</Label>
                   <Select
                     value={locator.direction || 'right'}
-                    onValueChange={(v) => updateLocator({ direction: v as any })}
+                    onValueChange={(v) => updateLocator({ direction: v as BlackboxLocator['direction'] })}
                   >
                     <SelectTrigger className="bg-background border-input">
                       <SelectValue />

@@ -7,7 +7,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { trackCTAClick, trackDownload } from '@/lib/web-analytics';
 import {
   ArrowRight, Download, Monitor, Apple, Shield, Zap,
-  Lock, UserPlus, CheckCircle2, Rocket
+  Lock, UserPlus, CheckCircle2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,21 +17,21 @@ export default function DownloadPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+    <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-sm border-b border-slate-200/50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
               <span className="text-white font-bold text-lg">F</span>
             </div>
-            <span className="text-xl font-bold text-slate-800">Flowstral</span>
+            <span className="text-xl font-bold text-slate-900">Flowstral</span>
           </Link>
           <div className="flex items-center gap-3">
             <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => { trackCTAClick('sign_in', '/download'); navigate('/signin'); }}>
               Sign In
             </Button>
-            <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => { trackCTAClick('start_free', '/download'); navigate('/signup'); }}>
+            <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => { trackCTAClick('start_free', '/download'); navigate('/signup'); }}>
               Start Free <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
@@ -75,9 +75,8 @@ export default function DownloadPage() {
             <Button
               size="lg"
               onClick={() => { trackCTAClick('create_account_download', '/download'); navigate('/signup'); }}
-              className="w-full h-14 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold rounded-xl shadow-lg shadow-emerald-500/20"
+              className="w-full h-14 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl"
             >
-              <Rocket className="w-5 h-5 mr-2" />
               Create Free Account
               <ArrowRight className="w-5 h-5 ml-2" />
             </Button>

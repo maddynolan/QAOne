@@ -101,19 +101,20 @@ export default function TestRunner({ script, workflowName }: TestRunnerProps) {
       } else {
         toast.error(`Test ${testResult.status}: ${testResult.error || 'Unknown error'}`, { id: 'test-execution' });
       }
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to execute test';
       setResult({
         status: 'error',
-        error: error.message || 'Failed to execute test'
+        error: errorMessage
       });
       setIsRunning(false);
-      toast.error(`Test execution error: ${error.message}`, { id: 'test-execution' });
+      toast.error(`Test execution error: ${errorMessage}`, { id: 'test-execution' });
     }
   };
 
-  const extractStepsFromScript = (script: string): any[] => {
+  const extractStepsFromScript = (script: string): Array<{ step_number: number; action: string; expected: string }> => {
     // Extract steps from Playwright script for display
-    const steps: any[] = [];
+    const steps: Array<{ step_number: number; action: string; expected: string }> = [];
     const lines = script.split('\n');
     
     lines.forEach((line, index) => {
@@ -196,6 +197,7 @@ export default function TestRunner({ script, workflowName }: TestRunnerProps) {
               onClick={executeTest}
               disabled={isRunning || !script}
               className="flex-1"
+              aria-label={isRunning ? 'Test is currently running' : 'Run test'}
             >
               {isRunning ? (
                 <>
@@ -263,7 +265,7 @@ export default function TestRunner({ script, workflowName }: TestRunnerProps) {
                 </div>
               )}
 
-              {(result.screenshots && result.screenshots.length > 0) || result.video || result.trace && (
+              {((result.screenshots && result.screenshots.length > 0) || result.video || result.trace) && (
                 <div>
                   <p className="text-sm font-medium mb-2">Artifacts</p>
                   <div className="flex flex-wrap gap-2">

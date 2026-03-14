@@ -47,7 +47,7 @@ import {
 interface TabConfig {
   id: MobileTab;
   label: string;
-  icon: React.FC<any>;
+  icon: React.FC<{ className?: string }>;
   description: string;
 }
 

@@ -9,6 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { toast } from 'sonner';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -107,7 +108,17 @@ export function ReleasesTabPanel({
                           >
                             <Edit className="w-4 h-4 mr-2" /> Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-foreground focus:bg-secondary">
+                          <DropdownMenuItem
+                            className="text-foreground focus:bg-secondary"
+                            onClick={() => {
+                              onEditRelease({
+                                ...release,
+                                id: '',
+                                name: `${release.name} (Copy)`,
+                              });
+                              toast.info(`Duplicating release: ${release.name}`);
+                            }}
+                          >
                             <Copy className="w-4 h-4 mr-2" /> Duplicate
                           </DropdownMenuItem>
                           <DropdownMenuSeparator className="bg-secondary" />

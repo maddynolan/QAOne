@@ -36,12 +36,16 @@ export function saveEnvironmentsToLocalStorage(envs: any[]) {
 }
 
 /**
- * Save an environment to the database (best-effort, silently fails).
+ * Save an environment to the database (best-effort, logs on failure).
+ * Returns true if saved successfully, false otherwise.
  */
-export async function saveEnvironmentToDb(env: any) {
+export async function saveEnvironmentToDb(env: any): Promise<boolean> {
   try {
     const envId = env.environment_id || env.id;
-    if (!envId || !env.name) return; // Skip invalid environments
+    if (!envId || !env.name) {
+      console.warn('[EnvPersistence] Skipping invalid environment (missing id or name):', env);
+      return false;
+    }
     const payload = {
       id: envId,
       name: env.name,
@@ -58,14 +62,23 @@ export async function saveEnvironmentToDb(env: any) {
     });
     // If 409 Conflict (already exists), try PUT to update
     if (resp.status === 409 || resp.status === 422) {
-      await fetch(`${API_BASE_URL}/api/db/environments/${envId}`, {
+      const putResp = await fetch(`${API_BASE_URL}/api/db/environments/${envId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      }).catch(() => {});
+      });
+      if (!putResp.ok) {
+        console.warn(`[EnvPersistence] PUT update failed for env "${env.name}" (HTTP ${putResp.status})`);
+        return false;
+      }
+    } else if (!resp.ok) {
+      console.warn(`[EnvPersistence] POST create failed for env "${env.name}" (HTTP ${resp.status})`);
+      return false;
     }
-  } catch {
-    // Silently ignore -- envs work from localStorage as fallback
+    return true;
+  } catch (err) {
+    console.warn('[EnvPersistence] DB save failed for env (using localStorage fallback):', env.name, err);
+    return false;
   }
 }
 
@@ -109,13 +122,20 @@ export async function loadEnvironments(
         envsToMigrate.push(p);
       }
     }
-    // Migrate up to 5 environments to DB in the background (sequential, not parallel)
+    // Migrate up to 5 environments to DB in the background (sequential, bounded)
     if (envsToMigrate.length > 0) {
-      (async () => {
+      const migrateEnvs = async () => {
+        let successCount = 0;
         for (const env of envsToMigrate.slice(0, 5)) {
-          try { await saveEnvironmentToDb(env); } catch (err) { console.warn('[EnvPersistence] DB migration failed for env:', env.name, err); }
+          const ok = await saveEnvironmentToDb(env);
+          if (ok) successCount++;
         }
-      })();
+        if (successCount > 0) {
+          console.info(`[EnvPersistence] Migrated ${successCount}/${envsToMigrate.length} environments to DB`);
+        }
+      };
+      // Fire-and-forget but with proper error boundary
+      migrateEnvs().catch(err => console.warn('[EnvPersistence] Background migration failed:', err));
     }
 
     if (allEnvs.length > 0) {

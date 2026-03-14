@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { RecordedAction } from '@/modules/recorder/types/recorder.types';
+import type { RecordedAction, StepResult } from '@/modules/recorder/types/recorder.types';
 import {
   getDisplayLabel, getDisplayDescription, looksLikeFieldValue,
   getFieldIdentity, areSameFillField,
@@ -39,13 +39,13 @@ import ManualAssistCard from '@/modules/recorder/components/ManualAssistCard';
 
 export interface TestExecutionResultData {
   status: string;
-  stepResults: any[];
+  stepResults: StepResult[];
   currentStep?: number;
   totalSteps?: number;
   error?: string;
   failedStepIndex?: number;
   selectedScreenshot?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface TestResultsDialogProps {
@@ -60,8 +60,8 @@ export interface TestResultsDialogProps {
   pausedAtStep: number | null;
   stepByStepMode: boolean;
   toggleStepByStepMode: () => void;
-  editingPausedStep: any;
-  updatePausedStepField: (field: string, value: any) => void;
+  editingPausedStep: RecordedAction | null;
+  updatePausedStepField: (field: string, value: string) => void;
   failureCardStepIndex: number | null;
   setFailureCardStepIndex: (idx: number | null) => void;
   // AI state
@@ -74,7 +74,7 @@ export interface TestResultsDialogProps {
   manualAssistStep: number | null;
   setManualAssistStep: (v: number | null) => void;
   setAutoFixResults: React.Dispatch<React.SetStateAction<Map<number, { success: boolean; message: string }>>>;
-  falsePositiveSteps: Map<string, any>;
+  falsePositiveSteps: Map<string, { reason?: string; screenshot?: string | null; [key: string]: unknown }>;
   flakyStepIds: Set<string>;
   currentTestId: string;
   // Handlers
@@ -90,7 +90,15 @@ export interface TestResultsDialogProps {
   handleRefreshSuggestions: () => void;
   markStepAsFalsePositive: (idx: number, screenshot: string | null, reason?: string) => void;
   unmarkFalsePositive: (actionId: string) => void;
-  explainFailureApi: (params: any) => Promise<any>;
+  explainFailureApi: (params: {
+    test_id: string;
+    step_id: string;
+    step_index?: number;
+    step_label?: string;
+    error_message: string;
+    step_info?: Record<string, unknown>;
+    screenshot_b64?: string | null;
+  }) => Promise<FailureExplanation>;
   switchToStepTabAndRefresh: (idx: number) => void;
   setEditingActionIndex: (idx: number | null) => void;
   setRightPanelTab: (tab: string) => void;

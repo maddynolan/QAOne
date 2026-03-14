@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import type { Defect, TestRun } from '../types/test-repository.types';
 
 interface CreateDefectFormProps {
-  testCases: any[];
+  testCases: Array<{ id: string; name: string }>;
   testRuns: TestRun[];
   initialDefect?: Defect;
   onSubmit: (defect: Defect) => void;
@@ -108,7 +108,7 @@ export function CreateDefectForm({
           <label className="text-sm text-muted-foreground mb-1 block">Severity</label>
           <select
             value={severity}
-            onChange={(e) => setSeverity(e.target.value as any)}
+            onChange={(e) => setSeverity(e.target.value as Defect['severity'])}
             className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"
           >
             <option value="critical">S1 - Critical</option>
@@ -121,7 +121,7 @@ export function CreateDefectForm({
           <label className="text-sm text-muted-foreground mb-1 block">Priority</label>
           <select
             value={priority}
-            onChange={(e) => setPriority(e.target.value as any)}
+            onChange={(e) => setPriority(e.target.value as Defect['priority'])}
             className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"
           >
             <option value="critical">P1 - Critical</option>
@@ -134,7 +134,7 @@ export function CreateDefectForm({
           <label className="text-sm text-muted-foreground mb-1 block">Status</label>
           <select
             value={status}
-            onChange={(e) => setStatus(e.target.value as any)}
+            onChange={(e) => setStatus(e.target.value as Defect['status'])}
             className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"
           >
             <option value="new">New</option>
@@ -151,7 +151,7 @@ export function CreateDefectForm({
           <label className="text-sm text-muted-foreground mb-1 block">Type</label>
           <select
             value={type}
-            onChange={(e) => setType(e.target.value as any)}
+            onChange={(e) => setType(e.target.value as Defect['type'])}
             className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"
           >
             <option value="bug">Bug</option>

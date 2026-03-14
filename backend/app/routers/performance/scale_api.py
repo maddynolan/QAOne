@@ -146,10 +146,10 @@ async def health_check():
             "database": "connected",
             "counts": summary
         }
-    except Exception as e:
+    except Exception:
         return {
             "status": "unhealthy",
-            "error": str(e)
+            "error": "Health check failed"
         }
 
 

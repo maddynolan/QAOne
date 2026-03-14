@@ -108,7 +108,17 @@ export function SuitesTabPanel({
                           >
                             <Edit className="w-4 h-4 mr-2" /> Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-foreground focus:bg-secondary">
+                          <DropdownMenuItem
+                            className="text-foreground focus:bg-secondary"
+                            onClick={() => {
+                              onEditSuite({
+                                ...suite,
+                                id: '',
+                                name: `${suite.name} (Copy)`,
+                              });
+                              toast.info(`Duplicating suite: ${suite.name}`);
+                            }}
+                          >
                             <Copy className="w-4 h-4 mr-2" /> Duplicate
                           </DropdownMenuItem>
                           <DropdownMenuSeparator className="bg-secondary" />

@@ -183,7 +183,7 @@ export default function PlaywrightRecorderPage() {
   // Network capture toggles for Load/API testing
   const [captureForLoadTest, setCaptureForLoadTest] = useState(false);
   const [captureForApiTest, setCaptureForApiTest] = useState(false);
-  const [capturedNetworkRequests, setCapturedNetworkRequests] = useState<any[]>([]);
+  const [capturedNetworkRequests, setCapturedNetworkRequests] = useState<Array<{ url: string; method: string; status?: number; headers?: Record<string, string> }>>([]);
   
   // Mobile device emulation - 50+ devices
   const [selectedMobileDevice, setSelectedMobileDevice] = useState<string>('desktop');
@@ -411,16 +411,18 @@ export default function PlaywrightRecorderPage() {
         });
       }
     }).catch(() => {
-      // Silent fail — in-memory flow still works
+      // Non-critical: backend unavailable — in-memory flow still works
     });
-    
+
     // Also load flaky step data
     getFlakyStepsApi(currentTestId).then((flakySteps) => {
       if (flakySteps && flakySteps.length > 0) {
         const ids = new Set(flakySteps.filter(s => s.is_flaky).map(s => s.step_id));
         setFlakyStepIds(ids);
       }
-    }).catch(() => {});
+    }).catch(() => {
+      // Non-critical: flaky step data unavailable
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);  // Run once on mount
   
@@ -1565,9 +1567,11 @@ export default function PlaywrightRecorderPage() {
           const tc = JSON.parse(localStorage.getItem(key) || '{}');
           if (tc.name === updatedTestCase.name && tc.id !== updatedTestCase.id) {
             localStorage.removeItem(key);
-            console.log(`[Recorder] Removed duplicate unified entry: ${key}`);
+            if (import.meta.env.DEV) console.log(`[Recorder] Removed duplicate unified entry: ${key}`);
           }
-        } catch (e) {}
+        } catch {
+            // Non-critical: duplicate localStorage entry could not be parsed — skip it
+          }
       }
       
       // Also update backend (PostgreSQL) if available
@@ -1584,7 +1588,7 @@ export default function PlaywrightRecorderPage() {
           })
         });
         if (backendResponse.ok) {
-          console.log(`[Recorder] Updated test case ${updatedTestCase.id} in PostgreSQL backend`);
+          if (import.meta.env.DEV) console.log(`[Recorder] Updated test case ${updatedTestCase.id} in PostgreSQL backend`);
         } else {
           console.warn(`[Recorder] PostgreSQL update failed with status: ${backendResponse.status}`);
         }
@@ -1606,7 +1610,7 @@ export default function PlaywrightRecorderPage() {
           })
         });
         if (scaleResponse.ok) {
-          console.log(`[Recorder] Updated test case ${updatedTestCase.id} in SQLite scale DB`);
+          if (import.meta.env.DEV) console.log(`[Recorder] Updated test case ${updatedTestCase.id} in SQLite scale DB`);
         }
       } catch (e) {
         // SQLite update is optional - don't warn if not available
@@ -1622,15 +1626,17 @@ export default function PlaywrightRecorderPage() {
       });
       
       // Log detailed step info for debugging
-      console.log('[Recorder] Merged test saved:', updatedTestCase.id, 'status:', automationStatus, 'steps:', updatedTestCase.steps?.length);
-      console.log('[Recorder] Step details:', updatedTestCase.steps?.map((s, i) => ({
-        idx: i,
-        type: s.type,
-        qword: s.qword,
-        hasArgs: !!s.args,
-        hasSelector: !!s.selector || !!s.selectorObj,
-        name: s.name?.substring(0, 30)
-      })));
+      if (import.meta.env.DEV) {
+        console.log('[Recorder] Merged test saved:', updatedTestCase.id, 'status:', automationStatus, 'steps:', updatedTestCase.steps?.length);
+        console.log('[Recorder] Step details:', updatedTestCase.steps?.map((s, i) => ({
+          idx: i,
+          type: s.type,
+          qword: s.qword,
+          hasArgs: !!s.args,
+          hasSelector: !!s.selector || !!s.selectorObj,
+          name: s.name?.substring(0, 30)
+        })));
+      }
       toast.success(`Merged ${stepsWithAutomation.length} automated steps into "${selectedTestCase.name}" (${automationStatus})`);
       setShowMergePreview(false);
       setSelectedTestCase(null);
@@ -1713,7 +1719,7 @@ export default function PlaywrightRecorderPage() {
           const combined = [...deduplicatedRecorded, ...manualActions].sort((a, b) => 
             (a.timestamp || 0) - (b.timestamp || 0)
           );
-          console.log(`[Recorder] Stopped: ${finalActions?.length} -> ${deduplicatedRecorded.length} deduplicated + ${manualActions.length} manual`);
+          if (import.meta.env.DEV) console.log(`[Recorder] Stopped: ${finalActions?.length} -> ${deduplicatedRecorded.length} deduplicated + ${manualActions.length} manual`);
           return combined;
         }
         return prev;
@@ -1725,7 +1731,7 @@ export default function PlaywrightRecorderPage() {
     // Handle actions-reordered: replace entire actions list with correctly ordered list
     const unsubRefresh = flowstral.on('playwright-recorder-actions-refresh', ({ actions: reorderedActions }: { actions: RecordedAction[] }) => {
       if (reorderedActions?.length > 0) {
-        console.log(`[Recorder] Actions reordered, refreshing list (${reorderedActions.length} actions)`);
+        if (import.meta.env.DEV) console.log(`[Recorder] Actions reordered, refreshing list (${reorderedActions.length} actions)`);
         setActions(reorderedActions);
       }
     });
@@ -1746,7 +1752,7 @@ export default function PlaywrightRecorderPage() {
       const unsubAction = electronAPI.on('action-recorded', (action: RecordedAction) => {
         // Filter out garbage actions during recording (React internals, imports, etc.)
         if (isGarbageAction(action)) {
-          console.log('[Record] BLOCKED garbage action:', action.description?.slice(0, 50));
+          if (import.meta.env.DEV) console.log('[Record] BLOCKED garbage action:', action.description?.slice(0, 50));
           return;
         }
         setActions(prev => [...prev, action]);
@@ -2120,7 +2126,7 @@ export default function PlaywrightRecorderPage() {
           return !url.match(/\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)(\?|$)/i);
         });
         setCapturedNetworkRequests(filteredRequests);
-        console.log(`[Recorder] Captured ${filteredRequests.length} network requests`);
+        if (import.meta.env.DEV) console.log(`[Recorder] Captured ${filteredRequests.length} network requests`);
       }
       
       // Merge recorded actions with manually added ones (SF Tools, Test Helpers, etc.)
@@ -2148,7 +2154,7 @@ export default function PlaywrightRecorderPage() {
           
           if (manualActions.length === 0) {
             // No manual actions, just use deduplicated recorded
-            console.log(`[Recorder] Stop: ${recordedActions.length} -> ${deduplicatedRecorded.length} deduplicated`);
+            if (import.meta.env.DEV) console.log(`[Recorder] Stop: ${recordedActions.length} -> ${deduplicatedRecorded.length} deduplicated`);
             return deduplicatedRecorded.length > 0 ? deduplicatedRecorded : prev;
           }
           
@@ -2161,7 +2167,7 @@ export default function PlaywrightRecorderPage() {
             (a.timestamp || 0) - (b.timestamp || 0)
           );
           
-          console.log(`[Recorder] Stop: ${recordedActions.length} -> ${recordedOnly.length} deduplicated + ${manualActions.length} manual`);
+          if (import.meta.env.DEV) console.log(`[Recorder] Stop: ${recordedActions.length} -> ${recordedOnly.length} deduplicated + ${manualActions.length} manual`);
           return combined;
         });
       }
@@ -2431,26 +2437,26 @@ const handleExportToBuilder = async () => {
             fieldName = fieldNormalizations[fieldName];
           }
           
-          console.log(`[Recorder Export] Fill ${i}: fieldName="${fieldName}" from args[0]="${action.args?.[0]}" fieldLabel="${(action as any).fieldLabel}"`);
-          
+          if (import.meta.env.DEV) console.log(`[Recorder Export] Fill ${i}: fieldName="${fieldName}" from args[0]="${action.args?.[0]}" fieldLabel="${(action as any).fieldLabel}"`);
+
           if (fieldName && fieldName !== 'input') {
             // Check if we've seen this field before
             const existingIdx = seenFillFields.get(fieldName);
             if (existingIdx !== undefined) {
               // Replace with this one (later fill has more complete value)
-              console.log(`[Recorder Export] ★ DEDUPING fill for "${fieldName}" - replacing index ${existingIdx}`);
+              if (import.meta.env.DEV) console.log(`[Recorder Export] DEDUPING fill for "${fieldName}" - replacing index ${existingIdx}`);
               deduplicatedActions[existingIdx] = action;
               continue; // Don't add again
             }
             seenFillFields.set(fieldName, deduplicatedActions.length);
-            console.log(`[Recorder Export] First fill for "${fieldName}" at index ${deduplicatedActions.length}`);
+            if (import.meta.env.DEV) console.log(`[Recorder Export] First fill for "${fieldName}" at index ${deduplicatedActions.length}`);
           }
         }
-        
+
         deduplicatedActions.push(action);
       }
-      
-      console.log(`[Recorder Export] Deduplicated: ${actions.length} -> ${deduplicatedActions.length} actions`);
+
+      if (import.meta.env.DEV) console.log(`[Recorder Export] Deduplicated: ${actions.length} -> ${deduplicatedActions.length} actions`);
       
       // Build a proper test case object with deduplicated actions
       const testCase = {
@@ -2517,9 +2523,11 @@ const handleExportToBuilder = async () => {
         networkData: (captureForLoadTest || captureForApiTest) ? capturedNetworkRequests : undefined,
       };
       
-      console.log('[Recorder] Exporting test case with', testCase.steps.length, 'steps');
-      console.log('[Recorder] Tags:', testCase.tags);
-      console.log('[Recorder] Network requests:', testCase.networkData?.length || 0);
+      if (import.meta.env.DEV) {
+        console.log('[Recorder] Exporting test case with', testCase.steps.length, 'steps');
+        console.log('[Recorder] Tags:', testCase.tags);
+        console.log('[Recorder] Network requests:', testCase.networkData?.length || 0);
+      }
 
       if (electronAPI?.exportToTestBuilder) {
         await electronAPI.exportToTestBuilder(testCase);
@@ -3595,16 +3603,16 @@ const handleExportToBuilder = async () => {
           onElementPicked={(element) => {
             // Immediately save the picked element - update selectorObj.manualOverride for playback!
             if (editingActionIndex === null) return;
-            console.log('[onElementPicked] Saving manual fix:', element);
+            if (import.meta.env.DEV) console.log('[onElementPicked] Saving manual fix:', element);
             setActions(prev => prev.map((action, idx) => {
               if (idx !== editingActionIndex) return action;
               const newSelector = element.selector || action.selectorObj?.manualOverride;
               const newText = element.text || action.selectorObj?.text;
-              console.log('[onElementPicked] Updating action:', { 
-                idx, 
-                newSelector, 
+              if (import.meta.env.DEV) console.log('[onElementPicked] Updating action:', {
+                idx,
+                newSelector,
                 newText,
-                selectorType: element.selectorType 
+                selectorType: element.selectorType
               });
               return {
                 ...action,
@@ -3665,7 +3673,7 @@ const handleExportToBuilder = async () => {
           actionIndex={editingActionIndex || 0}
           onSave={(updates) => {
             if (editingActionIndex === null) return;
-            console.log('[ElementRepairWizard onSave] Saving:', updates);
+            if (import.meta.env.DEV) console.log('[ElementRepairWizard onSave] Saving:', updates);
             setActions(prev => prev.map((action, idx) => {
               if (idx !== editingActionIndex) return action;
               const newSelector = updates.manualSelector || action.selectorObj?.manualOverride;

@@ -361,9 +361,17 @@ export default function UnifiedWorkflowEditor() {
   });
 
   // Test history
-  const [testHistory, setTestHistory] = useState<any[]>(() => {
-    const saved = localStorage.getItem('unified_test_history');
-    return saved ? JSON.parse(saved) : [];
+  const [testHistory, setTestHistory] = useState<Array<{ id: string; name: string; status: string; timestamp: string; duration?: number }>>(() => {
+    try {
+      const saved = localStorage.getItem('unified_test_history');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+    } catch (e) {
+      console.warn('[Builder] Failed to parse test history from localStorage:', e);
+    }
+    return [];
   });
 
   // Selected step
@@ -774,9 +782,9 @@ export default function UnifiedWorkflowEditor() {
             correlations: networkData.correlations || [],
             statistics: networkData.statistics || {
               totalRequests: networkData.requests?.length || 0,
-              successfulRequests: networkData.requests?.filter((r: any) => r.statusCode >= 200 && r.statusCode < 400).length || 0,
-              failedRequests: networkData.requests?.filter((r: any) => r.statusCode >= 400).length || 0,
-              avgDuration: Math.round((networkData.requests || []).reduce((sum: number, r: any) => sum + (r.duration || 0), 0) / (networkData.requests?.length || 1)),
+              successfulRequests: networkData.requests?.filter((r: Record<string, unknown>) => (r.statusCode as number) >= 200 && (r.statusCode as number) < 400).length || 0,
+              failedRequests: networkData.requests?.filter((r: Record<string, unknown>) => (r.statusCode as number) >= 400).length || 0,
+              avgDuration: Math.round((networkData.requests || []).reduce((sum: number, r: Record<string, unknown>) => sum + ((r.duration as number) || 0), 0) / (networkData.requests?.length || 1)),
               p95Duration: 0,
             },
             linkedActions: networkData.linkedActions || [],
@@ -1111,7 +1119,7 @@ export default function UnifiedWorkflowEditor() {
         }
         
         // PRIORITY 2B: Try to parse test_data as JSON to get the original step
-        let originalStep: any = null;
+        let originalStep: Record<string, unknown> | null = null;
         if (step.test_data) {
           try {
             originalStep = typeof step.test_data === 'string' 
@@ -1224,9 +1232,9 @@ export default function UnifiedWorkflowEditor() {
       
       setSavedTestCaseId(testCaseId);
       toast.success(`Loaded "${foundCase.name || foundCase.title}" with ${convertedSteps.length} steps`);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error loading test case:', error);
-      toast.error(`Error loading test case: ${error.message}`);
+      toast.error(`Error loading test case: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }, []);
 
@@ -1267,7 +1275,7 @@ export default function UnifiedWorkflowEditor() {
 
   // Convert recorded events to steps (from raw events)
   // PRESERVES selectorObj with fallbacks - same as Suggest feature
-  const convertRecordedEvents = (events: any[], startUrl?: string): TestStep[] => {
+  const convertRecordedEvents = (events: Record<string, unknown>[], startUrl?: string): TestStep[] => {
     console.log('[Builder] Converting events:', events.length, 'startUrl:', startUrl);
     const steps: TestStep[] = [];
 
@@ -1311,7 +1319,7 @@ export default function UnifiedWorkflowEditor() {
 
   // Convert workflow nodes (from sidepanel)
   // PRESERVES selectorObj with fallbacks - same as Suggest feature
-  const convertWorkflowNodes = (nodes: any[], startUrl?: string): TestStep[] => {
+  const convertWorkflowNodes = (nodes: Record<string, unknown>[], startUrl?: string): TestStep[] => {
     console.log('[Builder] Converting nodes:', nodes.length, 'startUrl:', startUrl);
     const steps: TestStep[] = [];
 
@@ -1361,7 +1369,7 @@ export default function UnifiedWorkflowEditor() {
     return steps;
   };
 
-  const generateNodeName = (node: any): string => {
+  const generateNodeName = (node: Record<string, unknown>): string => {
     const nodeData = node.data || node;
     const type = node.type || nodeData.type || 'click';
     
@@ -1939,15 +1947,17 @@ export default function UnifiedWorkflowEditor() {
       const rawSteps = foundCase.steps || [];
       return rawSteps.map((step: any, index: number) => {
         // Try to parse test_data
-        let originalStep: any = null;
+        let originalStep: Record<string, unknown> | null = null;
         if (step.test_data) {
           try {
-            originalStep = typeof step.test_data === 'string' 
-              ? JSON.parse(step.test_data) 
+            originalStep = typeof step.test_data === 'string'
+              ? JSON.parse(step.test_data)
               : step.test_data;
-          } catch (e) {}
+          } catch (e) {
+            console.warn(`[Builder] Failed to parse test_data for precondition step ${index}:`, e);
+          }
         }
-        
+
         if (originalStep && originalStep.type) {
           return {
             ...originalStep,
@@ -2025,7 +2035,7 @@ export default function UnifiedWorkflowEditor() {
       } : null;
 
       // Create merged test case for execution
-      const mergedTestCase: any = {
+      const mergedTestCase: Record<string, unknown> = {
         ...testCase,
         steps: allSteps,
         preconditions: [], // Clear preconditions since we're inlining them
@@ -2211,7 +2221,7 @@ export default function UnifiedWorkflowEditor() {
             }
 
             return;
-          } catch (fastPathError: any) {
+          } catch (fastPathError) {
             // Cleanup subscriptions on error
             if (stepStartUnsub) stepStartUnsub();
             if (stepCompleteUnsub) stepCompleteUnsub();
@@ -2509,9 +2519,9 @@ export default function UnifiedWorkflowEditor() {
           }
         }
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('[Test Run] Execution error:', error);
-      const errorMsg = error?.message || String(error) || 'Unknown error';
+      const errorMsg = error instanceof Error ? error.message : String(error) || 'Unknown error';
       const errorLogs = [
         `Execution Error: ${errorMsg}`,
         '',
@@ -2655,7 +2665,7 @@ export default function UnifiedWorkflowEditor() {
   /**
    * Handle save from Quick Re-record modal
    */
-  const handleQuickRerecordSave = useCallback((updates: { manualSelector?: string; manualText?: string; selectorObj?: any }) => {
+  const handleQuickRerecordSave = useCallback((updates: { manualSelector?: string; manualText?: string; selectorObj?: Record<string, string> }) => {
     if (quickRerecordStepIndex === null) return;
     
     setTestCase(prev => ({
@@ -2727,8 +2737,8 @@ export default function UnifiedWorkflowEditor() {
           return { success: true };
         }
         return { success: false, error: result?.error || 'Failed to re-open browser' };
-      } catch (e: any) {
-        return { success: false, error: e.message || 'Failed to re-open browser' };
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Failed to re-open browser' };
       }
     }
     return { success: false, error: 'Browser re-open not available' };
@@ -2743,8 +2753,8 @@ export default function UnifiedWorkflowEditor() {
       try {
         const result = await flowstral.playwrightRecorder.retryFailedStep(updates);
         return result;
-      } catch (e: any) {
-        return { success: false, error: e.message || 'Retry failed' };
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Retry failed' };
       }
     }
     return { success: false, error: 'Retry function not available' };
@@ -2765,8 +2775,8 @@ export default function UnifiedWorkflowEditor() {
           toast.success('Test resumed successfully!');
         }
         return result;
-      } catch (e: any) {
-        return { success: false, error: e.message || 'Resume failed' };
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Resume failed' };
       }
     }
     return { success: false, error: 'Resume function not available' };
@@ -2785,8 +2795,8 @@ export default function UnifiedWorkflowEditor() {
           return { success: true };
         }
         return result;
-      } catch (e: any) {
-        return { success: false, error: e.message };
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Unknown error' };
       }
     }
     return { success: false };
@@ -2954,7 +2964,9 @@ export default function UnifiedWorkflowEditor() {
               localCases[idx].id = data.id;
               localStorage.setItem('test_cases', JSON.stringify(localCases));
             }
-          } catch { /* ignore */ }
+          } catch (localUpdateErr) {
+            console.warn('[SaveAs] Could not update localStorage with backend ID:', localUpdateErr);
+          }
 
           setTestCase(prev => ({ ...prev, name: newName }));
           setSavedTestCaseId(data.id);
@@ -3863,18 +3875,18 @@ export default function UnifiedWorkflowEditor() {
                                 const entries = harData?.log?.entries || [];
                                 
                                 if (entries.length > 0) {
-                                  const requests = entries.map((entry: any, idx: number) => ({
+                                  const requests = entries.map((entry: Record<string, unknown>, idx: number) => ({
                                     requestId: `har_${idx}`,
-                                    url: entry.request?.url || '',
-                                    method: entry.request?.method || 'GET',
-                                    statusCode: entry.response?.status || 0,
+                                    url: (entry.request as Record<string, unknown>)?.url || '',
+                                    method: (entry.request as Record<string, unknown>)?.method || 'GET',
+                                    statusCode: (entry.response as Record<string, unknown>)?.status || 0,
                                     duration: entry.time || 0,
                                     type: 'fetch',
-                                    requestHeaders: (entry.request?.headers || []).reduce((acc: any, h: any) => {
+                                    requestHeaders: (((entry.request as Record<string, unknown>)?.headers || []) as Array<{name: string; value: string}>).reduce((acc: Record<string, string>, h) => {
                                       acc[h.name] = h.value;
                                       return acc;
                                     }, {}),
-                                    responseHeaders: (entry.response?.headers || []).reduce((acc: any, h: any) => {
+                                    responseHeaders: (((entry.response as Record<string, unknown>)?.headers || []) as Array<{name: string; value: string}>).reduce((acc: Record<string, string>, h) => {
                                       acc[h.name] = h.value;
                                       return acc;
                                     }, {}),
@@ -3886,9 +3898,9 @@ export default function UnifiedWorkflowEditor() {
                                     correlations: [],
                                     statistics: {
                                       totalRequests: requests.length,
-                                      successfulRequests: requests.filter((r: any) => r.statusCode >= 200 && r.statusCode < 400).length,
-                                      failedRequests: requests.filter((r: any) => r.statusCode >= 400).length,
-                                      avgDuration: Math.round(requests.reduce((sum: number, r: any) => sum + (r.duration || 0), 0) / requests.length),
+                                      successfulRequests: requests.filter((r) => (r.statusCode as number) >= 200 && (r.statusCode as number) < 400).length,
+                                      failedRequests: requests.filter((r) => (r.statusCode as number) >= 400).length,
+                                      avgDuration: Math.round(requests.reduce((sum: number, r) => sum + ((r.duration as number) || 0), 0) / requests.length),
                                       p95Duration: 0,
                                     },
                                     linkedActions: [],

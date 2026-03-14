@@ -22,10 +22,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { API_BASE_URL } from "@/lib/api-config";
+
+interface TestRunResultSummary {
+  passed?: number;
+  failed?: number;
+  total?: number;
+  test_results?: Array<Record<string, unknown>>;
+}
 
 interface TestRun {
   id: string;
@@ -33,7 +40,7 @@ interface TestRun {
   status: string;
   suite_id?: string;
   test_case_ids: string[];
-  results: any;
+  results: string | TestRunResultSummary | null;
   started_at?: string;
   completed_at?: string;
   created_at: string;
@@ -44,13 +51,10 @@ interface TestRun {
 export default function TestRuns() {
   const [testRuns, setTestRuns] = useState<TestRun[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [deletingRunId, setDeletingRunId] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    loadTestRuns();
-  }, []);
-
-  const loadTestRuns = async () => {
+  const loadTestRuns = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/db/test-runs?limit=100`);
@@ -59,16 +63,21 @@ export default function TestRuns() {
         setTestRuns(Array.isArray(data) ? data : []);
       } else {
         console.error('Failed to load test runs:', response.statusText);
+        toast.error(`Failed to load test runs: ${response.status} ${response.statusText}`);
         setTestRuns([]);
       }
     } catch (error) {
       console.error('Error loading test runs:', error);
-      toast.error('Failed to load test runs');
+      toast.error('Failed to load test runs. Check your network connection.');
       setTestRuns([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadTestRuns();
+  }, [loadTestRuns]);
 
   const createNewTestRun = async () => {
     setIsLoading(true);
@@ -89,7 +98,7 @@ export default function TestRuns() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: `Test Run ${new Date().toLocaleString()}`,
-          test_case_ids: testCases.map((tc: any) => tc.id),
+          test_case_ids: testCases.map((tc: { id: string }) => tc.id),
           browser: 'chromium',
           environment: 'production',
         })
@@ -99,8 +108,9 @@ export default function TestRuns() {
       
       toast.success(`Test run created with ${testCases.length} test case(s)!`);
       await loadTestRuns();
-    } catch (error: any) {
-      toast.error(`Failed to create test run: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to create test run: ${message}`);
     } finally {
       setIsLoading(false);
     }
@@ -128,7 +138,9 @@ export default function TestRuns() {
         try {
           const res = await fetch(`${API_BASE_URL}/api/db/test-cases/${tcId}`);
           if (res.ok) testCaseDetails.push(await res.json());
-        } catch {}
+        } catch (fetchErr) {
+          console.warn(`Failed to fetch test case ${tcId}:`, fetchErr instanceof Error ? fetchErr.message : 'Unknown error');
+        }
       }
 
       if (testCaseDetails.length === 0) {
@@ -142,7 +154,7 @@ export default function TestRuns() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           test_suite: {
-            test_cases: testCaseDetails.map((tc: any) => ({
+            test_cases: testCaseDetails.map((tc: Record<string, any>) => ({
               test_case_id: tc.id,
               title: tc.name || "Test",
               method: tc.metadata?.method || "GET",
@@ -180,29 +192,49 @@ export default function TestRuns() {
 
       toast.success(`Test run completed! ${passed} passed, ${failed} failed`);
       await loadTestRuns();
-    } catch (error: any) {
-      toast.error(`Failed to execute test run: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown execution error';
+      toast.error(`Failed to execute test run: ${message}`);
       // Mark as failed
-      await fetch(`${API_BASE_URL}/api/db/test-runs/${runId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'failed', completed_at: new Date().toISOString() })
-      }).catch(() => {});
+      try {
+        await fetch(`${API_BASE_URL}/api/db/test-runs/${runId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'failed', completed_at: new Date().toISOString() })
+        });
+      } catch (updateErr) {
+        console.error('Failed to update run status after error:', updateErr instanceof Error ? updateErr.message : 'Unknown error');
+      }
     } finally {
       setIsLoading(false);
       await loadTestRuns();
     }
   };
 
-  const deleteTestRun = async (runId: string) => {
+  const deleteTestRun = useCallback(async (runId: string) => {
+    const run = testRuns.find(r => r.id === runId);
+    const runName = run?.name || runId;
+
+    // Use toast-based confirmation instead of blocking window.confirm
+    if (!window.confirm(`Are you sure you want to delete "${runName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingRunId(runId);
     try {
-      await fetch(`${API_BASE_URL}/api/db/test-runs/${runId}`, { method: 'DELETE' });
+      const response = await fetch(`${API_BASE_URL}/api/db/test-runs/${runId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      }
       setTestRuns(prev => prev.filter(r => r.id !== runId));
       toast.success('Test run deleted');
-    } catch {
+    } catch (error) {
+      console.error('Failed to delete test run:', error instanceof Error ? error.message : 'Unknown error');
       toast.error('Failed to delete test run');
+    } finally {
+      setDeletingRunId(null);
     }
-  };
+  }, [testRuns]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -224,12 +256,15 @@ export default function TestRuns() {
     }
   };
 
-  const parseResults = (results: any) => {
+  const parseResults = useCallback((results: string | TestRunResultSummary | null): TestRunResultSummary | null => {
     if (!results) return null;
     try {
-      return typeof results === 'string' ? JSON.parse(results) : results;
-    } catch { return null; }
-  };
+      return typeof results === 'string' ? JSON.parse(results) as TestRunResultSummary : results;
+    } catch (parseErr) {
+      console.warn('Failed to parse test run results:', parseErr instanceof Error ? parseErr.message : 'Invalid JSON');
+      return null;
+    }
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -239,7 +274,7 @@ export default function TestRuns() {
           <p className="text-muted-foreground mt-1">Execute and monitor test runs - data persists across all users</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={loadTestRuns} disabled={isLoading}>
+          <Button variant="outline" onClick={loadTestRuns} disabled={isLoading} aria-label="Refresh test runs">
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
@@ -356,10 +391,11 @@ export default function TestRuns() {
                         Running...
                       </Badge>
                     )}
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => navigate(`/runs/${run.id}`)}
+                      aria-label={`View details for ${run.name}`}
                     >
                       View Details
                     </Button>
@@ -367,9 +403,11 @@ export default function TestRuns() {
                       variant="ghost"
                       size="sm"
                       onClick={() => deleteTestRun(run.id)}
+                      disabled={deletingRunId === run.id}
                       className="text-destructive hover:text-destructive/80"
+                      aria-label={`Delete test run ${run.name}`}
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Trash2 className={`h-3 w-3 ${deletingRunId === run.id ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
                 </CardContent>

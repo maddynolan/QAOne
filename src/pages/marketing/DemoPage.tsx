@@ -9,7 +9,7 @@ import {
   ArrowRight, Play, Pause, SkipForward, RotateCcw, CheckCircle2,
   MousePointer, Type, Eye, Zap, Database, BarChart3, Shield, Workflow,
   ChevronRight, ChevronLeft, Maximize2, Volume2, VolumeX, Code,
-  Compass, Map, Sparkles, RefreshCw, Target, Smartphone, Wifi, Globe
+  Compass, Map, RefreshCw, Target, Smartphone, Wifi, Globe
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,10 +34,10 @@ function MarketingHeader() {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
               <span className="text-white font-bold text-lg">F</span>
             </div>
-            <span className="text-xl font-bold text-slate-800">Flowstral</span>
+            <span className="text-xl font-bold text-slate-900">Flowstral</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             <Link to="/#features" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Features</Link>
@@ -51,7 +51,7 @@ function MarketingHeader() {
           <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => { trackCTAClick('sign_in', '/demo'); navigate('/signin'); }}>
             Sign In
           </Button>
-          <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => { trackCTAClick('start_free', '/demo'); navigate('/signup'); }}>
+          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => { trackCTAClick('start_free', '/demo'); navigate('/signup'); }}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -590,7 +590,7 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
             <div className="space-y-2 mb-3">
               {[
                 { agent: 'Explorer', action: 'Scanning login page...', icon: Compass, status: animationStep > 0 },
-                { agent: 'Generator', action: 'Creating test steps...', icon: Sparkles, status: animationStep > 2 },
+                { agent: 'Generator', action: 'Creating test steps...', icon: Code, status: animationStep > 2 },
                 { agent: 'Self-Healer', action: 'Optimizing locators...', icon: RefreshCw, status: animationStep > 4 },
               ].map((item, idx) => (
                 <div
@@ -747,7 +747,7 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
   };
 
   return (
-    <div className="relative w-full h-[420px] bg-gradient-to-br from-slate-50 to-white rounded-2xl overflow-hidden border border-slate-200 shadow-xl">
+    <div className="relative w-full h-[420px] bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-xl">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200">
         <div className="flex items-center gap-3">
@@ -896,15 +896,13 @@ export default function DemoPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-blue-50">
+    <div className="min-h-screen bg-white">
       <MarketingHeader />
 
       {/* Hero */}
       <section className="pt-32 pb-8 px-6">
         <div className="max-w-5xl mx-auto text-center">
-          <Badge className="mb-4 bg-violet-100 text-violet-700 border-violet-200 px-4 py-1.5">
-            <Play className="w-4 h-4 mr-1 inline" /> Interactive Demo
-          </Badge>
+          <p className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4">Interactive Demo</p>
           <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
             See Flowstral in Action
           </h1>
@@ -1027,17 +1025,17 @@ export default function DemoPage() {
       </section>
 
       {/* CTA */}
-      <section className="py-16 px-6 bg-gradient-to-r from-blue-600 to-violet-600">
+      <section className="py-16 px-6 bg-slate-900">
         <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">Ready to Get Started?</h2>
-          <p className="text-white/80 mb-8">
-            Experience the power of Flowstral firsthand. Start your free trial today.
+          <h2 className="text-3xl font-bold text-white mb-4">Start testing for free</h2>
+          <p className="text-slate-400 mb-8">
+            No credit card required. Free tier with no time limit.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Button
               size="lg"
               onClick={() => { trackCTAClick('start_free_trial', '/demo'); navigate('/signup'); }}
-              className="h-12 px-8 bg-white text-violet-600 hover:bg-slate-100 shadow-lg"
+              className="h-12 px-8 bg-white text-slate-900 hover:bg-slate-100"
             >
               Start Free Trial <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
@@ -1045,7 +1043,7 @@ export default function DemoPage() {
               size="lg"
               variant="outline"
               onClick={() => { trackCTAClick('schedule_live_demo', '/demo'); navigate('/contact'); }}
-              className="h-12 px-8 border-white/30 text-white hover:bg-white/10"
+              className="h-12 px-8 border-slate-600 text-white hover:bg-slate-800"
             >
               Schedule Live Demo
             </Button>

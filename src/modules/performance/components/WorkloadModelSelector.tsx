@@ -181,9 +181,10 @@ export default function WorkloadModelSelector({
                     id="wm-dur"
                     type="number"
                     min={1}
+                    max={86400}
                     value={duration}
                     onChange={(e) =>
-                      onDurationChange(parseInt(e.target.value) || 1)
+                      onDurationChange(Math.min(86400, parseInt(e.target.value) || 1))
                     }
                   />
                 </div>
@@ -217,9 +218,10 @@ export default function WorkloadModelSelector({
                     id="wm-iter-pv"
                     type="number"
                     min={1}
+                    max={100000}
                     value={iterations}
                     onChange={(e) =>
-                      onIterationsChange(parseInt(e.target.value) || 1)
+                      onIterationsChange(Math.min(100000, parseInt(e.target.value) || 1))
                     }
                   />
                 </div>
@@ -247,9 +249,10 @@ export default function WorkloadModelSelector({
                     id="wm-iter-si"
                     type="number"
                     min={1}
+                    max={100000}
                     value={iterations}
                     onChange={(e) =>
-                      onIterationsChange(parseInt(e.target.value) || 1)
+                      onIterationsChange(Math.min(100000, parseInt(e.target.value) || 1))
                     }
                   />
                 </div>
@@ -264,9 +267,10 @@ export default function WorkloadModelSelector({
                     id="wm-rate"
                     type="number"
                     min={1}
+                    max={100000}
                     value={arrivalRate ?? 10}
                     onChange={(e) =>
-                      onArrivalRateChange?.(parseInt(e.target.value) || 1)
+                      onArrivalRateChange?.(Math.min(100000, parseInt(e.target.value) || 1))
                     }
                   />
                 </div>
@@ -276,9 +280,10 @@ export default function WorkloadModelSelector({
                     id="wm-dur-ar"
                     type="number"
                     min={1}
+                    max={86400}
                     value={duration}
                     onChange={(e) =>
-                      onDurationChange(parseInt(e.target.value) || 1)
+                      onDurationChange(Math.min(86400, parseInt(e.target.value) || 1))
                     }
                   />
                 </div>

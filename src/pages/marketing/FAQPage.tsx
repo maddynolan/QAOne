@@ -4,9 +4,8 @@
 
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowRight, ChevronDown, Search, HelpCircle, Zap, CreditCard, Shield, Settings, Users, Code } from 'lucide-react';
+import { ArrowRight, ChevronDown, Search, Zap, CreditCard, Shield, Settings, Users, Code } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 // Shared Header
@@ -28,10 +27,10 @@ function MarketingHeader() {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
               <span className="text-white font-bold text-lg">F</span>
             </div>
-            <span className="text-xl font-bold text-slate-800">Flowstral</span>
+            <span className="text-xl font-bold text-slate-900">Flowstral</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             <Link to="/#features" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Features</Link>
@@ -45,7 +44,7 @@ function MarketingHeader() {
           <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
             Sign In
           </Button>
-          <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => navigate('/signup')}>
+          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => navigate('/signup')}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -235,15 +234,13 @@ export default function FAQPage() {
   const currentCategory = filteredCategories.find(cat => cat.id === activeCategory) || filteredCategories[0];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+    <div className="min-h-screen bg-white">
       <MarketingHeader />
 
       {/* Hero */}
       <section className="pt-32 pb-12 px-6">
         <div className="max-w-4xl mx-auto text-center">
-          <Badge className="mb-4 bg-amber-100 text-amber-700 border-0 px-4 py-1.5">
-            <HelpCircle className="w-4 h-4 mr-1 inline" /> Help Center
-          </Badge>
+          <p className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4">Help Center</p>
           <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
             Frequently Asked Questions
           </h1>
@@ -338,10 +335,10 @@ export default function FAQPage() {
       </section>
 
       {/* Still Have Questions */}
-      <section className="py-16 px-6 bg-gradient-to-r from-blue-600 to-violet-600">
+      <section className="py-16 px-6 bg-slate-900">
         <div className="max-w-3xl mx-auto text-center text-white">
-          <h2 className="text-2xl font-bold mb-4">Still Have Questions?</h2>
-          <p className="text-blue-100 mb-8">
+          <h2 className="text-2xl font-bold mb-4">Still have questions?</h2>
+          <p className="text-slate-400 mb-8">
             Our support team is here to help. Reach out and we'll get back to you within 24 hours.
           </p>
           <div className="flex flex-wrap justify-center gap-4">

@@ -11,7 +11,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { trackCTAClick } from '@/lib/web-analytics';
 import {
   ArrowRight, BookOpen, Clock, Tag, Search,
-  ChevronRight, Rocket, ArrowLeft
+  ChevronRight, ArrowLeft
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -114,21 +114,21 @@ export default function BlogPage() {
 
   if (selectedPost) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50">
+      <div className="min-h-screen bg-white">
         {/* Header */}
         <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/50">
           <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
             <Link to="/" className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
                 <span className="text-white font-bold text-lg">F</span>
               </div>
-              <span className="text-xl font-bold text-slate-800">Flowstral</span>
+              <span className="text-xl font-bold text-slate-900">Flowstral</span>
             </Link>
             <div className="flex items-center gap-3">
               <Button variant="ghost" onClick={() => navigate('/blog')}>
                 <ArrowLeft className="w-4 h-4 mr-1" /> All Posts
               </Button>
-              <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => navigate('/signup')}>
+              <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => navigate('/signup')}>
                 Start Free <ArrowRight className="w-4 h-4 ml-1" />
               </Button>
             </div>
@@ -181,15 +181,15 @@ export default function BlogPage() {
   const featured = blogPosts.filter(p => p.featured);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50">
+    <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/50">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
               <span className="text-white font-bold text-lg">F</span>
             </div>
-            <span className="text-xl font-bold text-slate-800">Flowstral</span>
+            <span className="text-xl font-bold text-slate-900">Flowstral</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             <Link to="/#features" className="text-sm text-slate-600 hover:text-slate-900 font-medium">Features</Link>
@@ -200,7 +200,7 @@ export default function BlogPage() {
           </nav>
           <div className="flex items-center gap-3">
             <Button variant="ghost" onClick={() => { trackCTAClick('sign_in', '/blog'); navigate('/signin'); }}>Sign In</Button>
-            <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => { trackCTAClick('start_free', '/blog'); navigate('/signup'); }}>
+            <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => { trackCTAClick('start_free', '/blog'); navigate('/signup'); }}>
               Start Free <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
@@ -210,9 +210,7 @@ export default function BlogPage() {
       {/* Hero */}
       <section className="py-16 px-6">
         <div className="max-w-4xl mx-auto text-center">
-          <Badge className="mb-4 bg-blue-50 text-blue-700 border-blue-200">
-            <BookOpen className="w-3 h-3 mr-1" /> Blog
-          </Badge>
+          <p className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4">Blog</p>
           <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
             QA Insights & Guides
           </h1>
@@ -230,7 +228,7 @@ export default function BlogPage() {
               {featured.map(post => (
                 <div
                   key={post.slug}
-                  className="p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-violet-50 border border-blue-200 cursor-pointer hover:shadow-lg transition-all group"
+                  className="p-6 rounded-2xl bg-slate-50 border border-slate-200 cursor-pointer hover:shadow-md transition-all group"
                   onClick={() => navigate(`/blog/${post.slug}`)}
                 >
                   <Badge className="mb-3 bg-blue-100 text-blue-700 border-0">{post.category}</Badge>
@@ -311,19 +309,19 @@ export default function BlogPage() {
       </section>
 
       {/* CTA */}
-      <section className="py-16 px-6 bg-gradient-to-r from-blue-600 via-violet-600 to-blue-600">
+      <section className="py-16 px-6 bg-slate-900">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-2xl lg:text-3xl font-bold text-white mb-4">
-            Ready to Try What You Just Read About?
+            Try what you just read about
           </h2>
-          <p className="text-blue-100 mb-8">
-            Start free — no credit card, no sales call required.
+          <p className="text-slate-400 mb-8">
+            Free tier available. No credit card required.
           </p>
           <Button
-            className="h-12 px-8 rounded-xl text-lg font-semibold bg-white text-blue-600 hover:bg-blue-50 shadow-lg"
+            className="h-12 px-8 rounded-xl text-lg font-semibold bg-white text-slate-900 hover:bg-slate-100"
             onClick={() => { trackCTAClick('get_started_free', '/blog'); navigate('/signup'); }}
           >
-            <Rocket className="w-5 h-5 mr-2" /> Get Started Free
+            Get Started Free <ArrowRight className="w-5 h-5 ml-2" />
           </Button>
         </div>
       </section>

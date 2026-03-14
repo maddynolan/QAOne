@@ -57,8 +57,13 @@ function buildTimeSeriesData(testData: LiveTestData) {
  */
 function buildHistogramData(responseTimes: number[]) {
   if (responseTimes.length === 0) return [];
-  const max = Math.max(...responseTimes);
-  const min = Math.min(...responseTimes);
+  // Use loop-based min/max to avoid stack overflow with large arrays (>100K elements)
+  let max = -Infinity;
+  let min = Infinity;
+  for (const rt of responseTimes) {
+    if (rt > max) max = rt;
+    if (rt < min) min = rt;
+  }
   const range = max - min || 1;
   const bucketCount = Math.min(20, Math.max(5, Math.ceil(responseTimes.length / 3)));
   const bucketSize = range / bucketCount;

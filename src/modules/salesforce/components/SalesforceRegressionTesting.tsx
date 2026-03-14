@@ -9,7 +9,7 @@
  * 5. Apex Test Automation - Run and track Apex tests
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -117,13 +117,30 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
   
   // Baselines State
   const [baselines, setBaselines] = useState<BaselineSnapshot[]>([]);
-  const [comparisonResult, setComparisonResult] = useState<any>(null);
+  const [comparisonResult, setComparisonResult] = useState<Record<string, unknown> | null>(null);
   
   // Apex Tests State
   const [apexTestClasses, setApexTestClasses] = useState<Array<{ Id: string; Name: string }>>([]);
   const [selectedApexTests, setSelectedApexTests] = useState<Set<string>>(new Set());
   const [apexTestResults, setApexTestResults] = useState<ApexTestResult[]>([]);
   const [apexTestJobId, setApexTestJobId] = useState<string | null>(null);
+
+  // Ref for polling interval cleanup on unmount
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, []);
+
+  /** Escape single quotes in SOQL/Tooling API values to prevent injection */
+  const escapeSoql = (value: string): string => {
+    return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  };
 
   // ========== TEST SUITES ==========
   
@@ -185,7 +202,15 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
     
     setIsLoading(true);
     setMetadataChanges([]);
-    
+
+    // Validate date format to prevent SOQL injection via date input
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(baselineDate)) {
+      toast.error('Invalid date format. Use YYYY-MM-DD.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       // Query recently modified Apex Classes
       const apexQuery = `SELECT Id, Name, LastModifiedDate FROM ApexClass WHERE LastModifiedDate >= ${baselineDate}T00:00:00Z ORDER BY LastModifiedDate DESC LIMIT 50`;
@@ -193,7 +218,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
       
       const changes: MetadataChange[] = [];
       
-      (apexResult.records || []).forEach((record: any) => {
+      (apexResult.records || []).forEach((record: Record<string, string>) => {
         changes.push({
           type: 'ApexClass',
           name: record.Name,
@@ -207,7 +232,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
       const triggerQuery = `SELECT Id, Name, LastModifiedDate FROM ApexTrigger WHERE LastModifiedDate >= ${baselineDate}T00:00:00Z ORDER BY LastModifiedDate DESC LIMIT 50`;
       const triggerResult = await salesforceApi.toolingQuery(triggerQuery);
       
-      (triggerResult.records || []).forEach((record: any) => {
+      (triggerResult.records || []).forEach((record: Record<string, string>) => {
         changes.push({
           type: 'ApexTrigger',
           name: record.Name,
@@ -221,7 +246,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
       const validationQuery = `SELECT Id, ValidationName, LastModifiedDate FROM ValidationRule WHERE LastModifiedDate >= ${baselineDate}T00:00:00Z ORDER BY LastModifiedDate DESC LIMIT 50`;
       const validationResult = await salesforceApi.toolingQuery(validationQuery);
       
-      (validationResult.records || []).forEach((record: any) => {
+      (validationResult.records || []).forEach((record: Record<string, string>) => {
         changes.push({
           type: 'ValidationRule',
           name: record.ValidationName,
@@ -235,7 +260,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
       const flowQuery = `SELECT Id, DeveloperName, LastModifiedDate FROM FlowDefinition WHERE LastModifiedDate >= ${baselineDate}T00:00:00Z ORDER BY LastModifiedDate DESC LIMIT 50`;
       const flowResult = await salesforceApi.toolingQuery(flowQuery);
       
-      (flowResult.records || []).forEach((record: any) => {
+      (flowResult.records || []).forEach((record: Record<string, string>) => {
         changes.push({
           type: 'Flow',
           name: record.DeveloperName,
@@ -248,9 +273,9 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
       setMetadataChanges(changes);
       toast.success(`Found ${changes.length} metadata changes since ${baselineDate}`);
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error detecting changes:', error);
-      toast.error('Failed to detect changes: ' + error.message);
+      toast.error('Failed to detect metadata changes');
     } finally {
       setIsLoading(false);
     }
@@ -284,7 +309,8 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
       
       setBaselines(prev => [...prev, baseline]);
       toast.success('Baseline created successfully');
-    } catch (error: any) {
+    } catch (error: unknown) {
+      console.error('Failed to create baseline:', error);
       toast.error('Failed to create baseline');
     } finally {
       setIsLoading(false);
@@ -302,7 +328,8 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
       const result = await salesforceApi.toolingQuery(query);
       setApexTestClasses(result.records || []);
       toast.success(`Found ${result.records?.length || 0} test classes`);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      console.error('Failed to load test classes:', error);
       toast.error('Failed to load test classes');
     } finally {
       setIsLoading(false);
@@ -330,43 +357,65 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
         method: 'POST',
         body: JSON.stringify(testRequest),
       });
-      
-      const jobId = response;
+
+      const jobId = typeof response === 'string' ? response : String(response);
       setApexTestJobId(jobId);
       toast.success('Apex tests started, polling for results...');
-      
-      // Poll for results
-      let complete = false;
+
+      // Poll for results using interval (non-blocking, cleanable on unmount)
       let attempts = 0;
-      
-      while (!complete && attempts < 60) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        const statusQuery = `SELECT Id, Status, ApexClassId, MethodName, Outcome, Message, StackTrace, RunTime, TestTimestamp FROM ApexTestResult WHERE AsyncApexJobId = '${jobId}'`;
-        const statusResult = await salesforceApi.toolingQuery(statusQuery);
-        
-        if (statusResult.records && statusResult.records.length > 0) {
-          setApexTestResults(statusResult.records);
-          
-          // Check if all tests complete
-          const jobQuery = `SELECT Id, Status FROM AsyncApexJob WHERE Id = '${jobId}'`;
-          const jobResult = await salesforceApi.toolingQuery(jobQuery);
-          
-          if (jobResult.records?.[0]?.Status === 'Completed' || 
-              jobResult.records?.[0]?.Status === 'Failed' ||
-              jobResult.records?.[0]?.Status === 'Aborted') {
-            complete = true;
-          }
-        }
-        
-        attempts++;
+      const MAX_ATTEMPTS = 60;
+      const safeJobId = escapeSoql(jobId);
+
+      // Clear any existing poll
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
       }
-      
-      toast.success('Apex tests completed');
-      
-    } catch (error: any) {
-      toast.error('Failed to run Apex tests: ' + error.message);
-    } finally {
+
+      pollIntervalRef.current = setInterval(async () => {
+        attempts++;
+
+        try {
+          const statusQuery = `SELECT Id, Status, ApexClassId, MethodName, Outcome, Message, StackTrace, RunTime, TestTimestamp FROM ApexTestResult WHERE AsyncApexJobId = '${safeJobId}'`;
+          const statusResult = await salesforceApi.toolingQuery(statusQuery);
+
+          if (statusResult.records && statusResult.records.length > 0) {
+            setApexTestResults(statusResult.records);
+
+            // Check if all tests complete
+            const jobQuery = `SELECT Id, Status FROM AsyncApexJob WHERE Id = '${safeJobId}'`;
+            const jobResult = await salesforceApi.toolingQuery(jobQuery);
+
+            const jobStatus = jobResult.records?.[0]?.Status;
+            if (jobStatus === 'Completed' || jobStatus === 'Failed' || jobStatus === 'Aborted') {
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+                pollIntervalRef.current = null;
+              }
+              setIsLoading(false);
+              setApexTestJobId(null);
+              toast.success('Apex tests completed');
+              return;
+            }
+          }
+        } catch (pollError) {
+          console.warn('Error polling Apex test status:', pollError);
+        }
+
+        if (attempts >= MAX_ATTEMPTS) {
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+          setIsLoading(false);
+          setApexTestJobId(null);
+          toast.error('Apex test polling timed out after 2 minutes');
+        }
+      }, 2000);
+
+    } catch (error: unknown) {
+      console.error('Failed to run Apex tests:', error);
+      toast.error('Failed to run Apex tests');
       setIsLoading(false);
       setApexTestJobId(null);
     }

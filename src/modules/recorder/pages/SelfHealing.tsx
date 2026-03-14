@@ -69,7 +69,7 @@ export default function SelfHealing() {
       loadRules();
       toast.success(`Rule ${enabled ? 'enabled' : 'disabled'} successfully`);
     } catch (error) {
-      toast.error(`Failed to update rule: ${error.message}`);
+      toast.error(`Failed to update rule: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsLoading(false);
     }
@@ -87,7 +87,7 @@ export default function SelfHealing() {
         toast.error("Failed to apply healing suggestion");
       }
     } catch (error) {
-      toast.error(`Failed to apply suggestion: ${error.message}`);
+      toast.error(`Failed to apply suggestion: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsLoading(false);
     }

@@ -36,11 +36,33 @@ interface WhereCondition {
   connector: 'AND' | 'OR';
 }
 
+interface SOQLQueryResult {
+  totalSize?: number;
+  records?: Record<string, unknown>[];
+  done?: boolean;
+}
+
+interface SOQLStepArgs {
+  query: string;
+  object?: string;
+  recordId?: string;
+  recordName?: string;
+  storeAs?: string;
+  assertion?: string;
+  expectedFields?: string;
+  description?: string;
+}
+
 interface SmartSOQLBuilderProps {
-  onExecute?: (query: string, results: any) => void;
-  onAddAsStep?: (step: { type: string; action: string; args: any }) => void;
+  onExecute?: (query: string, results: SOQLQueryResult) => void;
+  onAddAsStep?: (step: { type: string; action: string; args: SOQLStepArgs }) => void;
   className?: string;
   initialObject?: string;
+}
+
+/** Escape single quotes in SOQL string literals to prevent injection */
+function escapeSoql(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
 const STANDARD_OBJECTS = [
@@ -104,7 +126,7 @@ export function SmartSOQLBuilder({
   const [orderByDir, setOrderByDir] = useState<'ASC' | 'DESC'>('ASC');
   const [limit, setLimit] = useState<number>(100);
   const [isExecuting, setIsExecuting] = useState(false);
-  const [queryResults, setQueryResults] = useState<any>(null);
+  const [queryResults, setQueryResults] = useState<SOQLQueryResult | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [showRawEditor, setShowRawEditor] = useState(false);
   const [rawQuery, setRawQuery] = useState('');
@@ -116,10 +138,11 @@ export function SmartSOQLBuilder({
     setLoadingObjects(true);
     try {
       const result = await salesforceApi.describeGlobal();
-      setAllObjects(result.sobjects?.filter((o: any) => o.queryable).map((o: any) => ({
+      setAllObjects(result.sobjects?.filter((o: { queryable: boolean }) => o.queryable).map((o: { name: string; label: string; custom: boolean }) => ({
         name: o.name, label: o.label, custom: o.custom
-      })).sort((a: any, b: any) => a.label.localeCompare(b.label)) || []);
+      })).sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label)) || []);
     } catch (e) {
+      console.warn('Failed to load Salesforce objects, using defaults:', e);
       setAllObjects(STANDARD_OBJECTS.map(name => ({ name, label: name, custom: false })));
     } finally {
       setLoadingObjects(false);
@@ -180,7 +203,7 @@ export function SmartSOQLBuilder({
       field: firstField.name,
       operator: '=',
       value: '',
-      valueType: getFieldType(firstField) as any,
+      valueType: getFieldType(firstField) as WhereCondition['valueType'],
       connector: 'AND'
     }]);
   };
@@ -204,21 +227,22 @@ export function SmartSOQLBuilder({
     let q = `SELECT ${Array.from(selectedFields).join(', ')}\nFROM ${selectedObject}`;
     const whereParts: string[] = [];
     if (selectedRecordType !== 'all' && objectDescribe?.recordTypeInfos?.length) {
-      whereParts.push(`RecordType.DeveloperName = '${selectedRecordType}'`);
+      whereParts.push(`RecordType.DeveloperName = '${escapeSoql(selectedRecordType)}'`);
     }
     whereConditions.forEach((cond, idx) => {
       if (!cond.field || !cond.operator) return;
       let clause = '';
       if (cond.operator === 'IS_NULL') clause = `${cond.field} = NULL`;
-      else if (cond.operator === 'LIKE') clause = `${cond.field} LIKE '%${cond.value}%'`;
+      else if (cond.operator === 'LIKE') clause = `${cond.field} LIKE '%${escapeSoql(cond.value)}%'`;
       else if (cond.operator === 'IN') {
-        const vals = cond.value.split(',').map(v => `'${v.trim()}'`).join(', ');
+        const vals = cond.value.split(',').map(v => `'${escapeSoql(v.trim())}'`).join(', ');
         clause = `${cond.field} IN (${vals})`;
       } else if (['TODAY', 'LAST_N_DAYS'].includes(cond.operator)) {
-        clause = `${cond.field} = ${cond.operator}${cond.operator === 'LAST_N_DAYS' ? ':' + (cond.value || '30') : ''}`;
+        const days = parseInt(cond.value, 10);
+        clause = `${cond.field} = ${cond.operator}${cond.operator === 'LAST_N_DAYS' ? ':' + (isNaN(days) ? '30' : String(days)) : ''}`;
       } else {
         const needsQuotes = ['string', 'picklist', 'reference'].includes(cond.valueType);
-        clause = `${cond.field} ${cond.operator} ${needsQuotes ? `'${cond.value}'` : cond.value}`;
+        clause = `${cond.field} ${cond.operator} ${needsQuotes ? `'${escapeSoql(cond.value)}'` : cond.value}`;
       }
       if (clause) whereParts.push(idx > 0 || whereParts.length > 0 ? `${cond.connector} ${clause}` : clause);
     });
@@ -241,9 +265,10 @@ export function SmartSOQLBuilder({
       setQueryResults(result);
       onExecute?.(q, result);
       toast.success(`${result.totalSize || 0} records`);
-    } catch (e: any) {
-      setQueryError(e.message || 'Query failed');
-      toast.error(e.message || 'Query failed');
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Query failed';
+      setQueryError(message);
+      toast.error(message);
     } finally {
       setIsExecuting(false);
     }
@@ -299,7 +324,7 @@ export function SmartSOQLBuilder({
               </SelectTrigger>
               <SelectContent className="bg-secondary border-border">
                 <SelectItem value="all">All Types</SelectItem>
-                {objectDescribe.recordTypeInfos.filter((rt: any) => rt.active && rt.developerName && rt.developerName !== 'Master').map((rt: any) => (
+                {objectDescribe.recordTypeInfos.filter((rt: { active: boolean; developerName: string }) => rt.active && rt.developerName && rt.developerName !== 'Master').map((rt: { recordTypeId: string; developerName: string; name: string }) => (
                   <SelectItem key={rt.recordTypeId} value={rt.developerName} className="text-xs">{rt.name}</SelectItem>
                 ))}
               </SelectContent>
@@ -495,18 +520,18 @@ export function SmartSOQLBuilder({
                           </tr>
                         </thead>
                         <tbody>
-                          {queryResults.records.slice(0, 15).map((record: any, idx: number) => (
+                          {queryResults.records.slice(0, 15).map((record: Record<string, unknown>, idx: number) => (
                             <tr key={idx} className="border-t border-border hover:bg-white/5 group">
-                              {Object.entries(record).filter(([k]) => k !== 'attributes').slice(0, 5).map(([key, value]: [string, any]) => (
+                              {Object.entries(record).filter(([k]) => k !== 'attributes').slice(0, 5).map(([key, value]: [string, unknown]) => (
                                 <td key={key} className="px-1.5 py-1 text-foreground truncate max-w-[100px]">{typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')}</td>
                               ))}
                               <td className="px-1.5 py-0.5 text-right">
                                 <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <button
                                     onClick={() => {
-                                      const recordId = record.Id || record.id;
-                                      const recordName = record.Name || record.name || recordId;
-                                      const query = `SELECT ${Array.from(selectedFields).join(', ')} FROM ${selectedObject} WHERE Id = '${recordId}'`;
+                                      const recordId = String(record.Id || record.id || '');
+                                      const recordName = String(record.Name || record.name || recordId);
+                                      const query = `SELECT ${Array.from(selectedFields).join(', ')} FROM ${selectedObject} WHERE Id = '${escapeSoql(recordId)}'`;
                                       if (onAddAsStep) {
                                         onAddAsStep({
                                           type: 'sf_soql',
@@ -531,9 +556,9 @@ export function SmartSOQLBuilder({
                                   </button>
                                   <button
                                     onClick={() => {
-                                      const recordId = record.Id || record.id;
-                                      const recordName = record.Name || record.name || recordId;
-                                      const query = `SELECT Id FROM ${selectedObject} WHERE Id = '${recordId}'`;
+                                      const recordId = String(record.Id || record.id || '');
+                                      const recordName = String(record.Name || record.name || recordId);
+                                      const query = `SELECT Id FROM ${selectedObject} WHERE Id = '${escapeSoql(recordId)}'`;
                                       const expectedFields = Object.fromEntries(
                                         Object.entries(record).filter(([k]) => k !== 'attributes').slice(0, 3)
                                       );

@@ -19,6 +19,7 @@ import {
   Settings, Key, Globe, Lock, Shield, CheckCircle2,
   Edit, Save, X, AlertCircle, ChevronDown, ChevronRight,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { API_BASE_URL } from "./constants";
 
 // --- Types ---
@@ -180,8 +181,15 @@ export default function EnvironmentManager({
     }
   };
 
+  const [pendingDeleteEnvId, setPendingDeleteEnvId] = useState<string | null>(null);
   const handleDeleteEnvironment = (envId: string) => {
-    if (!confirm("Delete this environment?")) return;
+    // Use non-blocking state instead of window.confirm()
+    setPendingDeleteEnvId(envId);
+  };
+  const confirmDeleteEnvironment = () => {
+    const envId = pendingDeleteEnvId;
+    if (!envId) return;
+    setPendingDeleteEnvId(null);
     const updated = environments.filter(e => e.environment_id !== envId);
     onEnvironmentsChange(updated);
     if (selectedEnvironmentId === envId && updated.length > 0) {
@@ -650,6 +658,24 @@ export default function EnvironmentManager({
           </CardContent>
         </Card>
       )}
+
+      {/* Non-blocking delete confirmation (replaces window.confirm) */}
+      <Dialog open={!!pendingDeleteEnvId} onOpenChange={(open) => { if (!open) setPendingDeleteEnvId(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Environment</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this environment? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingDeleteEnvId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmDeleteEnvironment}>
+              <Trash2 className="w-4 h-4 mr-1" /> Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -142,7 +142,6 @@ export default function VirtualUserGenerator() {
   // ---------------------------------------------------------------------------
   // Local state (transient, UI-only)
   // ---------------------------------------------------------------------------
-  const [loading, setLoading] = useState(false);
   const [virtualUsers, setVirtualUsers] = useState<VirtualUser[]>([]);
   const [failedRequests, setFailedRequests] = useState<FailedRequest[]>([]);
   const [savedConfigs, setSavedConfigs] = useState<LoadTestConfig[]>([]);
@@ -193,15 +192,23 @@ export default function VirtualUserGenerator() {
         );
         setTestCases(automatedCases);
       } else {
-        const local = JSON.parse(localStorage.getItem('test_cases') || '[]');
-        setTestCases(local.filter((tc: any) =>
-          tc.type === 'automated' || tc.automationScript || tc.source?.type === 'flowstral'
-        ));
+        try {
+          const local = JSON.parse(localStorage.getItem('test_cases') || '[]');
+          setTestCases(local.filter((tc: any) =>
+            tc.type === 'automated' || tc.automationScript || tc.source?.type === 'flowstral'
+          ));
+        } catch {
+          setTestCases([]);
+        }
       }
     } catch (error) {
       console.error("Failed to load test cases:", error);
-      const local = JSON.parse(localStorage.getItem('test_cases') || '[]');
-      setTestCases(local);
+      try {
+        const local = JSON.parse(localStorage.getItem('test_cases') || '[]');
+        setTestCases(local);
+      } catch {
+        setTestCases([]);
+      }
     } finally {
       setLoadingTestCases(false);
     }
@@ -694,7 +701,7 @@ export default function VirtualUserGenerator() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ har: harData, name: file.name })
-          }).catch(() => {});
+          }).catch((err) => { console.warn('[LoadTest] Non-blocking HAR backend save failed:', err); });
         } else {
           toast({ title: "No API Requests Found", description: "HAR file contains no API requests", variant: "destructive" });
         }
@@ -783,8 +790,12 @@ export default function VirtualUserGenerator() {
 
   // Load saved configs and auto-refresh sessions
   useEffect(() => {
-    const saved = localStorage.getItem('load_test_configs');
-    if (saved) setSavedConfigs(JSON.parse(saved));
+    try {
+      const saved = localStorage.getItem('load_test_configs');
+      if (saved) setSavedConfigs(JSON.parse(saved));
+    } catch {
+      console.warn('[LoadTest] Failed to parse saved configs from localStorage');
+    }
     loadFlowstralSessions();
 
     const interval = setInterval(() => {
@@ -1203,22 +1214,22 @@ export default function VirtualUserGenerator() {
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <Label className="text-xs">Virtual Users</Label>
-                      <Input type="number" value={store.virtualUsers} onChange={(e) => store.setVirtualUsers(parseInt(e.target.value) || 10)} className="h-8" />
+                      <Input type="number" min={1} max={10000} value={store.virtualUsers} onChange={(e) => store.setVirtualUsers(Math.min(10000, Math.max(1, parseInt(e.target.value) || 10)))} className="h-8" />
                     </div>
                     <div>
                       <Label className="text-xs">Duration (sec)</Label>
-                      <Input type="number" value={store.duration} onChange={(e) => store.setDuration(parseInt(e.target.value) || 60)} className="h-8" />
+                      <Input type="number" min={1} max={3600} value={store.duration} onChange={(e) => store.setDuration(Math.min(3600, Math.max(1, parseInt(e.target.value) || 60)))} className="h-8" />
                     </div>
                     <div>
                       <Label className="text-xs">Ramp-up (sec)</Label>
-                      <Input type="number" value={store.rampUpTime} onChange={(e) => store.setRampUpTime(parseInt(e.target.value) || 10)} className="h-8" />
+                      <Input type="number" min={0} max={3600} value={store.rampUpTime} onChange={(e) => store.setRampUpTime(Math.min(3600, Math.max(0, parseInt(e.target.value) || 10)))} className="h-8" />
                     </div>
                   </div>
 
                   <div className="flex gap-2">
                     <Button className="flex-1" size="lg" disabled={store.isRunning} onClick={startLoadTest}>
-                      <Zap className="w-4 h-4 mr-2" />
-                      Start Load Test ({store.virtualUsers} VUs, {store.duration}s)
+                      {store.isRunning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
+                      {store.isRunning ? 'Running...' : `Start Load Test (${store.virtualUsers} VUs, ${store.duration}s)`}
                     </Button>
                     <Button variant="outline" onClick={() => store.setActiveTab("scenario")}>
                       <Eye className="w-4 h-4 mr-2" />
@@ -1562,17 +1573,24 @@ export default function VirtualUserGenerator() {
               <CardHeader><CardTitle>Response Time Over Time</CardTitle></CardHeader>
               <CardContent>
                 <div className="h-48 flex items-end gap-1">
-                  {store.metricsHistory.slice(-60).map((m, i) => (
+                  {(() => {
+                    const recentHistory = store.metricsHistory.slice(-60);
+                    let maxAvgRT = 1;
+                    for (const h of store.metricsHistory) {
+                      if (h.avgResponseTime > maxAvgRT) maxAvgRT = h.avgResponseTime;
+                    }
+                    return recentHistory.map((m, i) => (
                     <div
                       key={i}
                       className="flex-1 bg-primary/80 rounded-t transition-all"
                       style={{
-                        height: `${Math.min(100, (m.avgResponseTime / Math.max(1, Math.max(...store.metricsHistory.map(h => h.avgResponseTime)))) * 100)}%`,
+                        height: `${Math.min(100, (m.avgResponseTime / maxAvgRT) * 100)}%`,
                         minHeight: '4px'
                       }}
                       title={`${m.avgResponseTime.toFixed(0)}ms`}
                     />
-                  ))}
+                  ));
+                  })()}
                 </div>
                 <div className="flex justify-between text-xs text-muted-foreground mt-2">
                   <span>-60s</span>

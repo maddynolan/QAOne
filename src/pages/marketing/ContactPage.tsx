@@ -33,10 +33,10 @@ function MarketingHeader() {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
               <span className="text-white font-bold text-lg">F</span>
             </div>
-            <span className="text-xl font-bold text-slate-800">Flowstral</span>
+            <span className="text-xl font-bold text-slate-900">Flowstral</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             <Link to="/#features" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Features</Link>
@@ -50,7 +50,7 @@ function MarketingHeader() {
           <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => { trackCTAClick('sign_in', '/contact'); navigate('/signin'); }}>
             Sign In
           </Button>
-          <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => { trackCTAClick('start_free', '/contact'); navigate('/signup'); }}>
+          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => { trackCTAClick('start_free', '/contact'); navigate('/signup'); }}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -110,17 +110,15 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+    <div className="min-h-screen bg-white">
       <MarketingHeader />
 
       {/* Hero */}
       <section className="pt-32 pb-16 px-6">
         <div className="max-w-4xl mx-auto text-center">
-          <Badge className="mb-4 bg-blue-100 text-blue-700 border-0 px-4 py-1.5">
-            Get in Touch
-          </Badge>
+          <p className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4">Contact</p>
           <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
-            We'd Love to Hear From You
+            Get in touch
           </h1>
           <p className="text-xl text-slate-600">
             Have questions? Need a demo? Our team is here to help.
@@ -174,7 +172,7 @@ export default function ContactPage() {
                 </p>
               </div>
 
-              <div className="p-6 bg-gradient-to-br from-blue-50 to-violet-50 rounded-2xl border border-blue-100">
+              <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200">
                 <div className="flex items-center gap-3 mb-4">
                   <Building2 className="w-5 h-5 text-blue-600" />
                   <span className="font-semibold text-slate-800">Enterprise Sales</span>
@@ -258,9 +256,9 @@ export default function ContactPage() {
                     />
                   </div>
 
-                  <Button 
+                  <Button
                     type="submit"
-                    className="w-full h-12 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-semibold rounded-xl"
+                    className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl"
                   >
                     <Send className="w-4 h-4 mr-2" /> Send Message
                   </Button>

@@ -356,9 +356,9 @@ function StepEditor({
                   <div className="flex items-center gap-2">
                     <Select
                       value={(step as any).elementIndex?.toString() || 'first'}
-                      onValueChange={(value) => onUpdate({ 
-                        elementIndex: value === 'first' ? undefined : parseInt(value) 
-                      } as any)}
+                      onValueChange={(value) => onUpdate({
+                        elementIndex: value === 'first' ? undefined : parseInt(value)
+                      } as Partial<TestStep>)}
                     >
                       <SelectTrigger className="w-32">
                         <SelectValue placeholder="First" />
@@ -659,7 +659,7 @@ function StepEditor({
         <>
           <div className="space-y-2">
             <Label>Method</Label>
-            <Select value={step.method || 'GET'} onValueChange={(v) => onUpdate({ method: v as any })}>
+            <Select value={step.method || 'GET'} onValueChange={(v) => onUpdate({ method: v as TestStep['method'] })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].map(m => (

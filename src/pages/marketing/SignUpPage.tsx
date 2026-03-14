@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowRight, Eye, EyeOff, Loader2, Mail, Lock, User, Github, Chrome,
-  CheckCircle2, Zap, Shield, Rocket, AlertCircle, Building2
+  CheckCircle2, Zap, Shield, AlertCircle, Building2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -99,33 +99,33 @@ export default function SignUpPage() {
   return (
     <div className="min-h-screen flex">
       {/* Left Side - Branding */}
-      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 p-12 flex-col justify-between">
+      <div className="hidden lg:flex flex-1 bg-slate-900 p-12 flex-col justify-between">
         <div />
-        
+
         <div className="text-white">
           <h2 className="text-4xl font-bold mb-6">
-            Start Your Free 14-Day Trial
+            Start your free 14-day trial
           </h2>
-          <p className="text-xl text-emerald-100 mb-10">
+          <p className="text-xl text-slate-400 mb-10">
             Full access to all features. No credit card required.
           </p>
-          
+
           <div className="space-y-4">
             {[
-              { icon: Rocket, text: 'Get started in under 2 minutes' },
+              { icon: ArrowRight, text: 'Get started in under 2 minutes' },
               { icon: CheckCircle2, text: 'Unlimited test cases during trial' },
               { icon: Shield, text: 'Your data is secure & encrypted' },
               { icon: Zap, text: 'Cancel anytime, no questions asked' },
             ].map((item, idx) => (
-              <div key={idx} className="flex items-center gap-3 text-emerald-100">
-                <item.icon className="w-5 h-5 text-emerald-300" />
+              <div key={idx} className="flex items-center gap-3 text-slate-300">
+                <item.icon className="w-5 h-5 text-slate-500" />
                 <span>{item.text}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="flex items-center gap-4 text-emerald-200 text-sm">
+        <div className="flex items-center gap-4 text-slate-500 text-sm">
           <Link to="/privacy" className="hover:text-white">Privacy</Link>
           <span>•</span>
           <Link to="/terms" className="hover:text-white">Terms</Link>
@@ -139,7 +139,7 @@ export default function SignUpPage() {
         <div className="w-full max-w-md mx-auto">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2.5 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center">
               <span className="text-white font-bold text-xl">F</span>
             </div>
             <span className="text-2xl font-bold text-slate-800">Flowstral</span>
@@ -299,7 +299,7 @@ export default function SignUpPage() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full h-12 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold rounded-xl shadow-lg shadow-emerald-500/20 mt-4"
+              className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl mt-4"
             >
               {loading ? (
                 <>

@@ -58,18 +58,22 @@ async () => {
 """
 
 
+VALID_WCAG_LEVELS = {"A", "AA", "AAA"}
+
+
 class AxeCoreScanner:
     """
     Production-grade accessibility scanner using axe-core.
-    
+
     Usage:
         scanner = AxeCoreScanner()
         report = await scanner.scan_url("https://example.com")
         print(report['summary'])
     """
-    
+
     def __init__(self):
         self.playwright_available = self._check_playwright()
+        self._thread_pool = None
     
     def _check_playwright(self) -> bool:
         """Check if playwright is available and working"""
@@ -110,33 +114,45 @@ class AxeCoreScanner:
     ) -> Dict[str, Any]:
         """
         Scan a URL for accessibility violations using axe-core.
-        
+
         Args:
             url: The URL to scan
             wcag_level: WCAG compliance level (A, AA, AAA)
             include_passes: Include passing rules in report
             wait_for_selector: Wait for element before scanning
             timeout_ms: Timeout in milliseconds
-            
+
         Returns:
             Comprehensive accessibility report
         """
         import sys
         from concurrent.futures import ThreadPoolExecutor
-        
+
+        # Input validation
+        if not url or not isinstance(url, str):
+            raise ValueError("URL is required")
+        if len(url) > 2048:
+            raise ValueError("URL exceeds maximum length (2048 characters)")
+        if wcag_level.upper() not in VALID_WCAG_LEVELS:
+            wcag_level = "AA"
+        if wait_for_selector and len(wait_for_selector) > 500:
+            raise ValueError("wait_for_selector exceeds maximum length (500 characters)")
+
         start_time = datetime.utcnow()
-        
+
         if self.playwright_available:
             try:
                 # On Windows, run sync playwright in thread pool to avoid event loop issues
                 if sys.platform == 'win32':
-                    loop = asyncio.get_event_loop()
-                    with ThreadPoolExecutor() as pool:
-                        results = await loop.run_in_executor(
-                            pool,
-                            self._scan_with_playwright_sync,
-                            url, wcag_level, wait_for_selector, timeout_ms
-                        )
+                    loop = asyncio.get_running_loop()
+                    # Reuse thread pool to avoid per-call overhead
+                    if self._thread_pool is None:
+                        self._thread_pool = ThreadPoolExecutor(max_workers=2)
+                    results = await loop.run_in_executor(
+                        self._thread_pool,
+                        self._scan_with_playwright_sync,
+                        url, wcag_level, wait_for_selector, timeout_ms
+                    )
                 else:
                     results = await self._scan_with_playwright(
                         url, wcag_level, wait_for_selector, timeout_ms
@@ -232,15 +248,18 @@ class AxeCoreScanner:
                 results['pageUrl'] = page.url
 
             except Exception as e:
-                logger.error(f"Playwright sync scan failed: {e}")
+                logger.error(f"Playwright sync scan failed: {e}", exc_info=True)
                 results = {
                     "violations": [],
                     "incomplete": [],
                     "passes": [],
-                    "error": str(e)
+                    "error": "Playwright scan encountered an unexpected error"
                 }
             finally:
-                browser.close()
+                try:
+                    browser.close()
+                except Exception:
+                    pass
 
         return results
     
@@ -317,46 +336,49 @@ class AxeCoreScanner:
                         "error": "Failed to inject axe-core (CSP may be blocking scripts)"
                     }
 
-                # Take screenshot for reference
+                # Take screenshot for reference (optional, non-blocking)
                 try:
                     screenshot = await page.screenshot(full_page=True, type="png")
                     results['screenshot'] = screenshot
-                except Exception:
-                    pass  # Screenshot is optional
+                except Exception as screenshot_err:
+                    logger.debug(f"Screenshot capture failed (non-critical): {screenshot_err}")
 
                 # Get page title and meta
                 results['pageTitle'] = await page.title()
                 results['pageUrl'] = page.url
 
             except Exception as e:
-                logger.error(f"Playwright scan failed: {e}")
+                logger.error(f"Playwright scan failed: {e}", exc_info=True)
                 results = {
                     "violations": [],
                     "incomplete": [],
                     "passes": [],
-                    "error": str(e)
+                    "error": "Playwright scan encountered an unexpected error"
                 }
             finally:
-                await browser.close()
+                try:
+                    await browser.close()
+                except Exception:
+                    pass
 
         return results
     
     async def _scan_fallback(self, url: str, wcag_level: str) -> Dict[str, Any]:
-        """Fallback scanner when Playwright unavailable — uses httpx (already in deps)"""
+        """Fallback scanner when Playwright unavailable -- uses httpx (already in deps)"""
         try:
             import httpx
         except ImportError:
-            logger.error("httpx not installed — cannot perform fallback scan")
+            logger.error("httpx not installed -- cannot perform fallback scan")
             return {"violations": [], "error": "Neither Playwright nor httpx available for scanning"}
 
         try:
             async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
                 response = await client.get(url)
-                html = response.text
-                return self._analyze_html(html, url, wcag_level)
+                html_text = response.text
+                return self._analyze_html(html_text, url, wcag_level)
         except Exception as e:
-            logger.error(f"Fallback scan failed: {e}")
-            return {"violations": [], "error": str(e)}
+            logger.error(f"Fallback scan failed: {e}", exc_info=True)
+            return {"violations": [], "error": "Fallback HTML scan failed"}
     
     def _analyze_html(self, html: str, url: str, wcag_level: str) -> Dict[str, Any]:
         """Analyze HTML for common accessibility issues (fallback)"""

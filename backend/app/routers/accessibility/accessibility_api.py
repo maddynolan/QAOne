@@ -8,7 +8,8 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 import logging
 import asyncio
-from pydantic import BaseModel
+import secrets
+from pydantic import BaseModel, field_validator
 
 from app.services.flowstral.flowstral_wcag_pipeline import WCAGPipeline
 from app.services.agents.accessibility_agent import AccessibilityAgent
@@ -113,6 +114,12 @@ async def run_axe_core_scan(url: str, component_selector: Optional[str] = None, 
     return {"violations": violations, "html": html_content, "scanner_error": scanner_error}
 
 
+# Valid parameter constants
+VALID_SCAN_TYPES = {"full_page", "component", "site_wide"}
+VALID_WCAG_LEVELS = {"A", "AA", "AAA"}
+VALID_WCAG_VERSIONS = {"2.0", "2.1", "2.2"}
+
+
 # Request/Response Models
 class ScanRequest(BaseModel):
     url: str
@@ -121,6 +128,43 @@ class ScanRequest(BaseModel):
     project_id: Optional[str] = None
     wcag_level: str = "AA"  # A, AA, AAA
     wcag_version: str = "2.1"  # 2.0, 2.1, 2.2
+
+    @field_validator("url")
+    @classmethod
+    def validate_url_length(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("URL is required")
+        if len(v) > 2048:
+            raise ValueError("URL exceeds maximum length (2048 characters)")
+        return v.strip()
+
+    @field_validator("scan_type")
+    @classmethod
+    def validate_scan_type(cls, v: str) -> str:
+        if v not in VALID_SCAN_TYPES:
+            raise ValueError(f"scan_type must be one of: {', '.join(VALID_SCAN_TYPES)}")
+        return v
+
+    @field_validator("wcag_level")
+    @classmethod
+    def validate_wcag_level(cls, v: str) -> str:
+        if v.upper() not in VALID_WCAG_LEVELS:
+            raise ValueError(f"wcag_level must be one of: {', '.join(VALID_WCAG_LEVELS)}")
+        return v.upper()
+
+    @field_validator("wcag_version")
+    @classmethod
+    def validate_wcag_version(cls, v: str) -> str:
+        if v.strip() not in VALID_WCAG_VERSIONS:
+            raise ValueError(f"wcag_version must be one of: {', '.join(VALID_WCAG_VERSIONS)}")
+        return v.strip()
+
+    @field_validator("component_selector")
+    @classmethod
+    def validate_component_selector(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) > 500:
+            raise ValueError("component_selector exceeds maximum length (500 characters)")
+        return v
 
 
 class SiteWideScanRequest(BaseModel):
@@ -131,11 +175,53 @@ class SiteWideScanRequest(BaseModel):
     project_id: Optional[str] = None
     wcag_level: str = "AA"
 
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url_length(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("base_url is required")
+        if len(v) > 2048:
+            raise ValueError("base_url exceeds maximum length (2048 characters)")
+        return v.strip()
+
+    @field_validator("max_pages")
+    @classmethod
+    def validate_max_pages(cls, v: int) -> int:
+        if v < 1 or v > 200:
+            raise ValueError("max_pages must be between 1 and 200")
+        return v
+
+    @field_validator("wcag_level")
+    @classmethod
+    def validate_wcag_level(cls, v: str) -> str:
+        if v.upper() not in VALID_WCAG_LEVELS:
+            raise ValueError(f"wcag_level must be one of: {', '.join(VALID_WCAG_LEVELS)}")
+        return v.upper()
+
 
 class VPATRequest(BaseModel):
     project_id: str
     urls: List[str]
     wcag_level: str = "AA"
+
+    @field_validator("urls")
+    @classmethod
+    def validate_urls(cls, v: List[str]) -> List[str]:
+        if not v:
+            raise ValueError("At least one URL is required")
+        if len(v) > 50:
+            raise ValueError("Maximum 50 URLs allowed")
+        for url in v:
+            if len(url) > 2048:
+                raise ValueError("URL exceeds maximum length (2048 characters)")
+        return v
+
+    @field_validator("wcag_level")
+    @classmethod
+    def validate_wcag_level(cls, v: str) -> str:
+        if v.upper() not in VALID_WCAG_LEVELS:
+            raise ValueError(f"wcag_level must be one of: {', '.join(VALID_WCAG_LEVELS)}")
+        return v.upper()
 
 
 # Dependency to verify API key and extract tenant_id (optional for web UI access)
@@ -266,7 +352,7 @@ async def scan_page(
                 "help_url": violation.get("helpUrl", "")
             })
 
-        scan_id = f"scan-{datetime.utcnow().timestamp()}"
+        scan_id = f"scan-{secrets.token_urlsafe(12)}"
 
         # Generate simple report without LLM
         summary = wcag_result.get("summary", {})
@@ -329,7 +415,7 @@ async def scan_site_wide(
         # For now, return structure
         return {
             "status": "success",
-            "scan_id": f"site-scan-{datetime.utcnow().timestamp()}",
+            "scan_id": f"site-scan-{secrets.token_urlsafe(12)}",
             "base_url": body.base_url,
             "max_pages": body.max_pages,
             "message": "Site-wide scanning is being processed",
@@ -495,7 +581,7 @@ async def generate_vpat(
         # TODO: Implement VPAT generation
         return {
             "status": "success",
-            "vpat_id": f"vpat-{datetime.utcnow().timestamp()}",
+            "vpat_id": f"vpat-{secrets.token_urlsafe(12)}",
             "project_id": body.project_id,
             "wcag_level": body.wcag_level,
             "urls": body.urls,

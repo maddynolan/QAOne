@@ -118,16 +118,26 @@ export function SFContextDashboard({
       loadCurrentUserInfo();
     }
     
-    // Load captured variables from session
-    const savedVars = sessionStorage.getItem('sf_captured_variables');
-    if (savedVars) {
-      setCapturedVariables(JSON.parse(savedVars));
+    // Load captured variables from session (with safe parse)
+    try {
+      const savedVars = sessionStorage.getItem('sf_captured_variables');
+      if (savedVars) {
+        setCapturedVariables(JSON.parse(savedVars));
+      }
+    } catch (parseError) {
+      console.warn('Failed to parse saved variables from sessionStorage:', parseError);
+      sessionStorage.removeItem('sf_captured_variables');
     }
-    
-    // Load recent records
-    const savedRecent = sessionStorage.getItem('sf_recent_records');
-    if (savedRecent) {
-      setRecentRecords(JSON.parse(savedRecent));
+
+    // Load recent records (with safe parse)
+    try {
+      const savedRecent = sessionStorage.getItem('sf_recent_records');
+      if (savedRecent) {
+        setRecentRecords(JSON.parse(savedRecent));
+      }
+    } catch (parseError) {
+      console.warn('Failed to parse recent records from sessionStorage:', parseError);
+      sessionStorage.removeItem('sf_recent_records');
     }
   }, []);
   
@@ -182,65 +192,75 @@ export function SFContextDashboard({
     }
   };
   
+  // Escape single quotes in SOQL values to prevent injection
+  const escapeSoql = useCallback((value: string): string => {
+    return value.replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+  }, []);
+
   // Search users for Login As
   const searchUsers = useCallback(async (searchTerm: string) => {
     if (!searchTerm || searchTerm.length < 2) {
       setAvailableUsers([]);
       return;
     }
-    
+
     setLoadingUsers(true);
     try {
-      const result = await salesforceApi.query(`
-        SELECT Id, Name, Username, Email, Profile.Name, UserRole.Name, IsActive 
-        FROM User 
-        WHERE (Name LIKE '%${searchTerm}%' OR Username LIKE '%${searchTerm}%' OR Email LIKE '%${searchTerm}%')
-        AND IsActive = true
-        ORDER BY Name
-        LIMIT 20
-      `);
-      
-      setAvailableUsers(result.records?.map((u: any) => ({
-        id: u.Id,
-        name: u.Name,
-        username: u.Username,
-        email: u.Email,
-        profileName: u.Profile?.Name || 'Unknown',
-        roleName: u.UserRole?.Name,
-        isActive: u.IsActive
-      })) || []);
+      const sanitized = escapeSoql(searchTerm);
+      const result = await salesforceApi.query(
+        `SELECT Id, Name, Username, Email, Profile.Name, UserRole.Name, IsActive ` +
+        `FROM User ` +
+        `WHERE (Name LIKE '%${sanitized}%' OR Username LIKE '%${sanitized}%' OR Email LIKE '%${sanitized}%') ` +
+        `AND IsActive = true ` +
+        `ORDER BY Name ` +
+        `LIMIT 20`
+      );
+
+      const users: UserInfo[] = (result.records || []).map((u: Record<string, unknown>) => ({
+        id: u.Id as string,
+        name: u.Name as string,
+        username: u.Username as string,
+        email: u.Email as string,
+        profileName: (u.Profile as Record<string, unknown>)?.Name as string || 'Unknown',
+        roleName: (u.UserRole as Record<string, unknown>)?.Name as string | undefined,
+        isActive: u.IsActive as boolean
+      }));
+      setAvailableUsers(users);
     } catch (e) {
       console.error('Failed to search users:', e);
       toast.error('Failed to search users');
     } finally {
       setLoadingUsers(false);
     }
-  }, []);
+  }, [escapeSoql]);
   
   // Search users by profile
-  const searchUsersByProfile = async (profileName: string) => {
+  const searchUsersByProfile = async (searchProfileName: string) => {
     setLoadingUsers(true);
     try {
-      const result = await salesforceApi.query(`
-        SELECT Id, Name, Username, Email, Profile.Name, UserRole.Name, IsActive 
-        FROM User 
-        WHERE Profile.Name = '${profileName}'
-        AND IsActive = true
-        ORDER BY Name
-        LIMIT 20
-      `);
-      
-      setAvailableUsers(result.records?.map((u: any) => ({
-        id: u.Id,
-        name: u.Name,
-        username: u.Username,
-        email: u.Email,
-        profileName: u.Profile?.Name || 'Unknown',
-        roleName: u.UserRole?.Name,
-        isActive: u.IsActive
-      })) || []);
+      const sanitized = escapeSoql(searchProfileName);
+      const result = await salesforceApi.query(
+        `SELECT Id, Name, Username, Email, Profile.Name, UserRole.Name, IsActive ` +
+        `FROM User ` +
+        `WHERE Profile.Name = '${sanitized}' ` +
+        `AND IsActive = true ` +
+        `ORDER BY Name ` +
+        `LIMIT 20`
+      );
+
+      const users: UserInfo[] = (result.records || []).map((u: Record<string, unknown>) => ({
+        id: u.Id as string,
+        name: u.Name as string,
+        username: u.Username as string,
+        email: u.Email as string,
+        profileName: (u.Profile as Record<string, unknown>)?.Name as string || 'Unknown',
+        roleName: (u.UserRole as Record<string, unknown>)?.Name as string | undefined,
+        isActive: u.IsActive as boolean
+      }));
+      setAvailableUsers(users);
     } catch (e) {
-      console.error('Failed to search users:', e);
+      console.error('Failed to search users by profile:', e);
+      toast.error('Failed to search users by profile');
     } finally {
       setLoadingUsers(false);
     }

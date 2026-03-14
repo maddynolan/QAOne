@@ -68,7 +68,7 @@ interface TestStep {
   type?: string;
   selector?: string;
   value?: string;
-  args?: any;
+  args?: Record<string, string | number | boolean>;
   assertion?: {
     type?: string;
     target?: string;
@@ -89,7 +89,7 @@ const formatStepDetails = (step: TestStep): { action: string; details: { label: 
     case 'goto':
     case 'navigate':
       actionText = 'Navigate to URL';
-      if (args.url || args[0]) details.push({ label: 'URL', value: args.url || args[0] });
+      if (args.url || args[0]) details.push({ label: 'URL', value: String(args.url || args[0]) });
       break;
     case 'click':
     case 'clicktext':
@@ -134,30 +134,33 @@ const formatStepDetails = (step: TestStep): { action: string; details: { label: 
 };
 
 // Build expected result from step data
-const buildExpectedResult = (step: any): string => {
+const buildExpectedResult = (step: Record<string, unknown>): string => {
   if (step.qword === 'AssertText' || step.type === 'assert') {
-    const assertText = step.args?.[0] || step.args?.text || step.value;
+    const args = step.args as Record<string, unknown> | undefined;
+    const assertText = args?.[0] || args?.text || step.value;
     if (assertText) return `✓ Verify "${assertText}" is visible on the page`;
   }
   // Handle multi-assertion array (new) and single assertion (legacy)
-  if (step.assertions && step.assertions.length > 0) {
-    const enabledAssertions = step.assertions.filter((a: any) => a.enabled);
+  const assertions = step.assertions as Array<Record<string, unknown>> | undefined;
+  if (assertions && assertions.length > 0) {
+    const enabledAssertions = assertions.filter((a) => a.enabled);
     if (enabledAssertions.length > 0) {
-      const descriptions = enabledAssertions.map((a: any) => {
+      const descriptions = enabledAssertions.map((a) => {
         if (a.expected) return `✓ ${a.type}: "${a.expected}"`;
         return `✓ ${(a.type || 'verify').replace(/_/g, ' ')}`;
       });
       return descriptions.join('\n');
     }
   }
-  if (step.assertion) {
-    const assertValue = step.assertion.value || step.assertion.expectedValue || step.assertion.expected;
+  const assertion = step.assertion as Record<string, unknown> | undefined;
+  if (assertion) {
+    const assertValue = assertion.value || assertion.expectedValue || assertion.expected;
     if (assertValue) return `✓ Verify: ${assertValue}`;
   }
-  if (step.expectedResult?.trim()) return step.expectedResult;
-  if (step.expected_result?.trim()) return step.expected_result;
-  
-  const qword = step.qword || step.type || '';
+  if (typeof step.expectedResult === 'string' && step.expectedResult.trim()) return step.expectedResult;
+  if (typeof step.expected_result === 'string' && step.expected_result.trim()) return step.expected_result;
+
+  const qword = (step.qword || step.type || '') as string;
   switch (qword.toLowerCase()) {
     case 'goto':
     case 'navigate':
@@ -202,8 +205,8 @@ const getActionIcon = (qword?: string) => {
 export default function TestCaseExecution() {
   const { runId, testCaseId } = useParams<{ runId: string; testCaseId: string }>();
   const navigate = useNavigate();
-  const [testRun, setTestRun] = useState<any>(null);
-  const [testCase, setTestCase] = useState<any>(null);
+  const [testRun, setTestRun] = useState<Record<string, unknown> | null>(null);
+  const [testCase, setTestCase] = useState<Record<string, unknown> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [stepResults, setStepResults] = useState<StepResult[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -211,9 +214,9 @@ export default function TestCaseExecution() {
   const [showDefectDialog, setShowDefectDialog] = useState(false);
   const [showLinkDefectDialog, setShowLinkDefectDialog] = useState(false);
   const [newDefect, setNewDefect] = useState({ title: '', description: '', severity: 'medium', priority: 'medium' });
-  const [existingDefects, setExistingDefects] = useState<any[]>([]);
+  const [existingDefects, setExistingDefects] = useState<Array<Record<string, unknown>>>([]);
   const [defectSearchQuery, setDefectSearchQuery] = useState('');
-  const [allTestCases, setAllTestCases] = useState<any[]>([]);
+  const [allTestCases, setAllTestCases] = useState<Array<Record<string, unknown>>>([]);
   const [currentTestIndex, setCurrentTestIndex] = useState(0);
   const [showScreenshotPreview, setShowScreenshotPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -267,7 +270,7 @@ export default function TestCaseExecution() {
     setIsLoading(true);
     try {
       const savedRuns = JSON.parse(localStorage.getItem('test_execution_history') || '[]');
-      const run = savedRuns.find((r: any) => r.id === runId);
+      const run = savedRuns.find((r: Record<string, unknown>) => r.id === runId);
       
       if (run) {
         setTestRun(run);
@@ -284,11 +287,11 @@ export default function TestCaseExecution() {
         }
       }
       
-      let allCases: any[] = [];
+      let allCases: Array<Record<string, unknown>> = [];
       const seenIds = new Set<string>();
-      
+
       // Helper to add cases without duplicates
-      const addCases = (cases: any[]) => {
+      const addCases = (cases: Array<Record<string, unknown>>) => {
         for (const tc of cases) {
           if (tc.id && !seenIds.has(tc.id)) {
             seenIds.add(tc.id);
@@ -305,24 +308,24 @@ export default function TestCaseExecution() {
           console.log('[Execution] Loaded from Electron storage:', electronCases?.length || 0, 'test cases');
           addCases(electronCases || []);
         }
-      } catch (e) {
-        console.log('[Execution] Electron storage not available');
+      } catch (electronErr) {
+        console.warn('[Execution] Electron storage not available:', electronErr instanceof Error ? electronErr.message : 'Unknown error');
       }
-      
+
       // 2. Load from flowstral_test_cases
       try {
         const localCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
         addCases(localCases);
-      } catch (e) {
-        console.log('flowstral_test_cases not available');
+      } catch (parseErr) {
+        console.warn('[Execution] Failed to parse flowstral_test_cases:', parseErr instanceof Error ? parseErr.message : 'Invalid JSON');
       }
-      
+
       // 3. Load from test_cases key
       try {
         const altCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
         addCases(altCases);
-      } catch (e) {
-        console.log('test_cases not available');
+      } catch (parseErr) {
+        console.warn('[Execution] Failed to parse test_cases:', parseErr instanceof Error ? parseErr.message : 'Invalid JSON');
       }
       
       // 4. Load from unified_test_case_* keys (legacy format)
@@ -335,10 +338,12 @@ export default function TestCaseExecution() {
               seenIds.add(tc.id);
               allCases.push(tc);
             }
-          } catch (e) {}
+          } catch (innerParseErr) {
+            console.warn(`[Execution] Failed to parse ${key}:`, innerParseErr instanceof Error ? innerParseErr.message : 'Invalid JSON');
+          }
         }
-      } catch (e) {
-        console.log('unified_test_case keys not available');
+      } catch (storageErr) {
+        console.warn('[Execution] Failed to read unified_test_case keys:', storageErr instanceof Error ? storageErr.message : 'Unknown error');
       }
       
       // 5. Try backend API as additional source
@@ -349,8 +354,8 @@ export default function TestCaseExecution() {
           const cases = Array.isArray(backendCases) ? backendCases : [];
           addCases(cases);
         }
-      } catch (e) {
-        console.log('Backend API not available');
+      } catch (apiErr) {
+        console.warn('[Execution] Backend API not available:', apiErr instanceof Error ? apiErr.message : 'Network error');
       }
       
       console.log('[Execution] Loaded', allCases.length, 'test cases from all sources');
@@ -359,13 +364,13 @@ export default function TestCaseExecution() {
       
       setAllTestCases(allCases);
       
-      const foundCase = allCases.find((tc: any) => tc.id === testCaseId);
+      const foundCase = allCases.find((tc) => tc.id === testCaseId);
       if (foundCase) {
         console.log('[Execution] Found test case:', foundCase.name);
         setTestCase(foundCase);
         const steps = getSteps(foundCase);
         if (steps.length > 0 && (!run?.manualStepResults?.[testCaseId!] || run.manualStepResults[testCaseId!].length === 0)) {
-          setStepResults(steps.map((_: any, idx: number) => ({
+          setStepResults(steps.map((_: TestStep, idx: number) => ({
             stepIndex: idx,
             status: 'pending' as const
           })));
@@ -375,37 +380,42 @@ export default function TestCaseExecution() {
         console.error('[Execution] Available test cases:', allCases.map(tc => ({ id: tc.id, name: tc.name })));
         toast.error(`Test case not found (ID: ${testCaseId?.slice(0, 8)}...)`);
       }
-    } catch (error: any) {
-      console.error("Error loading data:", error);
-      toast.error(`Failed to load data: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error("Error loading data:", message);
+      toast.error(`Failed to load data: ${message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const getSteps = (tc: any): TestStep[] => {
-    if (tc.unified_data?.steps?.length > 0) {
-      return tc.unified_data.steps.map((s: any) => ({
-        action: s.action || '',
+  const getSteps = (tc: Record<string, unknown> | null): TestStep[] => {
+    if (!tc) return [];
+    const unifiedData = tc.unified_data as Record<string, unknown> | undefined;
+    const unifiedSteps = unifiedData?.steps as Array<Record<string, unknown>> | undefined;
+    if (unifiedSteps && unifiedSteps.length > 0) {
+      return unifiedSteps.map((s) => ({
+        action: (s.action as string) || '',
         expectedResult: buildExpectedResult(s),
-        qword: s.qword,
-        type: s.type,
-        selector: s.selector,
-        value: s.value,
-        args: s.args || {},
-        assertion: s.assertion
+        qword: s.qword as string | undefined,
+        type: s.type as string | undefined,
+        selector: s.selector as string | undefined,
+        value: s.value as string | undefined,
+        args: (s.args as Record<string, string | number | boolean>) || {},
+        assertion: s.assertion as TestStep['assertion']
       }));
     }
-    if (tc.steps?.length > 0) {
-      return tc.steps.map((s: any) => ({
-        action: s.action || '',
+    const steps = tc.steps as Array<Record<string, unknown>> | undefined;
+    if (steps && steps.length > 0) {
+      return steps.map((s) => ({
+        action: (s.action as string) || '',
         expectedResult: buildExpectedResult(s),
-        qword: s.qword || s.type,
-        type: s.type,
-        selector: s.selector,
-        value: s.value,
-        args: s.args || {},
-        assertion: s.assertion
+        qword: (s.qword || s.type) as string | undefined,
+        type: s.type as string | undefined,
+        selector: s.selector as string | undefined,
+        value: s.value as string | undefined,
+        args: (s.args as Record<string, string | number | boolean>) || {},
+        assertion: s.assertion as TestStep['assertion']
       }));
     }
     return [];
@@ -414,23 +424,25 @@ export default function TestCaseExecution() {
   const saveStepResults = (newResults: StepResult[]) => {
     setStepResults(newResults);
     const savedRuns = JSON.parse(localStorage.getItem('test_execution_history') || '[]');
-    const updatedRuns = savedRuns.map((r: any) => {
+    const updatedRuns = savedRuns.map((r: Record<string, unknown>) => {
       if (r.id === runId) {
-        const updatedResults = { ...r.manualStepResults, [testCaseId!]: newResults };
-        const testStatus = newResults.some(r => r.status === 'failed') ? 'failed' 
-          : newResults.every(r => r.status === 'passed' || r.status === 'skipped') ? 'passed' : 'running';
-        const testCaseStatuses = { ...r.testCaseStatuses, [testCaseId!]: testStatus };
-        const testIdsList = r.testCaseIds || [r.testCaseId];
+        const manualStepResults = (r.manualStepResults || {}) as Record<string, StepResult[]>;
+        const updatedResults = { ...manualStepResults, [testCaseId!]: newResults };
+        const testStatus = newResults.some(sr => sr.status === 'failed') ? 'failed'
+          : newResults.every(sr => sr.status === 'passed' || sr.status === 'skipped') ? 'passed' : 'running';
+        const existingStatuses = (r.testCaseStatuses || {}) as Record<string, string>;
+        const testCaseStatuses = { ...existingStatuses, [testCaseId!]: testStatus };
+        const testIdsList = (r.testCaseIds || (r.testCaseId ? [r.testCaseId] : [])) as string[];
         const values = testIdsList.map((id: string) => testCaseStatuses[id] || 'pending');
         const overallStatus = values.some((s: string) => s === 'failed') ? 'failed'
           : values.every((s: string) => s === 'passed') ? 'passed'
           : values.some((s: string) => s === 'running' || s === 'pending') ? 'running' : 'pending';
-        
+
         // Calculate step-level results for manual execution (more meaningful than test-case level)
         let totalPassed = 0, totalFailed = 0, totalSkipped = 0;
-        Object.values(updatedResults).forEach((stepResults: any) => {
-          if (Array.isArray(stepResults)) {
-            stepResults.forEach((step: StepResult) => {
+        Object.values(updatedResults).forEach((resultArr: StepResult[]) => {
+          if (Array.isArray(resultArr)) {
+            resultArr.forEach((step: StepResult) => {
               if (step.status === 'passed') totalPassed++;
               else if (step.status === 'failed') totalFailed++;
               else totalSkipped++; // pending counts as skipped for now
@@ -454,7 +466,7 @@ export default function TestCaseExecution() {
       return r;
     });
     localStorage.setItem('test_execution_history', JSON.stringify(updatedRuns));
-    setTestRun(updatedRuns.find((r: any) => r.id === runId));
+    setTestRun(updatedRuns.find((r: Record<string, unknown>) => r.id === runId) || null);
   };
 
   const markStep = (status: 'passed' | 'failed' | 'skipped', errorMessage?: string) => {
@@ -580,7 +592,7 @@ export default function TestCaseExecution() {
   };
 
   // Link existing defect to current step
-  const linkExistingDefect = (defect: any) => {
+  const linkExistingDefect = (defect: Record<string, unknown>) => {
     const newResults = [...stepResults];
     newResults[currentStepIndex] = {
       ...newResults[currentStepIndex],

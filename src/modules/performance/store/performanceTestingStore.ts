@@ -628,6 +628,10 @@ export const usePerformanceTestingStore = create<
           set(
             (state) => {
               state.metricsHistory.push(metrics);
+              // Cap at 3600 snapshots (1 hour at 1/sec) to prevent unbounded memory growth
+              if (state.metricsHistory.length > 3600) {
+                state.metricsHistory = state.metricsHistory.slice(-3600);
+              }
             },
             false,
             'addMetricsSnapshot'

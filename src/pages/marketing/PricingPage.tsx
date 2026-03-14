@@ -8,11 +8,11 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { trackCTAClick, trackPricingView } from '@/lib/web-analytics';
 import {
-  Check, X, ArrowRight, Rocket, Building2, Zap,
-  ChevronDown, HelpCircle, Mail, MessageSquare, Sparkles,
+  Check, X, ArrowRight, Building2, Zap,
+  ChevronDown, Mail, MessageSquare,
   TestTube, Gauge, Code, Eye, Accessibility, Cloud,
   Smartphone, Compass, Shield, Server,
-  CalendarCheck, DollarSign, Layers, Lock, Globe, BarChart3
+  CalendarCheck, Layers, Lock, Globe, BarChart3, FileText
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -37,10 +37,10 @@ function MarketingHeader() {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
               <span className="text-white font-bold text-lg">F</span>
             </div>
-            <span className="text-xl font-bold text-slate-800">Flowstral</span>
+            <span className="text-xl font-bold text-slate-900">Flowstral</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             <Link to="/#features" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Features</Link>
@@ -54,7 +54,7 @@ function MarketingHeader() {
           <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => { trackCTAClick('sign_in', '/pricing'); navigate('/signin'); }}>
             Sign In
           </Button>
-          <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => { trackCTAClick('start_free', '/pricing'); navigate('/signup'); }}>
+          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => { trackCTAClick('start_free', '/pricing'); navigate('/signup'); }}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -285,7 +285,7 @@ function ComparisonCell({ value, isEnterprise }: { value: boolean | string; isEn
     return (
       <span className={cn(
         "text-sm font-medium",
-        isEnterprise ? "text-violet-600 font-semibold" : "text-slate-600"
+        isEnterprise ? "text-slate-900 font-semibold" : "text-slate-600"
       )}>
         {value}
       </span>
@@ -338,50 +338,30 @@ export default function PricingPage() {
   }, 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50">
+    <div className="min-h-screen bg-white">
       <MarketingHeader />
 
       {/* Hero */}
       <section className="pt-32 pb-12 px-6">
         <div className="max-w-4xl mx-auto text-center">
-          <Badge className="mb-4 bg-gradient-to-r from-blue-100 to-violet-100 text-blue-700 border-0 px-4 py-1.5">
-            <Sparkles className="w-3.5 h-3.5 mr-1.5 inline" />
-            All-in-One Testing Platform
-          </Badge>
+          <p className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4">Pricing</p>
           <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
-            Start Free. Scale to Enterprise.
+            Free to start. Enterprise when you are ready.
           </h1>
-          <p className="text-xl text-slate-600 mb-4 max-w-2xl mx-auto">
-            Replace 5-8 testing tools with one platform. No credit card required.
-          </p>
-          <p className="text-base text-slate-500 mb-8 max-w-xl mx-auto">
-            Get started with a generous free tier, then unlock the full power of Flowstral when your team is ready.
+          <p className="text-xl text-slate-600 mb-8 max-w-2xl mx-auto">
+            One platform replaces your browser automation, API testing, performance, visual regression,
+            accessibility, and mobile testing tools. No credit card required for the free tier.
           </p>
 
-          {/* 8 Packs Showcase */}
+          {/* 8 Testing Areas */}
           <div className="flex flex-wrap justify-center gap-3 mb-10">
             {testingPacks.map((pack) => (
               <div
                 key={pack.name}
-                className={cn(
-                  "relative flex items-center gap-2 px-4 py-2 rounded-full border transition-all hover:scale-105",
-                  pack.color === 'blue' && "bg-blue-50 border-blue-200 text-blue-700",
-                  pack.color === 'orange' && "bg-orange-50 border-orange-200 text-orange-700",
-                  pack.color === 'emerald' && "bg-emerald-50 border-emerald-200 text-emerald-700",
-                  pack.color === 'purple' && "bg-purple-50 border-purple-200 text-purple-700",
-                  pack.color === 'pink' && "bg-pink-50 border-pink-200 text-pink-700",
-                  pack.color === 'cyan' && "bg-cyan-50 border-cyan-200 text-cyan-700",
-                  pack.color === 'fuchsia' && "bg-fuchsia-50 border-fuchsia-200 text-fuchsia-700",
-                  pack.color === 'sky' && "bg-sky-50 border-sky-200 text-sky-700",
-                )}
+                className="flex items-center gap-2 px-4 py-2 rounded-full border border-slate-200 bg-slate-50 text-slate-700"
               >
-                {pack.isNew && (
-                  <Badge className="absolute -top-2 -right-2 bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white border-0 text-[8px] font-bold px-1.5 py-0 animate-pulse">
-                    NEW
-                  </Badge>
-                )}
-                <pack.icon className="w-4 h-4" />
-                <span className="text-sm font-semibold">{pack.name}</span>
+                <pack.icon className="w-4 h-4 text-slate-500" />
+                <span className="text-sm font-medium">{pack.name}</span>
               </div>
             ))}
           </div>
@@ -395,8 +375,8 @@ export default function PricingPage() {
 
             {/* Free Tier */}
             <div className="relative p-8 rounded-3xl border-2 border-slate-200 bg-white hover:border-slate-300 hover:shadow-lg transition-all duration-300 flex flex-col">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-100 to-emerald-200 flex items-center justify-center mb-6 shadow-sm">
-                <Zap className="w-7 h-7 text-emerald-600" />
+              <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-6">
+                <Zap className="w-6 h-6 text-slate-600" />
               </div>
 
               <h3 className="text-2xl font-bold text-slate-900 mb-1">Free</h3>
@@ -444,18 +424,17 @@ export default function PricingPage() {
             </div>
 
             {/* Enterprise Tier */}
-            <div className="relative p-8 rounded-3xl border-2 border-violet-400 bg-gradient-to-b from-violet-50 via-white to-blue-50 shadow-xl shadow-violet-500/10 transition-all duration-300 flex flex-col lg:scale-[1.02]">
-              <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-blue-600 to-violet-600 text-white border-0 px-4 py-1 shadow-lg">
-                <Sparkles className="w-3 h-3 mr-1" />
+            <div className="relative p-8 rounded-3xl border-2 border-slate-900 bg-white shadow-sm transition-all duration-300 flex flex-col">
+              <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-slate-900 text-white border-0 px-4 py-1">
                 Recommended
               </Badge>
 
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-100 to-violet-200 flex items-center justify-center mb-6 shadow-sm">
-                <Building2 className="w-7 h-7 text-violet-600" />
+              <div className="w-12 h-12 rounded-xl bg-slate-900 flex items-center justify-center mb-6">
+                <Building2 className="w-6 h-6 text-white" />
               </div>
 
               <h3 className="text-2xl font-bold text-slate-900 mb-1">Enterprise</h3>
-              <p className="text-sm text-slate-500 mb-6">Full platform power for teams that ship quality at scale</p>
+              <p className="text-sm text-slate-500 mb-6">Everything in Free, plus performance, mobile, Salesforce, and deployment options</p>
 
               <div className="mb-6">
                 <span className="text-3xl font-bold text-slate-900">Contact Sales</span>
@@ -464,14 +443,14 @@ export default function PricingPage() {
 
               <div className="flex gap-3 mb-8">
                 <Button
-                  className="flex-1 h-12 rounded-xl font-semibold bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white shadow-lg shadow-blue-500/25 transition-all"
+                  className="flex-1 h-12 rounded-xl font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-all"
                   onClick={() => { trackCTAClick('talk_to_sales', '/pricing'); navigate('/contact'); }}
                 >
                   Talk to Sales <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-12 rounded-xl font-semibold border-violet-300 text-violet-600 hover:bg-violet-50"
+                  className="h-12 rounded-xl font-semibold border-slate-300 text-slate-700 hover:bg-slate-50"
                   onClick={() => { trackCTAClick('request_demo', '/pricing'); navigate('/contact'); }}
                 >
                   <CalendarCheck className="w-4 h-4 mr-1.5" /> Demo
@@ -502,7 +481,7 @@ export default function PricingPage() {
                   'Training, Onboarding & QBRs',
                 ].map((feature, i) => (
                   <div key={i} className="flex items-center gap-3">
-                    <Check className="w-5 h-5 text-violet-500 flex-shrink-0" />
+                    <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
                     <span className="text-sm text-slate-700">{feature}</span>
                   </div>
                 ))}
@@ -513,19 +492,16 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* Why Enterprise — Tool Consolidation ROI */}
-      <section className="py-20 px-6 bg-gradient-to-b from-slate-50 via-white to-slate-50 border-y border-slate-200/60">
+      {/* Tool Consolidation */}
+      <section className="py-20 px-6 bg-slate-50 border-y border-slate-200">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <Badge className="mb-4 bg-violet-100 text-violet-700 border-violet-200 px-4 py-1.5">
-              <DollarSign className="w-3.5 h-3.5 mr-1.5 inline" />
-              ROI Calculator
-            </Badge>
             <h2 className="text-3xl lg:text-4xl font-bold text-slate-900 mb-4">
-              Replace 5-8 Tools. Save ${totalSavingsLow}K-${totalSavingsHigh}K/Year.
+              What Flowstral replaces
             </h2>
             <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-              Most enterprise QA teams spend over $200K annually on fragmented testing tools. Flowstral consolidates everything into one platform, one vendor, one contract.
+              Most QA teams pay for 5-8 separate tools. That adds up to ${totalSavingsLow}K-${totalSavingsHigh}K per year
+              before you count the integration work and context-switching overhead.
             </p>
           </div>
 
@@ -540,23 +516,23 @@ export default function PricingPage() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
-            <div className="bg-gradient-to-br from-blue-50 to-violet-50 border border-blue-200/60 rounded-2xl p-8 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center mx-auto mb-4">
-                <Layers className="w-7 h-7 text-blue-600" />
+            <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                <Layers className="w-7 h-7 text-slate-700" />
               </div>
               <h3 className="text-xl font-bold text-slate-900 mb-2">One Platform</h3>
               <p className="text-sm text-slate-600">Replace 8 separate tools with a single, unified testing platform. No more context-switching between vendors.</p>
             </div>
-            <div className="bg-gradient-to-br from-emerald-50 to-cyan-50 border border-emerald-200/60 rounded-2xl p-8 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-                <DollarSign className="w-7 h-7 text-emerald-600" />
+            <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                <FileText className="w-7 h-7 text-slate-700" />
               </div>
               <h3 className="text-xl font-bold text-slate-900 mb-2">One Contract</h3>
               <p className="text-sm text-slate-600">Eliminate procurement complexity. One vendor, one renewal, one point of contact for all your testing needs.</p>
             </div>
-            <div className="bg-gradient-to-br from-violet-50 to-pink-50 border border-violet-200/60 rounded-2xl p-8 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-violet-100 flex items-center justify-center mx-auto mb-4">
-                <BarChart3 className="w-7 h-7 text-violet-600" />
+            <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                <BarChart3 className="w-7 h-7 text-slate-700" />
               </div>
               <h3 className="text-xl font-bold text-slate-900 mb-2">One Dashboard</h3>
               <p className="text-sm text-slate-600">Unified analytics across all testing types. See quality metrics, trends, and coverage in a single view.</p>
@@ -581,34 +557,26 @@ export default function PricingPage() {
                 icon: Shield,
                 title: 'RBAC & Multi-Tenant',
                 desc: 'Role-based access control with tenant isolation, JWT auth, and audit logging built in.',
-                gradient: 'from-blue-100 to-blue-200',
-                iconColor: 'text-blue-600',
               },
               {
                 icon: Lock,
                 title: 'SSO & SCIM (Roadmap)',
                 desc: 'SAML 2.0 single sign-on and SCIM provisioning are on our enterprise roadmap.',
-                gradient: 'from-violet-100 to-violet-200',
-                iconColor: 'text-violet-600',
               },
               {
                 icon: Server,
                 title: 'On-Premise Deploy',
                 desc: 'Air-gapped, private cloud, or hybrid deployments with Docker and Kubernetes Helm charts.',
-                gradient: 'from-emerald-100 to-emerald-200',
-                iconColor: 'text-emerald-600',
               },
               {
                 icon: Globe,
                 title: 'Self-Hosted Flexibility',
                 desc: 'Deploy anywhere your infrastructure lives. Works with Ollama for fully offline AI.',
-                gradient: 'from-orange-100 to-orange-200',
-                iconColor: 'text-orange-600',
               },
             ].map((badge, i) => (
               <div key={i} className="bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-lg hover:border-slate-300 transition-all">
-                <div className={cn("w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center mb-4", badge.gradient)}>
-                  <badge.icon className={cn("w-6 h-6", badge.iconColor)} />
+                <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-4">
+                  <badge.icon className="w-6 h-6 text-slate-700" />
                 </div>
                 <h3 className="text-lg font-bold text-slate-900 mb-2">{badge.title}</h3>
                 <p className="text-sm text-slate-600">{badge.desc}</p>
@@ -643,7 +611,7 @@ export default function PricingPage() {
             <div className="grid grid-cols-3 gap-4 p-6 bg-slate-50 border-b border-slate-200">
               <div className="font-semibold text-slate-700">Feature</div>
               <div className="text-center font-semibold text-emerald-600">Free</div>
-              <div className="text-center font-semibold text-violet-600">Enterprise</div>
+              <div className="text-center font-semibold text-slate-900">Enterprise</div>
             </div>
 
             {comparisonSections.map((section, sIdx) => (
@@ -653,7 +621,7 @@ export default function PricingPage() {
                   <section.icon className="w-4 h-4" />
                   {section.title}
                   {section.isNew && (
-                    <Badge className="bg-fuchsia-500 text-white border-0 text-[10px] ml-1">NEW</Badge>
+                    <Badge className="bg-slate-700 text-white border-0 text-[10px] ml-1">NEW</Badge>
                   )}
                 </div>
 
@@ -695,7 +663,7 @@ export default function PricingPage() {
                 <MessageSquare className="w-5 h-5 mr-2" /> Chat with Us
               </Button>
               <Button
-                className="h-12 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700"
+                className="h-12 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 text-white"
                 onClick={() => { trackCTAClick('contact_sales', '/pricing'); navigate('/contact'); }}
               >
                 <Mail className="w-5 h-5 mr-2" /> Contact Sales
@@ -730,24 +698,25 @@ export default function PricingPage() {
       </section>
 
       {/* Final CTA */}
-      <section className="py-20 px-6 bg-gradient-to-r from-blue-600 via-violet-600 to-blue-600">
+      <section className="py-20 px-6 bg-slate-900">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl lg:text-4xl font-bold text-white mb-4">
-            Ready to Unify Your Testing?
+            Start free, or talk to sales
           </h2>
-          <p className="text-lg text-blue-100 mb-8 max-w-2xl mx-auto">
-            Join teams that have replaced 5-8 fragmented tools with Flowstral. Start free today or talk to sales about an enterprise deployment.
+          <p className="text-lg text-slate-400 mb-8 max-w-2xl mx-auto">
+            The free tier is free forever. No credit card, no time limit.
+            When you need enterprise features, we will tailor a plan to your team.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
-              className="h-14 px-8 rounded-xl text-lg font-semibold bg-white text-blue-600 hover:bg-blue-50 shadow-lg transition-all"
+              className="h-14 px-8 rounded-xl text-lg font-semibold bg-white text-slate-900 hover:bg-slate-100 transition-all"
               onClick={() => { trackCTAClick('get_started_free_bottom', '/pricing'); navigate('/signup'); }}
             >
-              <Rocket className="w-5 h-5 mr-2" /> Get Started Free
+              Get Started Free <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
             <Button
               variant="outline"
-              className="h-14 px-8 rounded-xl text-lg font-semibold border-2 border-white/50 text-white hover:bg-white/10 transition-all"
+              className="h-14 px-8 rounded-xl text-lg font-semibold border-2 border-slate-600 text-white hover:bg-slate-800 transition-all"
               onClick={() => { trackCTAClick('talk_to_sales_bottom', '/pricing'); navigate('/contact'); }}
             >
               <Building2 className="w-5 h-5 mr-2" /> Talk to Sales

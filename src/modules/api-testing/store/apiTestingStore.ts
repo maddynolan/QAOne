@@ -87,6 +87,13 @@ export function clearBuilderDirtyState() {
 }
 
 // ============================================================================
+// DEBOUNCE TIMERS: Module-level (not in Zustand state to avoid serialization
+// issues and unnecessary re-renders). Keys are timer identifiers like
+// "coll_<id>" or "chain_<id>".
+// ============================================================================
+const _saveTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+
+// ============================================================================
 // STORE IMPLEMENTATION
 // ============================================================================
 
@@ -136,7 +143,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
           },
           sync_status: 'idle',
           last_sync: null,
-          _save_timers: {},
+          _save_timers: {}, // Deprecated: kept for type compat but timers use module-level _saveTimers
 
           // =================================================================
           // INITIALIZATION
@@ -214,10 +221,10 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                 set((s) => {
                   s.active_workspace_id = defaultWs.id;
                 });
-              } catch { /* ignore */ }
+              } catch (e) { console.warn('[ApiTestingStore] Failed to create default workspace on fallback:', e); }
             }
           },
-          
+
           createWorkspace: async (name, description = '') => {
             const ws: ApiWorkspace = {
               id: generateId(),
@@ -266,7 +273,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
             });
             try {
               await fetch(`${API_BASE_URL}/api/db/api-workspaces/${workspaceId}`, { method: 'DELETE' });
-            } catch { /* ignore */ }
+            } catch (e) { console.warn('[ApiTestingStore] Failed to delete workspace from DB:', e); }
           },
 
           // =================================================================
@@ -314,10 +321,10 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                         colls = [directColl];
                       }
                     }
-                  } catch { /* ignore */ }
+                  } catch (e) { console.warn('[ApiTestingStore] Failed to load persisted collection directly:', e); }
                 }
               }
-              
+
               set((s) => {
                 for (const c of colls) {
                   // Only overwrite if backend version is newer or local version doesn't exist
@@ -418,7 +425,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
             });
             try {
               await fetch(`${API_BASE_URL}/api/db/api-collections-v2/${collectionId}`, { method: 'DELETE' });
-            } catch { /* ignore */ }
+            } catch (e) { console.warn('[ApiTestingStore] Failed to delete collection from DB:', e); }
           },
           
           importCollection: async (payload, name) => {
@@ -779,7 +786,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                     const savedEnv = savedEnvs.find((e: any) => e.environment_id === savedEnvId);
                     if (savedEnv?.base_url) baseUrl = savedEnv.base_url;
                   }
-                } catch { /* ignore */ }
+                } catch (e) { console.warn('[ApiTestingStore] Failed to read localStorage env fallback:', e); }
               }
 
               fullUrl = baseUrl
@@ -848,7 +855,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                     });
                   }
                 }
-              } catch { /* ignore */ }
+              } catch (e) { console.warn('[ApiTestingStore] Failed to parse legacy chains from localStorage:', e); }
             } finally {
               set((s) => { s.loading.chains = false; });
             }
@@ -903,12 +910,11 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               }
             });
             
-            // Debounced save for chains
-            const state = get();
+            // Debounced save for chains (using module-level timers)
             const timerKey = `chain_${chainId}`;
-            if (state._save_timers[timerKey]) clearTimeout(state._save_timers[timerKey]);
-            
-            const timer = setTimeout(async () => {
+            if (_saveTimers[timerKey]) clearTimeout(_saveTimers[timerKey]);
+
+            _saveTimers[timerKey] = setTimeout(async () => {
               const coll = get().collections[collId];
               const chain = coll?.chains.find(c => c.id === chainId);
               if (!chain) return;
@@ -918,10 +924,8 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify(chain),
                 });
-              } catch { /* ignore */ }
+              } catch (e) { console.warn('[ApiTestingStore] Failed to save chain update:', e); }
             }, DEBOUNCE_MS);
-            
-            set((s) => { s._save_timers[timerKey] = timer; });
           },
           
           deleteChain: async (chainId) => {
@@ -937,7 +941,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
             
             try {
               await fetch(`${API_BASE_URL}/api/db/api-chains/${chainId}`, { method: 'DELETE' });
-            } catch { /* ignore */ }
+            } catch (e) { console.warn('[ApiTestingStore] Failed to delete chain from DB:', e); }
           },
 
           // =================================================================
@@ -1025,9 +1029,9 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newEnv),
               });
-            } catch { /* ignore */ }
+            } catch (e) { console.warn('[ApiTestingStore] Failed to persist environment:', e); }
           },
-          
+
           updateEnvironment: async (envId, updates) => {
             set((s) => {
               const env = s.environments.find(e => e.id === envId);
@@ -1042,9 +1046,9 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                   body: JSON.stringify(env),
                 });
               }
-            } catch { /* ignore */ }
+            } catch (e) { console.warn('[ApiTestingStore] Failed to update environment in DB:', e); }
           },
-          
+
           deleteEnvironment: async (envId) => {
             set((s) => {
               s.environments = s.environments.filter(e => e.id !== envId);
@@ -1052,7 +1056,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
             });
             try {
               await fetch(`${API_BASE_URL}/api/db/environments/${envId}`, { method: 'DELETE' });
-            } catch { /* ignore */ }
+            } catch (e) { console.warn('[ApiTestingStore] Failed to delete environment from DB:', e); }
           },
 
           // =================================================================
@@ -1156,8 +1160,8 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(run),
               });
-            } catch { /* ignore */ }
-            
+            } catch (e) { console.warn('[ApiTestingStore] Failed to persist test run:', e); }
+
             return run;
           },
           
@@ -1224,9 +1228,9 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                     const savedEnv = savedEnvs.find((e: any) => e.environment_id === savedEnvId);
                     if (savedEnv?.base_url) baseUrl = savedEnv.base_url;
                   }
-                } catch { /* ignore */ }
+                } catch (e) { console.warn('[ApiTestingStore] Failed to read localStorage env for test run:', e); }
               }
-              
+
               const res = await fetch(`${API_BASE_URL}/api/v2/testing/execute`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1290,7 +1294,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify(updatedRun),
                 });
-              } catch { /* ignore */ }
+              } catch (e) { console.warn('[ApiTestingStore] Failed to persist test run results to DB:', e); }
               
             } catch (err) {
               console.error('[ApiTestingStore] Test run execution failed:', err);
@@ -1321,18 +1325,15 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
           // =================================================================
           
           _debouncedSaveCollection: (collectionId) => {
-            const state = get();
             const timerKey = `coll_${collectionId}`;
-            
-            if (state._save_timers[timerKey]) {
-              clearTimeout(state._save_timers[timerKey]);
+
+            if (_saveTimers[timerKey]) {
+              clearTimeout(_saveTimers[timerKey]);
             }
-            
-            const timer = setTimeout(() => {
+
+            _saveTimers[timerKey] = setTimeout(() => {
               get()._saveCollectionNow(collectionId);
             }, DEBOUNCE_MS);
-            
-            set((s) => { s._save_timers[timerKey] = timer; });
           },
           
           _saveCollectionNow: async (collectionId) => {
@@ -1454,27 +1455,24 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
           },
           
           _debouncedSaveGlobalVars: () => {
-            const state = get();
             const timerKey = 'global_vars';
-            
-            if (state._save_timers[timerKey]) {
-              clearTimeout(state._save_timers[timerKey]);
+
+            if (_saveTimers[timerKey]) {
+              clearTimeout(_saveTimers[timerKey]);
             }
-            
-            const timer = setTimeout(() => {
+
+            _saveTimers[timerKey] = setTimeout(() => {
               const vars = get().global_variables;
               try {
                 localStorage.setItem('api_global_variables', JSON.stringify(vars));
-              } catch { /* ignore */ }
+              } catch (e) { console.warn('[ApiTestingStore] Failed to save global vars to localStorage:', e); }
               // Also persist to backend
               fetch(`${API_BASE_URL}/api/db/global-variables`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ variables: vars }),
-              }).catch(() => {});
+              }).catch((e) => console.warn('[ApiTestingStore] Failed to persist global vars to DB:', e));
             }, DEBOUNCE_MS);
-            
-            set((s) => { s._save_timers[timerKey] = timer; });
           },
 
           // =================================================================
@@ -1651,12 +1649,17 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
             setItem: (name, value) => {
               try {
                 localStorage.setItem(name, JSON.stringify(value));
-              } catch { /* ignore */ }
+              } catch (e) {
+                // localStorage quota exceeded or unavailable
+                console.warn('[ApiTestingStore] localStorage.setItem failed (quota?):', e);
+              }
             },
             removeItem: (name) => {
               try {
                 localStorage.removeItem(name);
-              } catch { /* ignore */ }
+              } catch (e) {
+                console.warn('[ApiTestingStore] localStorage.removeItem failed:', e);
+              }
             },
           },
         }

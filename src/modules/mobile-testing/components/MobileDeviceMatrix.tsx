@@ -12,7 +12,7 @@
  * - Execution time comparison across devices
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -120,6 +120,15 @@ export default function MobileDeviceMatrix() {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedManufacturer, setExpandedManufacturer] = useState<string | null>(null);
   const [configName, setConfigName] = useState('');
+  const matrixTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  // Cleanup all matrix timers on unmount to prevent state updates after unmount
+  useEffect(() => {
+    return () => {
+      matrixTimersRef.current.forEach(t => clearTimeout(t));
+      matrixTimersRef.current = [];
+    };
+  }, []);
 
   // Filter device catalog
   const filteredDevices = useMemo(() => {
@@ -200,6 +209,10 @@ export default function MobileDeviceMatrix() {
     });
     setMatrixResults(cells);
 
+    // Clear any previously pending timers before starting new run
+    matrixTimersRef.current.forEach(t => clearTimeout(t));
+    matrixTimersRef.current = [];
+
     // Simulate execution in waves based on maxParallel
     let idx = 0;
     const runWave = () => {
@@ -207,13 +220,14 @@ export default function MobileDeviceMatrix() {
       for (let i = idx; i < batchEnd; i++) {
         const cellIndex = i;
         // Set to running
-        setTimeout(() => {
+        const t1 = setTimeout(() => {
           setMatrixResults(prev => prev.map((c, j) => j === cellIndex ? { ...c, status: 'running' } : c));
         }, (i - idx) * 200);
+        matrixTimersRef.current.push(t1);
 
         // Complete after random delay
         const delay = 1500 + Math.random() * 3000;
-        setTimeout(() => {
+        const t2 = setTimeout(() => {
           const passed = Math.random() > 0.2;
           const stepsPassed = passed ? 8 : Math.floor(Math.random() * 7);
           setMatrixResults(prev => prev.map((c, j) =>
@@ -227,16 +241,19 @@ export default function MobileDeviceMatrix() {
             } : c
           ));
         }, delay);
+        matrixTimersRef.current.push(t2);
       }
 
       idx = batchEnd;
       if (idx < cells.length) {
-        setTimeout(runWave, 2000 + Math.random() * 2000);
+        const t3 = setTimeout(runWave, 2000 + Math.random() * 2000);
+        matrixTimersRef.current.push(t3);
       } else {
-        setTimeout(() => {
+        const t4 = setTimeout(() => {
           setIsRunning(false);
           toast.success('Matrix execution complete');
         }, 4000 + Math.random() * 2000);
+        matrixTimersRef.current.push(t4);
       }
     };
     runWave();

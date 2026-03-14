@@ -159,16 +159,30 @@ const ScenarioStepCard: React.FC<ScenarioStepCardProps> = ({
 
   const handleMinDelayChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      onUpdate(step.id, { minDelay: parseInt(e.target.value, 10) || 0 });
+      const val = Math.min(60000, Math.max(0, parseInt(e.target.value, 10) || 0));
+      const currentMax = step.maxDelay ?? 3000;
+      // Auto-clamp: if minDelay exceeds maxDelay, bring maxDelay up
+      if (val > currentMax) {
+        onUpdate(step.id, { minDelay: val, maxDelay: val });
+      } else {
+        onUpdate(step.id, { minDelay: val });
+      }
     },
-    [step.id, onUpdate],
+    [step.id, step.maxDelay, onUpdate],
   );
 
   const handleMaxDelayChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      onUpdate(step.id, { maxDelay: parseInt(e.target.value, 10) || 0 });
+      const val = Math.min(60000, Math.max(0, parseInt(e.target.value, 10) || 0));
+      const currentMin = step.minDelay ?? 1000;
+      // Auto-clamp: if maxDelay drops below minDelay, bring minDelay down
+      if (val < currentMin) {
+        onUpdate(step.id, { maxDelay: val, minDelay: val });
+      } else {
+        onUpdate(step.id, { maxDelay: val });
+      }
     },
-    [step.id, onUpdate],
+    [step.id, step.minDelay, onUpdate],
   );
 
   // ── Loop handlers ──────────────────────────────────────────────────────
@@ -466,6 +480,7 @@ const ScenarioStepCard: React.FC<ScenarioStepCardProps> = ({
                     value={step.minDelay ?? 1000}
                     onChange={handleMinDelayChange}
                     min={0}
+                    max={60000}
                     step={100}
                     className="mt-1"
                   />
@@ -477,6 +492,7 @@ const ScenarioStepCard: React.FC<ScenarioStepCardProps> = ({
                     value={step.maxDelay ?? 3000}
                     onChange={handleMaxDelayChange}
                     min={0}
+                    max={60000}
                     step={100}
                     className="mt-1"
                   />

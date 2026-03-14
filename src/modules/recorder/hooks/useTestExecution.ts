@@ -92,13 +92,15 @@ export function useTestExecution(params: UseTestExecutionParams) {
       toast.error('Can only lock locators after a successful test run');
       return;
     }
-    
+
     // Diagnostic: Log what stepResults look like BEFORE locking
-    console.log('[LockLocators] stepResults:', JSON.stringify(
-      testExecutionResult.stepResults?.map((r: any) => ({
-        idx: r.index, status: r.status, ws: r.workingSelector || 'NONE', st: r.strategyType || '-'
-      })), null, 2
-    ));
+    if (import.meta.env.DEV) {
+      console.log('[LockLocators] stepResults:', JSON.stringify(
+        testExecutionResult.stepResults?.map((r: any) => ({
+          idx: r.index, status: r.status, ws: r.workingSelector || 'NONE', st: r.strategyType || '-'
+        })), null, 2
+      ));
+    }
     
     let lockedCount = 0;
     let skippedCount = 0;
@@ -114,15 +116,15 @@ export function useTestExecution(params: UseTestExecutionParams) {
           const actionType = (action.type || action.action || '').toLowerCase();
           const isNavStep = actionType === 'navigate' || actionType === 'goto' || actionType === 'navigation';
           if (isNavStep) {
-            console.log(`[LockLocators] Step ${index + 1}: Navigate step (no selector needed)`);
+            if (import.meta.env.DEV) console.log(`[LockLocators] Step ${index + 1}: Navigate step (no selector needed)`);
           } else {
-            console.log(`[LockLocators] Step ${index + 1}: No working selector returned, skipping`);
+            if (import.meta.env.DEV) console.log(`[LockLocators] Step ${index + 1}: No working selector returned, skipping`);
             skippedCount++;
           }
           return action;
         }
         
-        console.log(`[LockLocators] Step ${index + 1}: Locking actual working selector → ${workingSelector}`);
+        if (import.meta.env.DEV) console.log(`[LockLocators] Step ${index + 1}: Locking actual working selector`, workingSelector);
         lockedCount++;
         
         return {
@@ -168,7 +170,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
           
           localStorage.setItem(`unified_test_case_${tcId}`, JSON.stringify(updatedTC));
           
-          console.log(`[LockLocators] Auto-saved ${lockedCount} locked selectors to localStorage`);
+          if (import.meta.env.DEV) console.log(`[LockLocators] Auto-saved ${lockedCount} locked selectors to localStorage`);
         } catch (e) {
           console.warn('[LockLocators] Auto-save failed (non-critical):', e);
         }
@@ -213,7 +215,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
     // ROBUST PLAYBACK: Normalize all steps before execution
     // This handles dynamic content like badge numbers, emojis, and creates fallback selectors
     const normalizedActions = normalizeStepsForPlayback(actions);
-    console.log('[Test] Normalized steps for robust playback:', normalizedActions.length);
+    if (import.meta.env.DEV) console.log('[Test] Normalized steps for robust playback:', normalizedActions.length);
     
     const flowstral = (window as any).flowstral;
     const electronAPI = (window as any).electronAPI;
@@ -234,7 +236,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
     // Listen for step start events
     if (flowstral?.on) {
       const unsubStepStart = flowstral.on('playwright-test-step-start', (data: { stepIndex: number; step: any }) => {
-        console.log('[Test] Step start:', data.stepIndex);
+        if (import.meta.env.DEV) console.log('[Test] Step start:', data.stepIndex);
         setTestExecutionResult(prev => {
           if (!prev || prev.status !== 'running') return prev;
           return { ...prev, currentStep: data.stepIndex };
@@ -246,7 +248,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
       const unsubStepComplete = flowstral.on('playwright-test-step-complete', (data: { stepIndex: number; success: boolean; error?: string; screenshot?: string; workingSelector?: string; strategyType?: string; healed?: boolean; skipped?: boolean; newSelector?: string; aiResolved?: string | false; aiDetails?: any }) => {
         const isHealed = data.healed || false;
         const isSkipped = data.skipped || false;
-        console.log('[Test] Step complete:', data.stepIndex, data.success ? '✓' : '✗', isHealed ? '[HEALED]' : '', isSkipped ? '[SKIPPED]' : '', data.aiResolved ? `[AI: ${data.aiResolved}]` : '');
+        if (import.meta.env.DEV) console.log('[Test] Step complete:', data.stepIndex, data.success ? 'pass' : 'fail', isHealed ? '[HEALED]' : '', isSkipped ? '[SKIPPED]' : '', data.aiResolved ? `[AI: ${data.aiResolved}]` : '');
 
         setTestExecutionResult(prev => {
           if (!prev) return prev;
@@ -276,7 +278,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
         // If a locked selector failed but SmartFinder found the element,
         // auto-update the step's optimizedSelector with the new working one
         if (data.success && data.healed && data.workingSelector) {
-          console.log(`[Test] 🔧 Auto-healing step ${data.stepIndex + 1}: ${data.workingSelector}`);
+          if (import.meta.env.DEV) console.log(`[Test] Auto-healing step ${data.stepIndex + 1}:`, data.workingSelector);
           setActions(prev => prev.map((action, idx) => {
             if (idx === data.stepIndex) {
               return {
@@ -296,14 +298,14 @@ export function useTestExecution(params: UseTestExecutionParams) {
 
         // Notify on auto-skipped steps
         if (data.success && isSkipped) {
-          console.log(`[Test] Step ${data.stepIndex + 1} auto-skipped (non-critical)`);
+          if (import.meta.env.DEV) console.log(`[Test] Step ${data.stepIndex + 1} auto-skipped (non-critical)`);
         }
 
         // =========== SMART SUGGESTIONS ON TRUE FAILURE ===========
         // Only pause and show failure UI when step truly failed
         // (NOT when healed or skipped by resilient runtime)
         if (!data.success && !isHealed && !isSkipped) {
-          console.log('[Test] Step failed - showing Smart Suggestions for quick fix');
+          if (import.meta.env.DEV) console.log('[Test] Step failed - showing Smart Suggestions for quick fix');
 
           // Set paused state so user can fix
           setIsTestPaused(true);
@@ -336,7 +338,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
 
       // Listen for resilient healing events (step is being auto-healed)
       const unsubStepHealing = flowstral.on('playwright-test-step-healing', (data: { stepIndex: number; error?: string }) => {
-        console.log(`[Test] 🔄 Step ${data.stepIndex + 1} healing in progress...`);
+        if (import.meta.env.DEV) console.log(`[Test] Step ${data.stepIndex + 1} healing in progress...`);
         setTestExecutionResult(prev => {
           if (!prev) return prev;
           const newResults = [...prev.stepResults];
@@ -352,7 +354,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
 
       // Listen for flagged step / pause events
       const unsubPaused = flowstral.on('playwright-test-paused', (data: { stepIndex: number; reason: string; flagReason?: string }) => {
-        console.log('[Test] 🚩 Paused at flagged step:', data.stepIndex, data.flagReason);
+        if (import.meta.env.DEV) console.log('[Test] Paused at flagged step:', data.stepIndex, data.flagReason);
         setTestExecutionResult(prev => {
           if (!prev) return prev;
           return {
@@ -378,7 +380,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
         stepResults?: any[];
         error?: string 
       }) => {
-        console.log('[Test] Test complete event received:', data.success ? 'PASSED' : 'FAILED');
+        if (import.meta.env.DEV) console.log('[Test] Test complete event received:', data.success ? 'PASSED' : 'FAILED');
         
         // Build step results from event data or create default
         const finalStepResults = data.stepResults?.map((s: any, i: number) => ({
@@ -436,7 +438,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
     // Fallback: Poll-based progress tracking if no event listeners
     let progressInterval: NodeJS.Timeout | null = null;
     if (!flowstral?.on) {
-      console.log('[Test] Using fallback progress polling (no flowstral.on)');
+      if (import.meta.env.DEV) console.log('[Test] Using fallback progress polling (no flowstral.on)');
       progressInterval = setInterval(async () => {
         if (flowstral?.playwrightRecorder?.getTestProgress) {
           const progress = await flowstral.playwrightRecorder.getTestProgress();
@@ -541,7 +543,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
       eventCleanups.forEach(cleanup => cleanup());
       if (progressInterval) clearInterval(progressInterval);
       
-      console.log('[Test] Result:', result);
+      if (import.meta.env.DEV) console.log('[Test] Result:', result);
       
       // Generate step results from the response (preserve workingSelector for Lock Locators)
       const generateStepResults = () => {
@@ -593,7 +595,7 @@ export function useTestExecution(params: UseTestExecutionParams) {
       if (pausedAtFlagged) {
         // Test paused at flagged step - show repair UI
         const flaggedStepIndex = result.stoppedAtFlaggedStep?.index ?? result.failedStep;
-        console.log('[Test] 🚩 Test paused at flagged step:', flaggedStepIndex);
+        if (import.meta.env.DEV) console.log('[Test] Test paused at flagged step:', flaggedStepIndex);
         
         setTestExecutionResult({
           status: 'paused',

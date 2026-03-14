@@ -9,7 +9,7 @@ import React, { useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { trackCTAClick, trackEvent } from '@/lib/web-analytics';
 import {
-  ArrowRight, Check, X, Minus, Rocket, Building2, Zap,
+  ArrowRight, Check, X, Minus, Building2, Zap,
   Shield, Globe, Eye, Gauge, Smartphone, Accessibility,
   Code, BarChart3, Bot, Layers, Cable
 } from 'lucide-react';
@@ -297,16 +297,16 @@ export default function ComparePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50">
+    <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/50">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <Link to="/" className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
                 <span className="text-white font-bold text-lg">F</span>
               </div>
-              <span className="text-xl font-bold text-slate-800">Flowstral</span>
+              <span className="text-xl font-bold text-slate-900">Flowstral</span>
             </Link>
             <nav className="hidden md:flex items-center gap-6">
               <Link to="/pricing" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Pricing</Link>
@@ -317,7 +317,7 @@ export default function ComparePage() {
           </div>
           <div className="flex items-center gap-3">
             <Button variant="ghost" onClick={() => { trackCTAClick('sign_in', `/compare/${slug}`); navigate('/signin'); }}>Sign In</Button>
-            <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => { trackCTAClick('start_free', `/compare/${slug}`); navigate('/signup'); }}>
+            <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => { trackCTAClick('start_free', `/compare/${slug}`); navigate('/signup'); }}>
               Start Free <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
@@ -327,9 +327,7 @@ export default function ComparePage() {
       {/* Hero */}
       <section className="py-16 px-6">
         <div className="max-w-4xl mx-auto text-center">
-          <Badge className="mb-4 bg-blue-50 text-blue-700 border-blue-200">
-            Comparison
-          </Badge>
+          <p className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4">Comparison</p>
           <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
             Flowstral vs {config.name}
           </h1>
@@ -421,24 +419,24 @@ export default function ComparePage() {
       </section>
 
       {/* Final CTA */}
-      <section className="py-20 px-6 bg-gradient-to-r from-blue-600 via-violet-600 to-blue-600">
+      <section className="py-20 px-6 bg-slate-900">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl lg:text-4xl font-bold text-white mb-4">
-            Ready to Replace {config.name}?
+            Ready to replace {config.name}?
           </h2>
-          <p className="text-lg text-blue-100 mb-8">
+          <p className="text-lg text-slate-400 mb-8">
             Start free with unlimited test building. No credit card required.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
-              className="h-14 px-8 rounded-xl text-lg font-semibold bg-white text-blue-600 hover:bg-blue-50 shadow-lg"
+              className="h-14 px-8 rounded-xl text-lg font-semibold bg-white text-slate-900 hover:bg-slate-100"
               onClick={() => { trackCTAClick('get_started_free', `/compare/${slug}`); navigate('/signup'); }}
             >
-              <Rocket className="w-5 h-5 mr-2" /> Try Flowstral Free
+              Try Flowstral Free <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
             <Button
               variant="outline"
-              className="h-14 px-8 rounded-xl text-lg font-semibold border-2 border-white/50 text-white hover:bg-white/10"
+              className="h-14 px-8 rounded-xl text-lg font-semibold border-slate-600 text-white hover:bg-slate-800"
               onClick={() => { trackCTAClick('talk_to_sales', `/compare/${slug}`); navigate('/contact'); }}
             >
               <Building2 className="w-5 h-5 mr-2" /> Talk to Sales
