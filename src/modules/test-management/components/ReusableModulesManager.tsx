@@ -61,7 +61,7 @@ export interface ModuleStep {
   selector?: string;
   value?: string;
   waitTime?: number;
-  assertion?: any;
+  assertion?: Record<string, unknown>;
   description?: string;
 }
 
@@ -73,7 +73,7 @@ export interface ModuleVariable {
 }
 
 interface ReusableModulesManagerProps {
-  currentNodes: any[];  // Current workflow nodes
+  currentNodes: Record<string, unknown>[];  // Current workflow nodes
   appType: string;
   onImportModule: (steps: ModuleStep[]) => void;
   onSelectSteps?: (nodeIds: string[]) => void;

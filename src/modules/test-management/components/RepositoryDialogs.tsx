@@ -232,7 +232,7 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
                 <label className="text-sm text-muted-foreground mb-1 block">Schedule</label>
                 <select
                   value={editingSuite.schedule || 'on-demand'}
-                  onChange={(e) => setEditingSuite({ ...editingSuite, schedule: e.target.value as any })}
+                  onChange={(e) => setEditingSuite({ ...editingSuite, schedule: e.target.value as TestSuite['schedule'] })}
                   className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"
                 >
                   <option value="on-demand">On Demand</option>
@@ -275,7 +275,7 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
               </div>
               <div>
                 <label className="text-sm text-muted-foreground mb-1 block">Status</label>
-                <select value={editingRelease.status} onChange={(e) => setEditingRelease({ ...editingRelease, status: e.target.value as any })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground">
+                <select value={editingRelease.status} onChange={(e) => setEditingRelease({ ...editingRelease, status: e.target.value as Release['status'] })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground">
                   <option value="planning">Planning</option>
                   <option value="active">Active</option>
                   <option value="completed">Completed</option>
@@ -421,7 +421,7 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-muted-foreground mb-1 block">Status</label>
-                  <select value={editingPlan.status} onChange={(e) => setEditingPlan({ ...editingPlan, status: e.target.value as any })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground">
+                  <select value={editingPlan.status} onChange={(e) => setEditingPlan({ ...editingPlan, status: e.target.value as TestPlan['status'] })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground">
                     <option value="draft">Draft</option><option value="ready">Ready</option><option value="in-progress">In Progress</option><option value="completed">Completed</option>
                   </select>
                 </div>
@@ -537,7 +537,7 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
             <div><label className="text-sm text-muted-foreground mb-1 block">Test Name *</label><Input value={newTestName} onChange={(e) => setNewTestName(e.target.value)} placeholder="e.g., User Login with Valid Credentials" className="bg-secondary border-border" autoFocus /></div>
             <div><label className="text-sm text-muted-foreground mb-1 block">Description</label><Input value={newTestDescription} onChange={(e) => setNewTestDescription(e.target.value)} placeholder="Brief description of what this test validates" className="bg-secondary border-border" /></div>
             <div className="grid grid-cols-2 gap-4">
-              <div><label className="text-sm text-muted-foreground mb-1 block">Priority</label><select value={newTestPriority} onChange={(e) => setNewTestPriority(e.target.value as any)} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
+              <div><label className="text-sm text-muted-foreground mb-1 block">Priority</label><select value={newTestPriority} onChange={(e) => setNewTestPriority(e.target.value as TestCase['priority'])} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
               <div><label className="text-sm text-muted-foreground mb-1 block">Folder</label><select value={newTestFolder} onChange={(e) => setNewTestFolder(e.target.value)} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"><option value="root">Test Repository (Root)</option>{folders.filter(f => f.id !== 'root').map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
             </div>
           </div>
@@ -612,7 +612,7 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
               </div>
               <div>
                 <label className="text-sm text-muted-foreground mb-1 block">Execution Order</label>
-                <select value={newRunExecutionMode} onChange={(e) => setNewRunExecutionMode(e.target.value as any)} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground" disabled={newRunMode === 'manual'}>
+                <select value={newRunExecutionMode} onChange={(e) => setNewRunExecutionMode(e.target.value as 'sequential' | 'parallel')} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground" disabled={newRunMode === 'manual'}>
                   <option value="sequential">Sequential (one by one)</option>{newRunMode === 'automated' && <option value="parallel">Parallel (all at once)</option>}
                 </select>
                 {newRunMode === 'manual' && <p className="text-xs text-muted-foreground mt-1">Manual tests run sequentially</p>}
@@ -677,8 +677,8 @@ export function RepositoryDialogs(props: RepositoryDialogsProps) {
                 <textarea value={editingTestCase.description || ''} onChange={(e) => setEditingTestCase({ ...editingTestCase, description: e.target.value })} placeholder="Brief description of what this test case validates" rows={2} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500" />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm text-muted-foreground mb-1 block">Priority</label><select value={editingTestCase.priority || 'medium'} onChange={(e) => setEditingTestCase({ ...editingTestCase, priority: e.target.value as any })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
-                <div><label className="text-sm text-muted-foreground mb-1 block">Status</label><select value={editingTestCase.status || 'draft'} onChange={(e) => setEditingTestCase({ ...editingTestCase, status: e.target.value as any })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"><option value="draft">Draft</option><option value="ready">Ready</option><option value="approved">Approved</option><option value="deprecated">Deprecated</option></select></div>
+                <div><label className="text-sm text-muted-foreground mb-1 block">Priority</label><select value={editingTestCase.priority || 'medium'} onChange={(e) => setEditingTestCase({ ...editingTestCase, priority: e.target.value as TestCase['priority'] })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
+                <div><label className="text-sm text-muted-foreground mb-1 block">Status</label><select value={editingTestCase.status || 'draft'} onChange={(e) => setEditingTestCase({ ...editingTestCase, status: e.target.value as TestCase['status'] })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"><option value="draft">Draft</option><option value="ready">Ready</option><option value="approved">Approved</option><option value="deprecated">Deprecated</option></select></div>
               </div>
               <div><label className="text-sm text-muted-foreground mb-1 block">Folder</label><select value={editingTestCase.folderId || 'root'} onChange={(e) => setEditingTestCase({ ...editingTestCase, folderId: e.target.value === 'root' ? null : e.target.value })} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-foreground"><option value="root">Test Repository (Root)</option>{folders.filter(f => f.id !== 'root').map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
               <div><label className="text-sm text-muted-foreground mb-1 block">Tags (comma separated)</label><Input value={editingTestCase.tags?.join(', ') || ''} onChange={(e) => setEditingTestCase({ ...editingTestCase, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })} placeholder="e.g., smoke, regression, login" className="bg-secondary border-border" /></div>

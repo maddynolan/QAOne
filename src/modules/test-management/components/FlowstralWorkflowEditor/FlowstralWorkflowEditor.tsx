@@ -309,9 +309,9 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
       console.log('[WorkflowEditor] Loading session:', targetSessionId);
       
       // Try multiple endpoints to get session data
-      let data: any = null;
-      let actionGraph: any = null;
-      let actions: any[] = [];
+      let data: Record<string, unknown> | null = null;
+      let actionGraph: Record<string, unknown> | null = null;
+      let actions: Record<string, unknown>[] = [];
       
       // 1. Try artifacts endpoint first (has most complete data)
       try {
@@ -410,9 +410,9 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
       toast.success(`Loaded ${newNodes.length} steps from session`);
       setShowImportDialog(false);
       
-    } catch (error: any) {
+    } catch (error) {
       console.error('[WorkflowEditor] Failed to load session:', error);
-      toast.error(`Failed to load session: ${error.message}`);
+      toast.error(`Failed to load session: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -512,9 +512,9 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
         toast.error('No action graph nodes found in the session data');
         console.error('Response structure:', data);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to load Flowstral session:', error);
-      const errorMessage = error.message || 'Unknown error occurred';
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       toast.error(`Failed to load from Flowstral: ${errorMessage}`);
     } finally {
       setLoading(false);
@@ -1006,7 +1006,7 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
     toast.success(`Deleted: ${nodeLabel}`);
   }, [selectedNode]);
 
-  const updateNodeData = (field: keyof Node['data'], value: any) => {
+  const updateNodeData = (field: keyof Node['data'], value: string | number | boolean | undefined) => {
     if (!selectedNode) return;
     
     const updatedNode = {
@@ -1069,8 +1069,8 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
 
       toast.success('Workflow exported to Flowstral successfully');
       onExport?.(actionGraph);
-    } catch (error: any) {
-      toast.error(`Failed to export: ${error.message}`);
+    } catch (error) {
+      toast.error(`Failed to export: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -1177,8 +1177,8 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
         setSelectedNode(null);
         toast.success('Workflow imported successfully');
         onImport?.(workflow);
-      } catch (error: any) {
-        toast.error(`Error importing workflow: ${error.message}`);
+      } catch (error) {
+        toast.error(`Error importing workflow: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     };
     reader.readAsText(file);
@@ -1229,9 +1229,9 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
       setShowImportDialog(false);
       setExtensionActions('');
       onImport?.(workflow);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to import from extension:', error);
-      toast.error(`Error importing: ${error.message}`);
+      toast.error(`Error importing: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -1251,8 +1251,8 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
           setEdges(workflow.edges || []);
           toast.success('Workflow loaded from dropped file');
           onImport?.(workflow);
-        } catch (error: any) {
-          toast.error(`Error loading file: ${error.message}`);
+        } catch (error) {
+          toast.error(`Error loading file: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       };
       reader.readAsText(file);

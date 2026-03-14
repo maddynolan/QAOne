@@ -11,7 +11,7 @@
  * and presents ranked selector candidates with "Use This" buttons.
  */
 
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -328,8 +328,11 @@ export default function ManualAssistCard({
               Take a screenshot of the area containing the element. Drag &amp; drop, click to upload, or <strong>Ctrl+V</strong> to paste.
             </p>
             <div
+              role="button"
+              aria-label="Upload screenshot: drag and drop, click to browse, or paste with Ctrl+V"
               className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
               onClick={() => fileInputRef.current?.click()}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
               onDragOver={e => e.preventDefault()}
               onDrop={handleDrop}
               onPaste={handlePasteImage}
@@ -417,6 +420,14 @@ function SelectorCandidateRow({
   onUse: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup copy feedback timer on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   const confidenceColor =
     selector.confidence >= 0.9
@@ -426,9 +437,12 @@ function SelectorCandidateRow({
         : "text-red-500 border-red-500 bg-red-500/10";
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(selector.selector);
+    navigator.clipboard.writeText(selector.selector).catch(() => {
+      // Clipboard API may not be available in all contexts (e.g., insecure origins)
+    });
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
   };
 
   return (

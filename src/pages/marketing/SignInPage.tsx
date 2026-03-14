@@ -6,7 +6,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowRight, Eye, EyeOff, Loader2, Mail, Lock, Github, Chrome,
-  CheckCircle2, Zap, Shield, Users
+  CheckCircle2, Shield, Users
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,7 +62,7 @@ export default function SignInPage() {
         <div className="w-full max-w-md mx-auto">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2.5 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center">
               <span className="text-white font-bold text-xl">F</span>
             </div>
             <span className="text-2xl font-bold text-slate-800">Flowstral</span>
@@ -123,7 +123,7 @@ export default function SignInPage() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full h-12 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/20"
+              className="w-full h-12 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl"
             >
               {loading ? (
                 <>
@@ -161,32 +161,32 @@ export default function SignInPage() {
       </div>
 
       {/* Right Side - Branding */}
-      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-blue-600 via-violet-600 to-purple-700 p-12 flex-col justify-between">
+      <div className="hidden lg:flex flex-1 bg-slate-900 p-12 flex-col justify-between">
         <div />
-        
+
         <div className="text-white">
           <h2 className="text-4xl font-bold mb-6">
-            No-Code QA Platform for Modern Teams
+            No-code QA platform for modern teams
           </h2>
-          <p className="text-xl text-blue-100 mb-10">
+          <p className="text-xl text-slate-400 mb-10">
             Record, build, and execute tests without writing a single line of code.
           </p>
-          
+
           <div className="space-y-4">
             {[
               { icon: CheckCircle2, text: 'Smart Trace with intelligent element recognition' },
               { icon: Shield, text: 'Enterprise-grade security & compliance' },
               { icon: Users, text: 'Built for QA teams of all sizes' },
             ].map((item, idx) => (
-              <div key={idx} className="flex items-center gap-3 text-blue-100">
-                <item.icon className="w-5 h-5 text-blue-300" />
+              <div key={idx} className="flex items-center gap-3 text-slate-300">
+                <item.icon className="w-5 h-5 text-slate-500" />
                 <span>{item.text}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="flex items-center gap-4 text-blue-200 text-sm">
+        <div className="flex items-center gap-4 text-slate-500 text-sm">
           <Link to="/privacy" className="hover:text-white">Privacy</Link>
           <span>•</span>
           <Link to="/terms" className="hover:text-white">Terms</Link>

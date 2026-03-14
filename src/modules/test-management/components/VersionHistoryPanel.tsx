@@ -55,7 +55,7 @@ interface Version {
   diff_details: {
     added?: Array<{ field: string; values?: string[]; count?: number }>;
     removed?: Array<{ field: string; values?: string[]; count?: number }>;
-    modified?: Array<{ field: string; old?: any; new?: any; modified_indices?: number[] }>;
+    modified?: Array<{ field: string; old?: unknown; new?: unknown; modified_indices?: number[] }>;
   };
   parent_version_id?: string;
   metadata: Record<string, any>;
@@ -307,7 +307,17 @@ export function VersionHistoryPanel({
                   {/* Version row */}
                   <div
                     className="flex items-start gap-3 p-3 cursor-pointer"
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isExpanded}
+                    aria-label={`Version ${version.version} - ${version.diff_summary}`}
                     onClick={() => setExpandedVersion(isExpanded ? null : version.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setExpandedVersion(isExpanded ? null : version.id);
+                      }
+                    }}
                   >
                     <div className="flex-shrink-0 mt-0.5">
                       {isExpanded ? (
@@ -361,6 +371,7 @@ export function VersionHistoryPanel({
                         size="sm"
                         className="h-7 px-2 text-xs"
                         onClick={() => handleViewSnapshot(version)}
+                        aria-label={`View snapshot for version ${version.version}`}
                       >
                         <Eye className="h-3 w-3 mr-1" />
                         View
@@ -370,6 +381,7 @@ export function VersionHistoryPanel({
                           variant="ghost"
                           size="sm"
                           className="h-7 px-2 text-xs text-orange-600 hover:text-orange-700"
+                          aria-label={`Revert to version ${version.version}`}
                           onClick={async () => {
                             setSelectedRevertVersion(version);
                             const loaded = await handleViewSnapshot(version);
@@ -416,7 +428,7 @@ export function VersionHistoryPanel({
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Steps ({(snapshotPreview.snapshot.steps || []).length})</label>
                 <div className="mt-1 space-y-1 max-h-60 overflow-y-auto">
-                  {(snapshotPreview.snapshot.steps || []).map((step: any, i: number) => (
+                  {(snapshotPreview.snapshot.steps || []).map((step: Record<string, unknown>, i: number) => (
                     <div key={i} className="text-xs p-2 bg-gray-50 dark:bg-gray-800 rounded border">
                       <span className="font-mono text-muted-foreground mr-2">{i + 1}.</span>
                       {step.action || step.description || JSON.stringify(step).slice(0, 100)}
@@ -496,4 +508,5 @@ export function VersionHistoryPanel({
   );
 }
 
+// Re-export for backwards compatibility with default imports
 export default VersionHistoryPanel;

@@ -26,6 +26,9 @@ interface WsMessage {
 
 type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
 
+/** Cap message history to prevent unbounded memory growth during long-running sessions. */
+const MAX_WS_MESSAGES = 500;
+
 export default function WebSocketClient() {
   const { toast } = useToast();
   const wsRef = useRef<WebSocket | null>(null);
@@ -73,7 +76,7 @@ export default function WebSocketClient() {
           timestamp: new Date(),
           type: "text",
           size: 0,
-        }]);
+        }].slice(-MAX_WS_MESSAGES));
       };
 
       ws.onmessage = (event) => {
@@ -85,7 +88,7 @@ export default function WebSocketClient() {
           timestamp: new Date(),
           type: typeof event.data === "string" ? "text" : "binary",
           size: data.length,
-        }]);
+        }].slice(-MAX_WS_MESSAGES));
       };
 
       ws.onerror = () => {
@@ -101,7 +104,7 @@ export default function WebSocketClient() {
           timestamp: new Date(),
           type: "text",
           size: 0,
-        }]);
+        }].slice(-MAX_WS_MESSAGES));
 
         // Auto-reconnect
         if (autoReconnect && event.code !== 1000) {
@@ -149,7 +152,7 @@ export default function WebSocketClient() {
       timestamp: new Date(),
       type: "text",
       size: msg.length,
-    }]);
+    }].slice(-MAX_WS_MESSAGES));
   }, [messageInput, toast]);
 
   const statusColor: Record<ConnectionStatus, string> = {

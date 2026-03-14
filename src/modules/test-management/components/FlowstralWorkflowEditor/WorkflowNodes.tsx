@@ -77,7 +77,7 @@ export interface ExtendedNodeData {
   envKey?: string;
   // Metadata
   description?: string;
-  elementData?: any;
+  elementData?: Record<string, unknown>;
 }
 
 export interface ExtendedNode {
@@ -141,7 +141,7 @@ export const getNodeColor = (type: ExtendedNodeType) => {
 // API Request Editor Component
 export const APIRequestEditor: React.FC<{
   data: ExtendedNodeData;
-  onChange: (field: keyof ExtendedNodeData, value: any) => void;
+  onChange: (field: keyof ExtendedNodeData, value: string | number | boolean | Record<string, unknown> | undefined) => void;
 }> = ({ data, onChange }) => {
   const [headersJson, setHeadersJson] = useState(
     data.apiHeaders ? JSON.stringify(data.apiHeaders, null, 2) : '{}'
@@ -224,7 +224,7 @@ export const APIRequestEditor: React.FC<{
 // Database Query Editor Component
 export const DatabaseQueryEditor: React.FC<{
   data: ExtendedNodeData;
-  onChange: (field: keyof ExtendedNodeData, value: any) => void;
+  onChange: (field: keyof ExtendedNodeData, value: string | number | boolean | Record<string, unknown> | undefined) => void;
 }> = ({ data, onChange }) => {
   return (
     <div className="space-y-4">
@@ -285,7 +285,7 @@ export const DatabaseQueryEditor: React.FC<{
 // Variable Editor Component
 export const VariableEditor: React.FC<{
   data: ExtendedNodeData;
-  onChange: (field: keyof ExtendedNodeData, value: any) => void;
+  onChange: (field: keyof ExtendedNodeData, value: string | number | boolean | Record<string, unknown> | undefined) => void;
 }> = ({ data, onChange }) => {
   return (
     <div className="space-y-4">
@@ -330,7 +330,7 @@ export const VariableEditor: React.FC<{
 // Loop Editor Component
 export const LoopEditor: React.FC<{
   data: ExtendedNodeData;
-  onChange: (field: keyof ExtendedNodeData, value: any) => void;
+  onChange: (field: keyof ExtendedNodeData, value: string | number | boolean | Record<string, unknown> | undefined) => void;
 }> = ({ data, onChange }) => {
   return (
     <div className="space-y-4">
@@ -405,7 +405,7 @@ export const LoopEditor: React.FC<{
 // Condition Editor Component
 export const ConditionEditor: React.FC<{
   data: ExtendedNodeData;
-  onChange: (field: keyof ExtendedNodeData, value: any) => void;
+  onChange: (field: keyof ExtendedNodeData, value: string | number | boolean | Record<string, unknown> | undefined) => void;
 }> = ({ data, onChange }) => {
   return (
     <div className="space-y-4">
@@ -454,7 +454,7 @@ export const ConditionEditor: React.FC<{
 // Screenshot Editor Component
 export const ScreenshotEditor: React.FC<{
   data: ExtendedNodeData;
-  onChange: (field: keyof ExtendedNodeData, value: any) => void;
+  onChange: (field: keyof ExtendedNodeData, value: string | number | boolean | Record<string, unknown> | undefined) => void;
 }> = ({ data, onChange }) => {
   return (
     <div className="space-y-4">
@@ -493,7 +493,7 @@ export const ScreenshotEditor: React.FC<{
 // Wait Condition Editor Component
 export const WaitConditionEditor: React.FC<{
   data: ExtendedNodeData;
-  onChange: (field: keyof ExtendedNodeData, value: any) => void;
+  onChange: (field: keyof ExtendedNodeData, value: string | number | boolean | Record<string, unknown> | undefined) => void;
 }> = ({ data, onChange }) => {
   return (
     <div className="space-y-4">
@@ -554,7 +554,7 @@ export const WaitConditionEditor: React.FC<{
 // Import Element Editor Component
 export const ImportElementEditor: React.FC<{
   data: ExtendedNodeData;
-  onChange: (field: keyof ExtendedNodeData, value: any) => void;
+  onChange: (field: keyof ExtendedNodeData, value: string | number | boolean | Record<string, unknown> | undefined) => void;
   elements?: Array<{ id: string; name: string; selector: string }>;
 }> = ({ data, onChange, elements = [] }) => {
   return (
@@ -609,7 +609,7 @@ export const ImportElementEditor: React.FC<{
 // Call Workflow Editor Component
 export const CallWorkflowEditor: React.FC<{
   data: ExtendedNodeData;
-  onChange: (field: keyof ExtendedNodeData, value: any) => void;
+  onChange: (field: keyof ExtendedNodeData, value: string | number | boolean | Record<string, unknown> | undefined) => void;
   workflows?: Array<{ id: string; name: string }>;
 }> = ({ data, onChange, workflows = [] }) => {
   const [paramsJson, setParamsJson] = useState(

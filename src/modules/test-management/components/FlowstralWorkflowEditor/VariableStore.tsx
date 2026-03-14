@@ -44,7 +44,7 @@ export interface WorkflowVariable {
   id: string;
   name: string;
   type: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'secret';
-  value: any;
+  value: string | number | boolean | Record<string, unknown> | unknown[];
   source: 'static' | 'environment' | 'runtime' | 'data_source';
   description?: string;
   isSecret?: boolean;
@@ -55,7 +55,7 @@ export interface DataSource {
   id: string;
   name: string;
   type: 'csv' | 'json' | 'excel' | 'api';
-  data: any[];
+  data: Record<string, unknown>[];
   columns?: string[];
   currentIndex: number;
   totalRows: number;
@@ -319,6 +319,7 @@ export default function VariableStore({
                         variant="ghost"
                         size="sm"
                         onClick={() => copyVariableReference(variable.name)}
+                        aria-label={`Copy reference for ${variable.name}`}
                       >
                         {copiedVar === variable.name ? (
                           <Check className="h-4 w-4 text-green-500" />
@@ -331,6 +332,7 @@ export default function VariableStore({
                           variant="ghost"
                           size="sm"
                           onClick={() => toggleSecretVisibility(variable.id)}
+                          aria-label={showSecrets.has(variable.id) ? `Hide ${variable.name} value` : `Show ${variable.name} value`}
                         >
                           {showSecrets.has(variable.id) ? (
                             <EyeOff className="h-4 w-4" />
@@ -347,6 +349,7 @@ export default function VariableStore({
                           setNewVar(variable);
                           setShowAddDialog(true);
                         }}
+                        aria-label={`Edit variable ${variable.name}`}
                       >
                         <Edit2 className="h-4 w-4" />
                       </Button>
@@ -354,6 +357,7 @@ export default function VariableStore({
                         variant="ghost"
                         size="sm"
                         onClick={() => deleteVariable(variable.id)}
+                        aria-label={`Delete variable ${variable.name}`}
                       >
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
@@ -429,6 +433,7 @@ export default function VariableStore({
                         variant="ghost"
                         size="sm"
                         onClick={() => deleteDataSource(ds.id)}
+                        aria-label={`Delete data source ${ds.name}`}
                       >
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>

@@ -10,8 +10,8 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { trackCTAClick, trackEvent } from '@/lib/web-analytics';
 import {
-  ArrowRight, Rocket, Building2, Check, Calculator, DollarSign,
-  TrendingDown, Sparkles, BarChart3, PiggyBank
+  ArrowRight, Building2, Check, Calculator, DollarSign,
+  TrendingDown, BarChart3, PiggyBank
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -149,16 +149,16 @@ export default function CostCalculatorPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50">
+    <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/50">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <Link to="/" className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
                 <span className="text-white font-bold text-lg">F</span>
               </div>
-              <span className="text-xl font-bold text-slate-800">Flowstral</span>
+              <span className="text-xl font-bold text-slate-900">Flowstral</span>
             </Link>
             <nav className="hidden md:flex items-center gap-6">
               <Link to="/pricing" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Pricing</Link>
@@ -169,7 +169,7 @@ export default function CostCalculatorPage() {
           </div>
           <div className="flex items-center gap-3">
             <Button variant="ghost" onClick={() => { trackCTAClick('sign_in', '/tools/cost-calculator'); navigate('/signin'); }}>Sign In</Button>
-            <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => { trackCTAClick('start_free', '/tools/cost-calculator'); navigate('/signup'); }}>
+            <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => { trackCTAClick('start_free', '/tools/cost-calculator'); navigate('/signup'); }}>
               Start Free <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
@@ -179,9 +179,7 @@ export default function CostCalculatorPage() {
       {/* Hero */}
       <section className="py-16 px-6">
         <div className="max-w-4xl mx-auto text-center">
-          <Badge className="mb-4 bg-emerald-50 text-emerald-700 border-emerald-200">
-            <Calculator className="w-3 h-3 mr-1" /> Free Tool
-          </Badge>
+          <p className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4">Free Tool</p>
           <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
             QA Tool Cost Calculator
           </h1>
@@ -235,7 +233,7 @@ export default function CostCalculatorPage() {
         <section className="pb-16 px-6">
           <div className="max-w-4xl mx-auto">
             <div className="rounded-2xl border border-slate-200 bg-white shadow-lg overflow-hidden">
-              <div className="bg-gradient-to-r from-blue-600 to-violet-600 px-6 py-4">
+              <div className="bg-slate-900 px-6 py-4">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <BarChart3 className="w-5 h-5" />
                   Your Savings Estimate
@@ -308,10 +306,10 @@ export default function CostCalculatorPage() {
                 {/* CTA */}
                 <div className="flex flex-col sm:flex-row gap-3">
                   <Button
-                    className="flex-1 h-12 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-semibold rounded-xl"
+                    className="flex-1 h-12 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl"
                     onClick={() => { trackCTAClick('get_started_free', '/tools/cost-calculator'); navigate('/signup'); }}
                   >
-                    <Rocket className="w-5 h-5 mr-2" /> Start Free — Replace {results.toolCount} Tools
+                    Start Free — Replace {results.toolCount} Tools <ArrowRight className="w-5 h-5 ml-2" />
                   </Button>
                   <Button
                     variant="outline"

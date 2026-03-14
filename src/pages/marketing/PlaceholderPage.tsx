@@ -5,12 +5,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useParams } from 'react-router-dom';
 import { 
-  ArrowRight, ArrowLeft, Rocket, Mail, Bell, BookOpen, Code2,
+  ArrowRight, ArrowLeft, Mail, Bell, BookOpen, Code2,
   Users, Newspaper, Handshake, HelpCircle, MessageSquare,
   GraduationCap, FileText, Building2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 // Shared Header
@@ -32,7 +31,7 @@ function MarketingHeader() {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
               <span className="text-white font-bold text-lg">F</span>
             </div>
             <span className="text-xl font-bold text-slate-800">Flowstral</span>
@@ -42,7 +41,7 @@ function MarketingHeader() {
           <Button variant="ghost" onClick={() => navigate('/')}>
             <ArrowLeft className="w-4 h-4 mr-2" /> Back to Home
           </Button>
-          <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => navigate('/signup')}>
+          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => navigate('/signup')}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -147,23 +146,18 @@ export default function PlaceholderPage() {
   const Icon = config.icon;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+    <div className="min-h-screen bg-white">
       <MarketingHeader />
       
       <section className="pt-32 pb-20 px-6">
         <div className="max-w-2xl mx-auto text-center">
           {/* Icon */}
-          <div className={cn(
-            "w-20 h-20 rounded-3xl mx-auto mb-8 flex items-center justify-center shadow-xl",
-            `bg-gradient-to-r ${config.gradient}`
-          )}>
-            <Icon className="w-10 h-10 text-white" />
+          <div className="w-20 h-20 rounded-3xl mx-auto mb-8 flex items-center justify-center bg-slate-200">
+            <Icon className="w-10 h-10 text-slate-700" />
           </div>
 
-          {/* Badge */}
-          <Badge className={cn("mb-4 border-0 text-white", `bg-gradient-to-r ${config.gradient}`)}>
-            {config.subtitle}
-          </Badge>
+          {/* Subtitle */}
+          <p className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4">{config.subtitle}</p>
 
           {/* Title */}
           <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-6">
@@ -191,7 +185,7 @@ export default function PlaceholderPage() {
                 placeholder="Enter your email"
                 className="flex-1 px-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
               />
-              <Button className={cn("px-6", `bg-gradient-to-r ${config.gradient}`)}>
+              <Button className="px-6 bg-slate-900 hover:bg-slate-800 text-white">
                 <Mail className="w-4 h-4 mr-2" /> Notify Me
               </Button>
             </div>
@@ -217,7 +211,7 @@ export default function PlaceholderPage() {
           <h2 className="text-xl font-bold text-slate-900 text-center mb-8">In the meantime, explore:</h2>
           <div className="grid sm:grid-cols-3 gap-4">
             {[
-              { label: 'Start Free Trial', href: '/signup', icon: Rocket },
+              { label: 'Start Free Trial', href: '/signup', icon: ArrowRight },
               { label: 'View Pricing', href: '/pricing', icon: FileText },
               { label: 'Contact Us', href: '/contact', icon: MessageSquare },
             ].map((link, idx) => (

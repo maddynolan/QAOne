@@ -163,7 +163,7 @@ export function DefectsTabPanel({
                               onClick={() => {
                                 const nextStatus = DEFECT_NEXT_STATUS[defect.status] || 'open';
                                 onUpdateDefects(prev => {
-                                  const updated = prev.map(d => d.id === defect.id ? { ...d, status: nextStatus as any, updatedAt: new Date().toISOString() } : d);
+                                  const updated = prev.map(d => d.id === defect.id ? { ...d, status: nextStatus as Defect['status'], updatedAt: new Date().toISOString() } : d);
                                   localStorage.setItem('test_defects', JSON.stringify(updated));
                                   return updated;
                                 });
@@ -187,7 +187,7 @@ export function DefectsTabPanel({
                             <DropdownMenuItem
                               className="text-red-400 focus:bg-red-500/10"
                               onClick={() => {
-                                if (!confirm('Delete this defect?')) return;
+                                if (!window.confirm(`Are you sure you want to delete defect "${defect.title}"? This action cannot be undone.`)) return;
                                 onUpdateDefects(prev => {
                                   const updated = prev.filter(d => d.id !== defect.id);
                                   localStorage.setItem('test_defects', JSON.stringify(updated));

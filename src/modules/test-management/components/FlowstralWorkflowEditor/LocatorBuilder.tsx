@@ -426,7 +426,7 @@ export default function LocatorBuilder({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Tabs value={strategy} onValueChange={(v) => setStrategy(v as any)}>
+          <Tabs value={strategy} onValueChange={(v) => setStrategy(v as 'role' | 'text' | 'label' | 'testid' | 'css' | 'auto')}>
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="auto">
                 <Sparkles className="h-4 w-4 mr-2" />

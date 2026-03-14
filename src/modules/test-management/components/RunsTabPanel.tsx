@@ -75,7 +75,8 @@ export function RunsTabPanel({
               const failedRuns = testRuns.filter(r => r.status === 'failed').length;
               const pendingRuns = testRuns.filter(r => r.status === 'pending').length;
               const runningRuns = testRuns.filter(r => r.status === 'running').length;
-              const passRate = totalRuns > 0 ? Math.round((passedRuns / (totalRuns - pendingRuns - runningRuns)) * 100) || 0 : 0;
+              const completedRuns = totalRuns - pendingRuns - runningRuns;
+              const passRate = completedRuns > 0 ? Math.round((passedRuns / completedRuns) * 100) : 0;
 
               return (
                 <div className="grid grid-cols-5 gap-3 mb-4">

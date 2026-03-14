@@ -88,11 +88,12 @@ export default function MobileAppProfiler() {
   const sessionStartRef = useRef<number>(0);
 
   // Generate sample profiling data for demo
-  const generateSnapshot = (): PerformanceSnapshot => ({
+  // Accept snapshotCount as a parameter to avoid stale closure over snapshots.length
+  const generateSnapshot = (snapshotCount: number): PerformanceSnapshot => ({
     timestamp: Date.now(),
     cpu: Math.round(15 + Math.random() * 60),
     memory_mb: Math.round(120 + Math.random() * 200),
-    battery: Math.max(0, 100 - snapshots.length * 0.1 + Math.random() * 2),
+    battery: Math.max(0, 100 - snapshotCount * 0.1 + Math.random() * 2),
     temperature: 30 + Math.random() * 12,
     fps: Math.round(50 + Math.random() * 14),
     network_rx_kbps: Math.round(Math.random() * 5000),
@@ -104,7 +105,7 @@ export default function MobileAppProfiler() {
     setSnapshots([]);
     sessionStartRef.current = Date.now();
     intervalRef.current = window.setInterval(() => {
-      setSnapshots(prev => [...prev.slice(-60), generateSnapshot()]);
+      setSnapshots(prev => [...prev.slice(-60), generateSnapshot(prev.length)]);
     }, 1000);
     toast.success('Profiling started');
   };

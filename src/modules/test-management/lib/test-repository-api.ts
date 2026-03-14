@@ -43,17 +43,21 @@ export async function deleteTestCaseFromAllSources(testId: string): Promise<void
     const flowstralCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
     const updatedFlowstral = flowstralCases.filter((tc: any) => tc.id !== testId);
     localStorage.setItem('flowstral_test_cases', JSON.stringify(updatedFlowstral));
-  } catch (e) {}
+  } catch (e) {
+    console.warn('[Repository] Failed to clean flowstral_test_cases:', e);
+  }
 
   // 3. Delete from test_cases localStorage
   try {
     const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
     const updatedLocal = localCases.filter((tc: any) => tc.id !== testId);
     localStorage.setItem('test_cases', JSON.stringify(updatedLocal));
-  } catch (e) {}
+  } catch (e) {
+    console.warn('[Repository] Failed to clean test_cases:', e);
+  }
 
   // NOW do async backend deletions (these can happen in parallel)
-  const deletePromises: Promise<any>[] = [];
+  const deletePromises: Promise<unknown>[] = [];
 
   // 4. Delete from backend API (PostgreSQL)
   deletePromises.push(
@@ -72,7 +76,7 @@ export async function deleteTestCaseFromAllSources(testId: string): Promise<void
         if (res.ok) console.log(`[Repository] Deleted ${testId} from Flowstral backend`);
         return res;
       })
-      .catch(e => {})
+      .catch(e => console.warn('[Repository] Flowstral backend delete failed:', e))
   );
 
   // 6. Delete from SQLite scale database
@@ -92,10 +96,12 @@ export async function deleteTestCaseFromAllSources(testId: string): Promise<void
       deletePromises.push(
         electronAPI.localStorage.deleteTestCase(testId)
           .then(() => console.log(`[Repository] Deleted ${testId} from Electron storage`))
-          .catch((e: any) => console.warn(`[Repository] Electron delete failed:`, e))
+          .catch((e) => console.warn(`[Repository] Electron delete failed:`, e))
       );
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('[Repository] Electron storage access failed:', e);
+  }
 
   // Wait for all backend deletions to complete
   await Promise.allSettled(deletePromises);
@@ -132,7 +138,9 @@ export async function loadAllTestCases(): Promise<TestCase[]> {
         localStorage.setItem('test_cases', JSON.stringify(cleanedLocal));
         console.log('[Repository] Cleaned', localCases.length - cleanedLocal.length, 'deleted entries from test_cases');
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[Repository] Failed to clean deleted entries from test_cases:', e);
+    }
 
     try {
       const flowstralCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
@@ -141,7 +149,9 @@ export async function loadAllTestCases(): Promise<TestCase[]> {
         localStorage.setItem('flowstral_test_cases', JSON.stringify(cleanedFlowstral));
         console.log('[Repository] Cleaned', flowstralCases.length - cleanedFlowstral.length, 'deleted entries from flowstral_test_cases');
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[Repository] Failed to clean deleted entries from flowstral_test_cases:', e);
+    }
   }
 
   const isDeleted = (id: string) => deletedIds.has(id);
@@ -227,7 +237,9 @@ export async function loadAllTestCases(): Promise<TestCase[]> {
         });
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('[Repository] Failed to parse test_cases from localStorage:', e);
+  }
 
   // 3. From unified_test_case_* keys (legacy format)
   const keys = Object.keys(localStorage).filter(k => k.startsWith('unified_test_case_'));
@@ -242,7 +254,9 @@ export async function loadAllTestCases(): Promise<TestCase[]> {
           automationStatus: calculateAutomationStatus(tc)
         });
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn(`[Repository] Failed to parse ${key}:`, e);
+    }
   }
 
   // 4. From persistent database API
@@ -368,25 +382,27 @@ export async function loadRelatedData(): Promise<RelatedData> {
   if (savedReleases) {
     try {
       releases = JSON.parse(savedReleases);
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[Repository] Failed to parse test_releases from localStorage:', e);
+    }
   }
 
   // Fallback to localStorage only when API did not succeed
   if (!apiSuitesOk) {
     const saved = localStorage.getItem('test_suites');
-    if (saved) { try { suites = JSON.parse(saved); } catch (e) {} }
+    if (saved) { try { suites = JSON.parse(saved); } catch (e) { console.warn('[Repository] Failed to parse test_suites:', e); } }
   }
   if (!apiPlansOk) {
     const saved = localStorage.getItem('test_plans');
-    if (saved) { try { plans = JSON.parse(saved); } catch (e) {} }
+    if (saved) { try { plans = JSON.parse(saved); } catch (e) { console.warn('[Repository] Failed to parse test_plans:', e); } }
   }
   if (!apiRunsOk) {
     const saved = localStorage.getItem('test_execution_history');
-    if (saved) { try { runs = JSON.parse(saved); } catch (e) {} }
+    if (saved) { try { runs = JSON.parse(saved); } catch (e) { console.warn('[Repository] Failed to parse test_execution_history:', e); } }
   }
   if (!apiDefectsOk) {
     const saved = localStorage.getItem('test_defects');
-    if (saved) { try { defects = JSON.parse(saved); } catch (e) {} }
+    if (saved) { try { defects = JSON.parse(saved); } catch (e) { console.warn('[Repository] Failed to parse test_defects:', e); } }
   }
 
   return { suites, plans, runs, defects, releases };

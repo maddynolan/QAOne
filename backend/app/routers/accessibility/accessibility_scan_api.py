@@ -13,12 +13,13 @@ Endpoints:
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, field_validator
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 import logging
 import secrets
 import asyncio
+import threading
 
 # Import our new scanner
 from app.services.accessibility.axe_core_scanner import get_scanner
@@ -32,31 +33,44 @@ router = APIRouter(prefix="/api/a11y", tags=["accessibility-v2"])
 
 # In-memory store for scan results (in production, use Redis or DB)
 # Bounded: auto-evicts oldest entries when exceeding MAX_SCAN_RESULTS
+# Thread-safe: protected by _scan_lock for concurrent access
 _scan_results: Dict[str, Dict[str, Any]] = {}
 _scan_timestamps: Dict[str, float] = {}  # track insertion time for TTL eviction
+_scan_lock = threading.Lock()
 MAX_SCAN_RESULTS = 500
 SCAN_TTL_SECONDS = 3600  # 1 hour
 
 
 def _store_scan_result(key: str, result: Dict[str, Any]):
-    """Store a scan result with TTL tracking and bounded size."""
+    """Store a scan result with TTL tracking and bounded size. Thread-safe."""
     import time
     now = time.time()
 
-    # Evict expired entries first
-    expired_keys = [k for k, ts in _scan_timestamps.items() if now - ts > SCAN_TTL_SECONDS]
-    for k in expired_keys:
-        _scan_results.pop(k, None)
-        _scan_timestamps.pop(k, None)
+    with _scan_lock:
+        # Evict expired entries first
+        expired_keys = [k for k, ts in _scan_timestamps.items() if now - ts > SCAN_TTL_SECONDS]
+        for k in expired_keys:
+            _scan_results.pop(k, None)
+            _scan_timestamps.pop(k, None)
 
-    # If still over limit, evict oldest
-    while len(_scan_results) >= MAX_SCAN_RESULTS and _scan_timestamps:
-        oldest_key = min(_scan_timestamps, key=_scan_timestamps.get)
-        _scan_results.pop(oldest_key, None)
-        _scan_timestamps.pop(oldest_key, None)
+        # If still over limit, evict oldest
+        while len(_scan_results) >= MAX_SCAN_RESULTS and _scan_timestamps:
+            oldest_key = min(_scan_timestamps, key=_scan_timestamps.get)
+            _scan_results.pop(oldest_key, None)
+            _scan_timestamps.pop(oldest_key, None)
 
-    _scan_results[key] = result
-    _scan_timestamps[key] = now
+        _scan_results[key] = result
+        _scan_timestamps[key] = now
+
+
+def _get_scan_result(key: str) -> Optional[Dict[str, Any]]:
+    """Get a scan result by key. Thread-safe."""
+    with _scan_lock:
+        return _scan_results.get(key)
+
+
+VALID_WCAG_LEVELS = {"A", "AA", "AAA"}
+VALID_REPORT_FORMATS = {"html", "json", "markdown", "md"}
 
 
 class ScanRequest(BaseModel):
@@ -66,12 +80,61 @@ class ScanRequest(BaseModel):
     wait_for_selector: Optional[str] = None
     include_passes: bool = False
 
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("URL is required")
+        if len(v) > 2048:
+            raise ValueError("URL exceeds maximum length (2048 characters)")
+        return v.strip()
+
+    @field_validator("wcag_level")
+    @classmethod
+    def validate_wcag_level(cls, v: str) -> str:
+        if v.upper() not in VALID_WCAG_LEVELS:
+            raise ValueError(f"wcag_level must be one of: {', '.join(VALID_WCAG_LEVELS)}")
+        return v.upper()
+
+    @field_validator("wait_for_selector")
+    @classmethod
+    def validate_wait_for_selector(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) > 500:
+            raise ValueError("wait_for_selector exceeds maximum length (500 characters)")
+        return v
+
 
 class BatchScanRequest(BaseModel):
     """Request to scan multiple URLs"""
     urls: List[str]
     wcag_level: str = "AA"
     max_concurrent: int = 3
+
+    @field_validator("urls")
+    @classmethod
+    def validate_urls(cls, v: List[str]) -> List[str]:
+        if not v:
+            raise ValueError("At least one URL is required")
+        for url in v:
+            if not url or not url.strip():
+                raise ValueError("Empty URL found in list")
+            if len(url) > 2048:
+                raise ValueError("URL exceeds maximum length (2048 characters)")
+        return [u.strip() for u in v]
+
+    @field_validator("wcag_level")
+    @classmethod
+    def validate_wcag_level(cls, v: str) -> str:
+        if v.upper() not in VALID_WCAG_LEVELS:
+            raise ValueError(f"wcag_level must be one of: {', '.join(VALID_WCAG_LEVELS)}")
+        return v.upper()
+
+    @field_validator("max_concurrent")
+    @classmethod
+    def validate_max_concurrent(cls, v: int) -> int:
+        if v < 1 or v > 5:
+            raise ValueError("max_concurrent must be between 1 and 5")
+        return v
 
 
 class ScanResponse(BaseModel):
@@ -153,29 +216,29 @@ async def get_report(
         - json: Raw JSON data
         - markdown: Markdown format
     """
-    if scan_id not in _scan_results:
-        raise HTTPException(status_code=404, detail=f"Scan {scan_id} not found")
-    
-    result = _scan_results[scan_id]
+    result = _get_scan_result(scan_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    if format not in VALID_REPORT_FORMATS:
+        raise HTTPException(status_code=400, detail=f"Unsupported format. Must be one of: {', '.join(VALID_REPORT_FORMATS)}")
+
     generator = get_report_generator()
-    
+
     if format == "html":
         html_content = generator.generate_html_report(result)
         return HTMLResponse(content=html_content)
-    
+
     elif format == "json":
         return JSONResponse(content=result)
-    
-    elif format == "markdown" or format == "md":
+
+    elif format in ("markdown", "md"):
         md_content = generator.generate_markdown_report(result)
         from fastapi.responses import PlainTextResponse
         return PlainTextResponse(
             content=md_content,
             media_type="text/markdown"
         )
-    
-    else:
-        raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
 
 
 @router.get("/report/{scan_id}/download")
@@ -185,17 +248,21 @@ async def download_report(
     format: str = "html"
 ):
     """Download accessibility report as file"""
-    if scan_id not in _scan_results:
-        raise HTTPException(status_code=404, detail=f"Scan {scan_id} not found")
-    
-    result = _scan_results[scan_id]
+    result = _get_scan_result(scan_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    if format not in VALID_REPORT_FORMATS:
+        raise HTTPException(status_code=400, detail=f"Unsupported format. Must be one of: {', '.join(VALID_REPORT_FORMATS)}")
+
     generator = get_report_generator()
     url = result.get("scan_info", {}).get("url", "unknown")
-    
-    # Create filename
-    safe_url = url.replace("https://", "").replace("http://", "").replace("/", "_")[:50]
+
+    # Create filename — sanitize URL to prevent path traversal in filename
+    import re
+    safe_url = re.sub(r'[^a-zA-Z0-9._-]', '_', url.replace("https://", "").replace("http://", ""))[:50]
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    
+
     if format == "html":
         content = generator.generate_html_report(result)
         filename = f"accessibility_report_{safe_url}_{timestamp}.html"
@@ -204,12 +271,12 @@ async def download_report(
         content = generator.generate_json_report(result)
         filename = f"accessibility_report_{safe_url}_{timestamp}.json"
         media_type = "application/json"
-    elif format in ["markdown", "md"]:
+    elif format in ("markdown", "md"):
         content = generator.generate_markdown_report(result)
         filename = f"accessibility_report_{safe_url}_{timestamp}.md"
         media_type = "text/markdown"
     else:
-        raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
+        raise HTTPException(status_code=400, detail=f"Unsupported format. Must be one of: {', '.join(VALID_REPORT_FORMATS)}")
     
     return HTMLResponse(
         content=content,
@@ -279,10 +346,11 @@ async def batch_scan(
 async def get_batch_status(request: Request, batch_id: str):
     """Get status of a batch scan"""
     key = f"batch_{batch_id}"
-    if key not in _scan_results:
-        raise HTTPException(status_code=404, detail=f"Batch {batch_id} not found")
-    
-    return _scan_results[key]
+    result = _get_scan_result(key)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    return result
 
 
 async def _process_batch(
@@ -291,12 +359,12 @@ async def _process_batch(
     wcag_level: str,
     max_concurrent: int
 ):
-    """Process batch of URLs"""
+    """Process batch of URLs with thread-safe result updates"""
     key = f"batch_{batch_id}"
     scanner = get_scanner()
-    
+
     semaphore = asyncio.Semaphore(max_concurrent)
-    
+
     async def scan_one(url: str):
         async with semaphore:
             try:
@@ -304,23 +372,32 @@ async def _process_batch(
                 scan_id = secrets.token_urlsafe(12)
                 _store_scan_result(scan_id, result)
 
-                _scan_results[key]["completed"].append({
-                    "url": url,
-                    "scan_id": scan_id,
-                    "summary": result["summary"]
-                })
+                with _scan_lock:
+                    batch_data = _scan_results.get(key)
+                    if batch_data:
+                        batch_data["completed"].append({
+                            "url": url,
+                            "scan_id": scan_id,
+                            "summary": result["summary"]
+                        })
             except Exception as e:
                 logger.error(f"Batch scan failed for URL in batch {batch_id}: {e}")
-                _scan_results[key]["failed"].append({
-                    "url": url,
-                    "error": "Scan failed for this URL"
-                })
-    
+                with _scan_lock:
+                    batch_data = _scan_results.get(key)
+                    if batch_data:
+                        batch_data["failed"].append({
+                            "url": url,
+                            "error": "Scan failed for this URL"
+                        })
+
     tasks = [scan_one(url) for url in urls]
     await asyncio.gather(*tasks)
-    
-    _scan_results[key]["status"] = "completed"
-    _scan_results[key]["completed_at"] = datetime.utcnow().isoformat()
+
+    with _scan_lock:
+        batch_data = _scan_results.get(key)
+        if batch_data:
+            batch_data["status"] = "completed"
+            batch_data["completed_at"] = datetime.utcnow().isoformat()
 
 
 @router.get("/quick-check")

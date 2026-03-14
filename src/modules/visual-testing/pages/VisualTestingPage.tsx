@@ -17,7 +17,7 @@
  * - Baseline versioning with branch support
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Eye, Upload, Download, Trash2, Check, X, RefreshCw,
   Image as ImageIcon, Settings, Layers, GitCompare,
@@ -241,6 +241,15 @@ export default function VisualTestingPage() {
   // Load on mount
   useEffect(() => { loadBaselines(); loadDiffs(); }, []);
 
+  // Cleanup upload preview data URL on unmount to prevent memory leak
+  useEffect(() => {
+    return () => {
+      if (uploadPreview && uploadPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(uploadPreview);
+      }
+    };
+  }, [uploadPreview]);
+
   // ─── API Calls ──────────────────────────────────────────────────────────
   const loadBaselines = async () => {
     try {
@@ -258,12 +267,44 @@ export default function VisualTestingPage() {
     try {
       const response = await axios.get(`${API_BASE}/diffs?limit=50`);
       setDiffs(response.data.diffs || []);
-    } catch { /* ignore */ }
+    } catch (error) {
+      // Backend may not be connected; leave diffs empty but don't silently swallow
+      if (axios.isAxiosError(error) && !error.response) {
+        // Network error — backend not connected, expected during local dev
+      } else {
+        toast.error('Failed to load diff images');
+      }
+    }
   };
 
+  // Constants for file validation
+  const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB matches backend MAX_IMAGE_SIZE
+  const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/bmp', 'image/gif'];
+
   const handleFileUpload = useCallback((file: File, setter: (val: string) => void) => {
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      toast.error(`Invalid file type: ${file.type || 'unknown'}. Allowed: PNG, JPEG, WebP, BMP, GIF`);
+      return;
+    }
+    if (file.size > MAX_UPLOAD_SIZE) {
+      toast.error(`File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maximum: ${MAX_UPLOAD_SIZE / (1024 * 1024)}MB`);
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = (e) => { setter((e.target?.result as string)?.split(',')[1]); };
+    reader.onload = (e) => {
+      const result = e.target?.result as string | undefined;
+      if (result) {
+        const base64Part = result.split(',')[1];
+        if (base64Part) {
+          setter(base64Part);
+        } else {
+          toast.error('Failed to process image file');
+        }
+      }
+    };
+    reader.onerror = () => {
+      toast.error('Failed to read file');
+    };
     reader.readAsDataURL(file);
   }, []);
 
@@ -282,8 +323,9 @@ export default function VisualTestingPage() {
       setComparisonResult(response.data.result);
       loadDiffs();
       setComparisonHistory(prev => [{ testName: 'manual_comparison', passed: response.data.result?.passed ?? false, diffPct: response.data.result?.diff_percentage ?? 0, mode: compareMode, timestamp: new Date().toISOString() }, ...prev].slice(0, 100));
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Comparison failed');
+    } catch (error: unknown) {
+      const message = axios.isAxiosError(error) ? error.response?.data?.detail : undefined;
+      toast.error(message || 'Comparison failed');
     } finally { setIsComparing(false); }
   };
 
@@ -302,14 +344,30 @@ export default function VisualTestingPage() {
       await axios.post(`${API_BASE}/baselines`, { test_name: uploadTestName, image: base64, metadata: {} });
       toast.success('Baseline uploaded');
       setShowUploadDialog(false);
-      setUploadTestName(''); setUploadImage(null); setUploadPreview(null);
+      setUploadTestName(''); setUploadImage(null);
+      // Revoke blob URL to prevent memory leak
+      if (uploadPreview && uploadPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(uploadPreview);
+      }
+      setUploadPreview(null);
       loadBaselines();
-    } catch (error: any) { toast.error(error.response?.data?.detail || 'Upload failed'); }
+    } catch (error: unknown) {
+      const message = axios.isAxiosError(error) ? error.response?.data?.detail : undefined;
+      toast.error(message || 'Upload failed');
+    }
   };
 
   const handleDeleteBaseline = async (testName: string) => {
+    if (!testName) return;
     if (!confirm(`Delete baseline "${testName}"?`)) return;
-    try { await axios.delete(`${API_BASE}/baselines/${testName}`); toast.success('Deleted'); loadBaselines(); } catch { toast.error('Delete failed'); }
+    try {
+      await axios.delete(`${API_BASE}/baselines/${encodeURIComponent(testName)}`);
+      toast.success(`Baseline "${testName}" deleted`);
+      loadBaselines();
+    } catch (error: unknown) {
+      const message = axios.isAxiosError(error) ? error.response?.data?.detail : undefined;
+      toast.error(message || 'Delete failed');
+    }
   };
 
   const [isLoadingBaselineImage, setIsLoadingBaselineImage] = useState(false);
@@ -321,9 +379,14 @@ export default function VisualTestingPage() {
     setSelectedBaselineImage(null);
     setIsLoadingBaselineImage(true);
     try {
-      const response = await axios.get(`${API_BASE}/baselines/${baseline.test_name}`);
+      const response = await axios.get(`${API_BASE}/baselines/${encodeURIComponent(baseline.test_name)}`);
       setSelectedBaselineImage(response.data.image_base64);
-    } catch { setSelectedBaselineImage(SAMPLE_IMAGE_PLACEHOLDER); }
+    } catch (error: unknown) {
+      setSelectedBaselineImage(SAMPLE_IMAGE_PLACEHOLDER);
+      if (axios.isAxiosError(error) && error.response?.status !== 404) {
+        toast.error('Failed to load baseline image');
+      }
+    }
     finally { setIsLoadingBaselineImage(false); }
   };
 
@@ -334,16 +397,30 @@ export default function VisualTestingPage() {
     try {
       setIsCapturing(true);
       let count = 0;
+      const errors: string[] = [];
       for (const vp of vps) {
         const name = vps.length > 1 ? `${captureTestName}_${vp.name.toLowerCase()}` : captureTestName;
         try {
           await axios.post(`${API_BASE}/capture`, new URLSearchParams({ url: captureUrl, test_name: name, full_page: 'true', viewport_width: String(vp.width), viewport_height: String(vp.height), save_as_baseline: 'true' }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
           count++;
-        } catch {}
+        } catch (error: unknown) {
+          const detail = axios.isAxiosError(error) ? error.response?.data?.detail : undefined;
+          errors.push(`${vp.name}: ${detail || 'capture failed'}`);
+        }
       }
-      if (count > 0) toast.success(`${count} screenshot(s) captured`); else toast.error('Capture failed');
+      if (count > 0) {
+        toast.success(`${count} screenshot(s) captured`);
+        if (errors.length > 0) {
+          toast.warning(`${errors.length} viewport(s) failed: ${errors.join('; ')}`);
+        }
+      } else {
+        toast.error(`All captures failed: ${errors[0] || 'Unknown error'}`);
+      }
       setShowCaptureDialog(false); setCaptureUrl(''); setCaptureTestName(''); loadBaselines();
-    } catch (error: any) { toast.error(error.response?.data?.detail || 'Capture failed'); }
+    } catch (error: unknown) {
+      const message = axios.isAxiosError(error) ? error.response?.data?.detail : undefined;
+      toast.error(message || 'Capture failed');
+    }
     finally { setIsCapturing(false); }
   };
 
@@ -397,46 +474,70 @@ export default function VisualTestingPage() {
         if (actualBase64) {
           try {
             const cmp = await axios.post(`${API_BASE}/compare-by-name`, { test_name: testName, actual: actualBase64, mode: compareMode, threshold });
-            results[i] = { ...results[i], status: 'done', result: cmp.data };
-          } catch { results[i] = { ...results[i], status: 'done' }; }
+            results[i] = { ...results[i], status: 'done', result: cmp.data?.result || cmp.data };
+          } catch (_compareErr) {
+            // Comparison failed but capture succeeded — show as done without result
+            results[i] = { ...results[i], status: 'done' };
+          }
         } else {
           results[i] = { ...results[i], status: 'error' };
         }
-      } catch { results[i] = { ...results[i], status: 'error' }; }
+      } catch (_captureErr) {
+        results[i] = { ...results[i], status: 'error' };
+      }
       setViewportResults([...results]);
     }
     setIsMatrixTesting(false);
     toast.success('Viewport matrix test complete');
   };
 
-  // ─── Helpers ──────────────────────────────────────────────────────────
-  const filteredBaselines = baselines.filter(b => b.test_name.toLowerCase().includes(searchQuery.toLowerCase()));
-  const formatFileSize = (bytes: number) => { if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; return (bytes / (1024 * 1024)).toFixed(1) + ' MB'; };
-  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const passRate = comparisonHistory.length > 0 ? Math.round((comparisonHistory.filter(h => h.passed).length / comparisonHistory.length) * 100) : 0;
-  const regionColorClass = (type: string) => REGION_TYPES.find(r => r.value === type)?.color || 'bg-gray-500/40 border-gray-400';
+  // ─── Helpers (memoized to avoid recalculation on every render) ──────
+  const filteredBaselines = useMemo(
+    () => baselines.filter(b => b.test_name.toLowerCase().includes(searchQuery.toLowerCase())),
+    [baselines, searchQuery]
+  );
+  const formatFileSize = useCallback((bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }, []);
+  const formatDate = useCallback((dateStr: string) => {
+    try {
+      return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return 'Invalid date';
+    }
+  }, []);
+  const passRate = useMemo(
+    () => comparisonHistory.length > 0 ? Math.round((comparisonHistory.filter(h => h.passed).length / comparisonHistory.length) * 100) : 0,
+    [comparisonHistory]
+  );
+  const regionColorClass = useCallback(
+    (type: string) => REGION_TYPES.find(r => r.value === type)?.color || 'bg-gray-500/40 border-gray-400',
+    []
+  );
 
   // ─── Render ───────────────────────────────────────────────────────────
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between" role="banner">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary rounded-lg"><Eye className="w-6 h-6" /></div>
+          <div className="p-2 bg-primary rounded-lg" aria-hidden="true"><Eye className="w-6 h-6" /></div>
           <div>
             <h1 className="text-2xl font-bold">Visual Testing</h1>
             <p className="text-sm text-muted-foreground">Applitools-class visual regression with AI</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={() => { loadBaselines(); loadDiffs(); }}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />Refresh
+        <div className="flex items-center gap-3" role="toolbar" aria-label="Visual testing actions">
+          <Button variant="outline" size="sm" onClick={() => { loadBaselines(); loadDiffs(); }} aria-label="Refresh baselines and diffs">
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />Refresh
           </Button>
-          <Button variant="outline" onClick={() => setShowCaptureDialog(true)}>
-            <Target className="w-4 h-4 mr-2" />Capture URL
+          <Button variant="outline" onClick={() => setShowCaptureDialog(true)} aria-label="Capture screenshot from URL">
+            <Target className="w-4 h-4 mr-2" aria-hidden="true" />Capture URL
           </Button>
-          <Button onClick={() => setShowUploadDialog(true)}>
-            <Upload className="w-4 h-4 mr-2" />Upload Baseline
+          <Button onClick={() => setShowUploadDialog(true)} aria-label="Upload baseline image">
+            <Upload className="w-4 h-4 mr-2" aria-hidden="true" />Upload Baseline
           </Button>
         </div>
       </div>
@@ -625,8 +726,12 @@ export default function VisualTestingPage() {
                     <div className="w-3 h-3 rounded-full bg-emerald-500" /> Baseline Image
                   </Label>
                   <div ref={canvasRef}
+                    role={baselineImage ? 'img' : 'button'}
+                    tabIndex={0}
+                    aria-label={baselineImage ? 'Baseline image with region drawing overlay' : 'Click or press Enter to upload baseline image'}
                     className={`relative aspect-video border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer transition-all ${baselineImage ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-border hover:border-primary'} ${isDrawingRegion ? 'cursor-crosshair' : ''}`}
                     onClick={() => { if (!isDrawingRegion) document.getElementById('baseline-input')?.click(); }}
+                    onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !isDrawingRegion) { e.preventDefault(); document.getElementById('baseline-input')?.click(); } }}
                     onMouseDown={baselineImage ? handleRegionMouseDown : undefined}
                     onMouseMove={baselineImage ? handleRegionMouseMove : undefined}
                     onMouseUp={baselineImage ? handleRegionMouseUp : undefined}
@@ -651,7 +756,7 @@ export default function VisualTestingPage() {
                       <div className="text-center text-muted-foreground"><Upload className="w-8 h-8 mx-auto mb-2" /><p>Click to upload baseline</p></div>
                     )}
                   </div>
-                  <input id="baseline-input" type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, setBaselineImage); }} />
+                  <input id="baseline-input" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif" className="hidden" aria-label="Select baseline image file" onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, setBaselineImage); e.target.value = ''; }} />
                   {baselineImage && <Button variant="outline" size="sm" onClick={() => { setBaselineImage(null); setIgnoreRegions([]); }}><X className="w-4 h-4 mr-1" />Clear</Button>}
                 </div>
 
@@ -661,14 +766,18 @@ export default function VisualTestingPage() {
                     <div className="w-3 h-3 rounded-full bg-blue-500" /> Actual Image
                   </Label>
                   <div className={`aspect-video border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer transition-all ${actualImage ? 'border-blue-500/50 bg-blue-500/5' : 'border-border hover:border-primary'}`}
-                    onClick={() => document.getElementById('actual-input')?.click()}>
+                    role={actualImage ? 'img' : 'button'}
+                    tabIndex={0}
+                    aria-label={actualImage ? 'Actual image for comparison' : 'Click or press Enter to upload actual image'}
+                    onClick={() => document.getElementById('actual-input')?.click()}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById('actual-input')?.click(); } }}>
                     {actualImage ? (
                       <img src={`data:image/png;base64,${actualImage}`} alt="Actual" className="max-h-full max-w-full object-contain" />
                     ) : (
                       <div className="text-center text-muted-foreground"><Upload className="w-8 h-8 mx-auto mb-2" /><p>Click to upload actual</p></div>
                     )}
                   </div>
-                  <input id="actual-input" type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, setActualImage); }} />
+                  <input id="actual-input" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif" className="hidden" aria-label="Select actual image file" onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, setActualImage); e.target.value = ''; }} />
                   {actualImage && <Button variant="outline" size="sm" onClick={() => setActualImage(null)}><X className="w-4 h-4 mr-1" />Clear</Button>}
                 </div>
               </div>
@@ -737,12 +846,15 @@ export default function VisualTestingPage() {
                         // Try to update existing baseline, or save as new
                         try {
                           await axios.put(`${API_BASE}/baselines/manual_comparison`, { test_name: 'manual_comparison', image: actualImage, reason: 'Accepted via comparison review' });
-                        } catch {
+                        } catch (_updateErr) {
                           await axios.post(`${API_BASE}/baselines`, { test_name: 'manual_comparison', image: actualImage, metadata: { promoted_from: 'comparison_review' } });
                         }
                         toast.success('Actual image promoted to baseline');
                         loadBaselines();
-                      } catch (err: any) { toast.error(err.response?.data?.detail || 'Failed to update baseline'); }
+                      } catch (err: unknown) {
+                        const message = axios.isAxiosError(err) ? err.response?.data?.detail : undefined;
+                        toast.error(message || 'Failed to update baseline');
+                      }
                     }}>
                       <Check className="w-3 h-3 mr-1" />Accept
                     </Button>
@@ -881,6 +993,7 @@ export default function VisualTestingPage() {
             <CardContent className="space-y-4">
               <textarea className="w-full h-28 rounded-md border bg-muted px-3 py-2 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-ring"
                 placeholder={"https://example.com\nhttps://example.com/about\nhttps://example.com/pricing"}
+                aria-label="URLs to test, one per line"
                 value={batchTestUrls} onChange={e => setBatchTestUrls(e.target.value)} />
               <div className="flex items-center gap-3">
                 <Button onClick={async () => {
@@ -899,11 +1012,11 @@ export default function VisualTestingPage() {
                           const cmp = await axios.post(`${API_BASE}/compare-by-name`, { test_name: testName, actual: actualBase64, mode: compareMode, threshold });
                           const result = cmp.data?.result || {};
                           results.push({ url, status: result.passed ? 'passed' : (result.is_new_baseline ? 'new-baseline' : 'failed'), diffPct: result.diff_percentage, testName });
-                        } catch { results.push({ url, status: 'error', testName }); }
+                        } catch (_cmpErr) { results.push({ url, status: 'error', testName }); }
                       } else {
                         results.push({ url, status: 'error', testName });
                       }
-                    } catch { results.push({ url, status: 'error', testName }); }
+                    } catch (_captureErr) { results.push({ url, status: 'error', testName }); }
                     setBatchTestResults([...results]);
                   }
                   setIsBatchTesting(false);
@@ -947,7 +1060,7 @@ export default function VisualTestingPage() {
           <div className="flex items-center gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search baselines..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-10" />
+              <Input placeholder="Search baselines..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-10" aria-label="Search baselines by test name" />
             </div>
             <Badge variant="outline">{filteredBaselines.length} baselines</Badge>
           </div>
@@ -991,7 +1104,21 @@ export default function VisualTestingPage() {
                           <DropdownMenuItem onClick={e => { e.stopPropagation(); handleViewBaseline(b); }}><Eye className="w-4 h-4 mr-2" />View</DropdownMenuItem>
                           <DropdownMenuItem onClick={async e => {
                             e.stopPropagation();
-                            try { const res = await axios.get(`${API_BASE}/baselines/${b.test_name}`); if (res.data.image_base64) { const a = document.createElement('a'); a.href = `data:image/png;base64,${res.data.image_base64}`; a.download = `${b.test_name}.png`; a.click(); toast.success('Downloaded'); } } catch { toast.error('Download failed'); }
+                            try {
+                              const res = await axios.get(`${API_BASE}/baselines/${encodeURIComponent(b.test_name)}`);
+                              if (res.data.image_base64) {
+                                const a = document.createElement('a');
+                                a.href = `data:image/png;base64,${res.data.image_base64}`;
+                                a.download = `${b.test_name}.png`;
+                                a.click();
+                                toast.success('Downloaded');
+                              } else {
+                                toast.error('No image data available');
+                              }
+                            } catch (error: unknown) {
+                              const message = axios.isAxiosError(error) ? error.response?.data?.detail : undefined;
+                              toast.error(message || 'Download failed');
+                            }
                           }}><Download className="w-4 h-4 mr-2" />Download</DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={e => { e.stopPropagation(); handleDeleteBaseline(b.test_name); }}><Trash2 className="w-4 h-4 mr-2" />Delete</DropdownMenuItem>
@@ -1065,7 +1192,7 @@ export default function VisualTestingPage() {
                             {r.floatOffset && <span className="text-xs text-blue-500 ml-2">drift: ±{r.floatOffset}px</span>}
                           </div>
                         </div>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={() => setIgnoreRegions(prev => prev.filter((_, j) => j !== i))}>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" aria-label={`Remove region ${r.name}`} onClick={() => setIgnoreRegions(prev => prev.filter((_, j) => j !== i))}>
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </div>
@@ -1246,10 +1373,10 @@ export default function VisualTestingPage() {
                               setApprovedDiffs(prev => ({ ...prev, [diff.filename]: 'accepted' }));
                               try {
                                 const testName = diff.filename.replace(/^diff_/, '').replace(/\.png$/, '').replace(/_\d+$/, '');
-                                const r = await axios.get(`${API_BASE}/baselines/${testName}`);
+                                const r = await axios.get(`${API_BASE}/baselines/${encodeURIComponent(testName)}`);
                                 if (r.data?.image_base64) { await axios.post(`${API_BASE}/baselines`, { test_name: testName, image: r.data.image_base64 }); toast.success('Promoted to new baseline'); loadBaselines(); }
                                 else toast.success('Accepted');
-                              } catch { toast.success('Accepted'); }
+                              } catch (_promoteErr) { toast.success('Accepted (baseline promotion skipped)'); }
                             }}><Check className="w-3 h-3 mr-1" />Accept</Button>
                           <Button size="sm" variant={approval === 'rejected' ? 'destructive' : 'outline'}
                             className={approval !== 'rejected' ? 'text-red-600 border-red-300' : ''}
@@ -1279,10 +1406,37 @@ export default function VisualTestingPage() {
             <div><Label>Test Name</Label><Input value={uploadTestName} onChange={e => setUploadTestName(e.target.value)} placeholder="homepage_hero_section" className="mt-1.5" /></div>
             <div>
               <Label>Image</Label>
-              <div className="mt-1.5 aspect-video border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer hover:border-primary" onClick={() => document.getElementById('upload-input')?.click()}>
-                {uploadPreview ? <img src={uploadPreview} alt="Preview" className="max-h-full max-w-full object-contain" /> : <div className="text-center text-muted-foreground"><Upload className="w-8 h-8 mx-auto mb-2" /><p>Click to select</p></div>}
+              <div className="mt-1.5 aspect-video border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer hover:border-primary"
+                role="button"
+                tabIndex={0}
+                aria-label="Click or press Enter to select image file"
+                onClick={() => document.getElementById('upload-input')?.click()}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById('upload-input')?.click(); } }}>
+                {uploadPreview ? <img src={uploadPreview} alt="Preview of selected baseline image" className="max-h-full max-w-full object-contain" /> : <div className="text-center text-muted-foreground"><Upload className="w-8 h-8 mx-auto mb-2" aria-hidden="true" /><p>Click to select</p></div>}
               </div>
-              <input id="upload-input" type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) { setUploadImage(f); const r = new FileReader(); r.onload = ev => setUploadPreview(ev.target?.result as string); r.readAsDataURL(f); } }} />
+              <input id="upload-input" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif" className="hidden" aria-label="Select baseline image to upload" onChange={e => {
+                const f = e.target.files?.[0];
+                if (f) {
+                  if (!ALLOWED_IMAGE_TYPES.includes(f.type)) {
+                    toast.error(`Invalid file type: ${f.type || 'unknown'}. Allowed: PNG, JPEG, WebP, BMP, GIF`);
+                    return;
+                  }
+                  if (f.size > MAX_UPLOAD_SIZE) {
+                    toast.error(`File too large (${(f.size / (1024 * 1024)).toFixed(1)}MB). Maximum: ${MAX_UPLOAD_SIZE / (1024 * 1024)}MB`);
+                    return;
+                  }
+                  // Revoke previous preview URL to prevent memory leak
+                  if (uploadPreview && uploadPreview.startsWith('blob:')) {
+                    URL.revokeObjectURL(uploadPreview);
+                  }
+                  setUploadImage(f);
+                  const r = new FileReader();
+                  r.onload = ev => setUploadPreview(ev.target?.result as string);
+                  r.onerror = () => toast.error('Failed to read image file');
+                  r.readAsDataURL(f);
+                }
+                e.target.value = '';
+              }} />
             </div>
           </div>
           <DialogFooter>
@@ -1344,7 +1498,7 @@ export default function VisualTestingPage() {
               </div>
             ) : selectedBaselineImage ? (
               <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[60vh]">
-                <img src={`data:image/png;base64,${selectedBaselineImage}`} alt={selectedBaseline?.test_name} className="max-w-full" />
+                <img src={`data:image/png;base64,${selectedBaselineImage}`} alt={`Baseline image for test: ${selectedBaseline?.test_name || 'unknown'}`} className="max-w-full" />
               </div>
             ) : null}
             {selectedBaseline && (
@@ -1357,7 +1511,7 @@ export default function VisualTestingPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => handleDeleteBaseline(selectedBaseline?.test_name || '')}><Trash2 className="w-4 h-4 mr-2" />Delete</Button>
+            <Button variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10" disabled={!selectedBaseline?.test_name} aria-label={`Delete baseline ${selectedBaseline?.test_name || ''}`} onClick={() => { if (selectedBaseline?.test_name) handleDeleteBaseline(selectedBaseline.test_name); }}><Trash2 className="w-4 h-4 mr-2" />Delete</Button>
             <Button variant="outline" onClick={() => { if (selectedBaselineImage) { setBaselineImage(selectedBaselineImage); setActiveTab('compare'); setSelectedBaseline(null); setSelectedBaselineImage(null); } }}>
               <GitCompare className="w-4 h-4 mr-2" />Use for Comparison
             </Button>

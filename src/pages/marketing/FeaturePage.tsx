@@ -5,16 +5,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useParams } from 'react-router-dom';
 import { 
-  MousePointer, Play, CheckCircle2, ArrowRight, Lightbulb, 
+  MousePointer, Play, CheckCircle2, ArrowRight, Lightbulb,
   Zap, Target, Clock, Shield, Eye, Globe, Blocks, Activity,
-  ChevronRight, Sparkles, Layers, RefreshCw, Database, Rocket,
+  ChevronRight, Layers, RefreshCw, Database,
   ClipboardCheck, BarChart3, GitBranch, Settings, FileText,
   Accessibility, TrendingUp, Lock, PieChart, LayoutDashboard,
   Users, Server, Code2, Gauge, AlertTriangle, CheckSquare,
   Smartphone, Wifi, Map, Compass, Navigation, BrainCircuit, Route
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 // Shared Header
@@ -36,7 +35,7 @@ function MarketingHeader() {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
               <span className="text-white font-bold text-lg">F</span>
             </div>
             <span className="text-xl font-bold text-slate-800">Flowstral</span>
@@ -53,7 +52,7 @@ function MarketingHeader() {
           <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
             Sign In
           </Button>
-          <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => navigate('/signup')}>
+          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => navigate('/signup')}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -82,7 +81,7 @@ const featureConfigs: Record<string, {
     bgGradient: 'from-blue-50 to-cyan-50',
     features: [
       { icon: Blocks, title: 'Drag & Drop Interface', desc: 'Build test flows visually by dragging and connecting steps. No coding required.' },
-      { icon: Sparkles, title: '50+ Data Generators', desc: 'Smart Fill with generators for names, emails, phones, addresses, dates, and more.' },
+      { icon: Database, title: '50+ Data Generators', desc: 'Smart Fill with generators for names, emails, phones, addresses, dates, and more.' },
       { icon: CheckSquare, title: 'One-Click Assertions', desc: 'Add validations instantly - verify text, check visibility, compare values.' },
       { icon: Layers, title: 'Reusable Components', desc: 'Create shared steps and use them across multiple tests for consistency.' },
       { icon: GitBranch, title: 'Conditional Logic', desc: 'Add if/else conditions, loops, and data-driven scenarios.' },
@@ -220,7 +219,7 @@ const featureConfigs: Record<string, {
       { icon: Map, title: 'Flowmap Explorer', desc: 'Visualize and explore all possible user journeys. Discover untested paths automatically.' },
       { icon: Compass, title: 'Autonomous Explorer', desc: 'AI-powered exploration that finds edge cases and bugs without human guidance.' },
       { icon: RefreshCw, title: 'Self-Healing', desc: 'Automatic locator repair when elements change. Zero maintenance, zero flakes.' },
-      { icon: Sparkles, title: 'Test Generator', desc: 'Describe what to test in natural language. AI creates the complete test steps.' },
+      { icon: FileText, title: 'Test Generator', desc: 'Describe what to test in natural language. AI creates the complete test steps.' },
       { icon: BrainCircuit, title: 'Goal Understanding', desc: 'Agents understand business goals and translate them into test coverage.' },
       { icon: Route, title: 'Path Optimization', desc: 'Intelligent test path selection for maximum coverage with minimum steps.' },
     ],
@@ -265,16 +264,14 @@ export default function FeaturePage() {
   const Icon = config.icon;
 
   return (
-    <div className={cn("min-h-screen bg-gradient-to-b", config.bgGradient, "to-white")}>
+    <div className="min-h-screen bg-white">
       <MarketingHeader />
       
       {/* Hero */}
       <section className="pt-32 pb-20 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="max-w-3xl mx-auto text-center">
-            <Badge className={cn("mb-4 border-0 px-4 py-1.5", `bg-gradient-to-r ${config.gradient} text-white`)}>
-              <Icon className="w-4 h-4 mr-2" /> {config.title}
-            </Badge>
+            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4">{config.title}</p>
             <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-6">
               {config.tagline}
             </h1>
@@ -283,16 +280,16 @@ export default function FeaturePage() {
             </p>
             <div className="flex flex-wrap gap-2 justify-center mb-8">
               {config.highlights.map((h, i) => (
-                <Badge key={i} className="bg-white/80 text-slate-700 border border-slate-200">{h}</Badge>
+                <span key={i} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">{h}</span>
               ))}
             </div>
             <div className="flex flex-wrap gap-4 justify-center">
-              <Button 
+              <Button
                 size="lg"
                 onClick={() => navigate('/signup')}
-                className={cn("h-12 px-8 text-white font-semibold rounded-xl shadow-lg", `bg-gradient-to-r ${config.gradient}`)}
+                className="h-12 px-8 text-white font-semibold rounded-xl bg-slate-900 hover:bg-slate-800"
               >
-                <Rocket className="w-5 h-5 mr-2" /> Try It Free
+                Try It Free <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
               <Button 
                 size="lg" 
@@ -317,9 +314,9 @@ export default function FeaturePage() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {config.features.map((feat, idx) => (
-              <div key={idx} className="p-6 bg-slate-50 rounded-2xl hover:shadow-lg hover:-translate-y-1 transition-all">
-                <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-4", `bg-gradient-to-r ${config.gradient}`)}>
-                  <feat.icon className="w-6 h-6 text-white" />
+              <div key={idx} className="p-6 bg-slate-50 rounded-2xl hover:shadow-md transition-shadow">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 bg-slate-200">
+                  <feat.icon className="w-6 h-6 text-slate-700" />
                 </div>
                 <h3 className="text-lg font-bold text-slate-800 mb-2">{feat.title}</h3>
                 <p className="text-sm text-slate-500">{feat.desc}</p>
@@ -330,16 +327,16 @@ export default function FeaturePage() {
       </section>
 
       {/* CTA */}
-      <section className={cn("py-20 px-6", `bg-gradient-to-r ${config.gradient}`)}>
+      <section className="py-20 px-6 bg-slate-900">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">Ready to Get Started?</h2>
-          <p className="text-xl text-white/80 mb-8">Start your free trial today. No credit card required.</p>
-          <Button 
-            size="lg" 
+          <h2 className="text-3xl font-bold text-white mb-4">Ready to get started?</h2>
+          <p className="text-xl text-slate-400 mb-8">Start your free trial today. No credit card required.</p>
+          <Button
+            size="lg"
             onClick={() => navigate('/signup')}
-            className="h-14 px-10 bg-white text-slate-800 hover:bg-white/90 font-semibold rounded-xl shadow-lg"
+            className="h-14 px-10 bg-white text-slate-800 hover:bg-slate-100 font-semibold rounded-xl"
           >
-            <Rocket className="w-5 h-5 mr-2" /> Start Free Trial
+            Start Free Trial <ArrowRight className="w-5 h-5 ml-2" />
           </Button>
         </div>
       </section>

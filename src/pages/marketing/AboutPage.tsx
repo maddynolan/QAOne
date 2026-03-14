@@ -5,7 +5,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
-  ArrowRight, Users, Target, Heart, Rocket, Building2, Sparkles
+  ArrowRight, Users, Target, Heart, Building2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,10 +30,10 @@ function MarketingHeader() {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
               <span className="text-white font-bold text-lg">F</span>
             </div>
-            <span className="text-xl font-bold text-slate-800">Flowstral</span>
+            <span className="text-xl font-bold text-slate-900">Flowstral</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             <Link to="/#features" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Features</Link>
@@ -47,7 +47,7 @@ function MarketingHeader() {
           <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
             Sign In
           </Button>
-          <Button className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700" onClick={() => navigate('/signup')}>
+          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => navigate('/signup')}>
             Start Free <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
@@ -59,15 +59,15 @@ function MarketingHeader() {
 const values = [
   { icon: Target, title: 'Quality First', desc: 'Every bug that reaches production is a user experience we failed to protect. We obsess over quality.' },
   { icon: Users, title: 'Empower Everyone', desc: 'Great testing shouldn\'t require a CS degree. We make enterprise-grade QA accessible to all team members.' },
-  { icon: Sparkles, title: 'Innovation Driven', desc: 'From AI-powered self-healing tests to visual regression detection, we\'re redefining what\'s possible.' },
+  { icon: ArrowRight, title: 'Ship Faster', desc: 'Self-healing locators, visual regression detection, and parallel execution help teams ship with confidence.' },
   { icon: Heart, title: 'Built with Empathy', desc: 'We\'ve lived the QA pain. Every feature we build comes from real testing challenges we\'ve faced.' },
 ];
 
 const painPoints = [
-  { icon: '😤', title: 'Flaky Tests', desc: 'Tests that pass sometimes and fail randomly, eating up hours of debugging time.' },
-  { icon: '⏰', title: 'Maintenance Hell', desc: 'Spending more time fixing tests than writing new ones after every UI change.' },
-  { icon: '🔧', title: 'Complex Setup', desc: 'Needing a development team just to maintain your test automation framework.' },
-  { icon: '🎯', title: 'Lack of Coverage', desc: 'Never quite testing everything because automation is too slow or complicated.' },
+  { title: 'Flaky Tests', desc: 'Tests that pass sometimes and fail randomly, eating up hours of debugging time.' },
+  { title: 'Maintenance Hell', desc: 'Spending more time fixing tests than writing new ones after every UI change.' },
+  { title: 'Complex Setup', desc: 'Needing a development team just to maintain your test automation framework.' },
+  { title: 'Lack of Coverage', desc: 'Never quite testing everything because automation is too slow or complicated.' },
 ];
 
 export default function AboutPage() {
@@ -78,14 +78,12 @@ export default function AboutPage() {
       <MarketingHeader />
 
       {/* Hero */}
-      <section className="pt-32 pb-20 px-6 bg-gradient-to-b from-violet-50 to-white">
+      <section className="pt-32 pb-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
-          <Badge className="mb-4 bg-violet-100 text-violet-700 border-0 px-4 py-1.5">
-            Our Story
-          </Badge>
+          <p className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4">About</p>
           <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-6">
-            Born from Real
-            <span className="block text-violet-600">QA Pain</span>
+            Built by QA engineers,
+            <span className="block">for QA engineers</span>
           </h1>
           <p className="text-xl text-slate-600 leading-relaxed max-w-3xl mx-auto">
             Flowstral was created by a passionate QA architect who spent over a decade 
@@ -124,7 +122,6 @@ export default function AboutPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             {painPoints.map((point, idx) => (
               <div key={idx} className="text-center p-4">
-                <div className="text-4xl mb-3">{point.icon}</div>
                 <div className="text-lg font-semibold text-white mb-1">{point.title}</div>
                 <div className="text-sm text-slate-400">{point.desc}</div>
               </div>
@@ -137,15 +134,14 @@ export default function AboutPage() {
       <section className="py-20 px-6">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <Badge className="mb-4 bg-blue-100 text-blue-700 border-0">Our Values</Badge>
             <h2 className="text-3xl font-bold text-slate-900">What Drives Us</h2>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {values.map((value, idx) => (
               <div key={idx} className="p-6 bg-slate-50 rounded-2xl hover:shadow-lg transition-all">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-blue-500 to-violet-500 flex items-center justify-center mb-4">
-                  <value.icon className="w-6 h-6 text-white" />
+                <div className="w-12 h-12 rounded-xl bg-slate-200 flex items-center justify-center mb-4">
+                  <value.icon className="w-6 h-6 text-slate-700" />
                 </div>
                 <h3 className="text-lg font-bold text-slate-800 mb-2">{value.title}</h3>
                 <p className="text-sm text-slate-500">{value.desc}</p>
@@ -159,14 +155,13 @@ export default function AboutPage() {
       <section className="py-20 px-6 bg-slate-50">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
-            <Badge className="mb-4 bg-violet-100 text-violet-700 border-0">Our Mission</Badge>
-            <h2 className="text-3xl font-bold text-slate-900 mb-6">Democratizing Quality Assurance</h2>
+            <h2 className="text-3xl font-bold text-slate-900 mb-6">Our Mission</h2>
           </div>
 
           <div className="grid md:grid-cols-2 gap-8">
-            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-blue-500 to-violet-500 flex items-center justify-center mb-4">
-                <Target className="w-6 h-6 text-white" />
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+              <div className="w-12 h-12 rounded-xl bg-slate-200 flex items-center justify-center mb-4">
+                <Target className="w-6 h-6 text-slate-700" />
               </div>
               <h3 className="text-xl font-bold text-slate-800 mb-3">What We Believe</h3>
               <p className="text-slate-600">
@@ -176,9 +171,9 @@ export default function AboutPage() {
               </p>
             </div>
 
-            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-violet-500 to-pink-500 flex items-center justify-center mb-4">
-                <Rocket className="w-6 h-6 text-white" />
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+              <div className="w-12 h-12 rounded-xl bg-slate-200 flex items-center justify-center mb-4">
+                <ArrowRight className="w-6 h-6 text-slate-700" />
               </div>
               <h3 className="text-xl font-bold text-slate-800 mb-3">Where We're Headed</h3>
               <p className="text-slate-600">
@@ -189,7 +184,7 @@ export default function AboutPage() {
             </div>
           </div>
 
-          <div className="mt-8 p-8 bg-gradient-to-br from-blue-50 to-violet-50 rounded-2xl border border-blue-100 text-center">
+          <div className="mt-8 p-8 bg-slate-100 rounded-2xl border border-slate-200 text-center">
             <p className="text-lg text-slate-700 italic">
               "We're not just building a testing tool. We're giving QA professionals 
               their nights and weekends back."
@@ -200,25 +195,25 @@ export default function AboutPage() {
       </section>
 
       {/* CTA */}
-      <section className="py-20 px-6 bg-gradient-to-r from-blue-600 to-violet-600">
+      <section className="py-20 px-6 bg-slate-900">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">Join Us in Transforming QA</h2>
-          <p className="text-xl text-white/80 mb-8">Start your free trial or explore career opportunities.</p>
+          <h2 className="text-3xl font-bold text-white mb-4">Try Flowstral for free</h2>
+          <p className="text-lg text-slate-400 mb-8">No credit card required. No time limit on the free tier.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
+            <Button
               size="lg"
               onClick={() => navigate('/signup')}
-              className="h-12 px-8 bg-white text-violet-600 hover:bg-white/90 font-semibold rounded-xl"
+              className="h-12 px-8 bg-white text-slate-900 hover:bg-slate-100 font-semibold rounded-xl"
             >
-              <Rocket className="w-5 h-5 mr-2" /> Start Free Trial
+              Get Started Free <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
-            <Button 
+            <Button
               size="lg"
               variant="outline"
-              onClick={() => navigate('/resources/careers')}
-              className="h-12 px-8 border-white/30 text-white hover:bg-white/10 rounded-xl"
+              onClick={() => navigate('/contact')}
+              className="h-12 px-8 border-slate-600 text-white hover:bg-slate-800 rounded-xl"
             >
-              <Building2 className="w-5 h-5 mr-2" /> View Careers
+              <Building2 className="w-5 h-5 mr-2" /> Talk to Sales
             </Button>
           </div>
         </div>

@@ -10,7 +10,7 @@
  * - Boot / shutdown simulators & emulators
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -58,6 +58,7 @@ export default function MobileDeviceLab() {
   const isDark = theme !== 'light';
   const inElectron = isElectron();
   const logRef = useRef<HTMLDivElement>(null);
+  const logUnsubRef = useRef<(() => void) | null>(null);
 
   // Individual selectors
   const selectedPlatform = useMobileTestingStore(s => s.selectedPlatform);
@@ -85,7 +86,7 @@ export default function MobileDeviceLab() {
   const [logFilter, setLogFilter] = useState('');
   const [viewingScreenshot, setViewingScreenshot] = useState<string | null>(null);
 
-  const loadDevices = async () => {
+  const loadDevices = useCallback(async () => {
     if (!inElectron) return;
     setIsLoadingDevices(true);
     try {
@@ -95,15 +96,16 @@ export default function MobileDeviceLab() {
         setSelectedDevice(devices[0]);
       }
     } catch (error) {
+      console.error('Failed to load devices:', error);
       setNativeDevices([]);
     } finally {
       setIsLoadingDevices(false);
     }
-  };
+  }, [inElectron, selectedPlatform, selectedDevice, setIsLoadingDevices, setNativeDevices, setSelectedDevice]);
 
   useEffect(() => {
     if (maestroInstalled) loadDevices();
-  }, [selectedPlatform, maestroInstalled]);
+  }, [selectedPlatform, maestroInstalled, loadDevices]);
 
   // Auto-scroll logs
   useEffect(() => {
@@ -113,7 +115,8 @@ export default function MobileDeviceLab() {
   // Cleanup log listener on unmount
   useEffect(() => {
     return () => {
-      (window as any).__mobileLogUnsub?.();
+      logUnsubRef.current?.();
+      logUnsubRef.current = null;
       mobile.stopLogs().catch(() => {});
     };
   }, []);
@@ -125,7 +128,7 @@ export default function MobileDeviceLab() {
     }
     setIsInstalling(true);
     try {
-      const result = await mobile.installApp(installPath, selectedPlatform, selectedDevice?.id || selectedDevice);
+      const result = await mobile.installApp(installPath, selectedPlatform, selectedDevice);
       if (result.success) {
         toast.success('App installed successfully');
         addInstalledApp({
@@ -149,7 +152,7 @@ export default function MobileDeviceLab() {
   const handleTakeScreenshot = async () => {
     setIsTakingScreenshot(true);
     try {
-      const result = await mobile.takeScreenshot(selectedPlatform, selectedDevice?.id || selectedDevice);
+      const result = await mobile.takeScreenshot(selectedPlatform, selectedDevice);
       if (result.success) {
         toast.success('Screenshot captured!');
         setScreenshots(prev => [...prev, result.base64 ? `data:image/png;base64,${result.base64}` : result.filename]);
@@ -169,27 +172,34 @@ export default function MobileDeviceLab() {
       `[${new Date().toLocaleTimeString()}] Starting ${selectedPlatform === 'ios' ? 'syslog' : 'logcat'} capture...`,
     ]);
 
-    const result = await mobile.startLogs(selectedPlatform, selectedDevice?.id || selectedDevice);
-    if (!result.success) {
-      toast.error(result.error || 'Failed to start log capture');
-      setIsCapturingLogs(false);
-      return;
-    }
+    try {
+      const result = await mobile.startLogs(selectedPlatform, selectedDevice);
+      if (!result.success) {
+        toast.error(result.error || 'Failed to start log capture');
+        setIsCapturingLogs(false);
+        return;
+      }
 
-    // Listen for streamed log lines from device
-    const unsub = mobile.onLogLine?.((line: string) => {
-      setDeviceLogs(prev => {
-        if (prev.length > 2000) return [...prev.slice(-1000), line];
-        return [...prev, line];
+      // Listen for streamed log lines from device
+      const unsub = mobile.onLogLine?.((line: string) => {
+        setDeviceLogs(prev => {
+          if (prev.length > 2000) return [...prev.slice(-1000), line];
+          return [...prev, line];
+        });
       });
-    });
-    (window as any).__mobileLogUnsub = unsub;
+      logUnsubRef.current = unsub ?? null;
+    } catch (error: any) {
+      console.error('Failed to start log capture:', error);
+      toast.error(error.message || 'Failed to start log capture');
+      setIsCapturingLogs(false);
+    }
   };
 
   const handleStopLogs = async () => {
     setIsCapturingLogs(false);
     await mobile.stopLogs();
-    (window as any).__mobileLogUnsub?.();
+    logUnsubRef.current?.();
+    logUnsubRef.current = null;
     setDeviceLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Log capture stopped.`]);
   };
 
@@ -421,7 +431,7 @@ export default function MobileDeviceLab() {
               <div className="grid grid-cols-2 gap-2">
                 <Button variant="outline" size="sm" className="h-8 text-xs justify-start" onClick={async () => {
                   if (!appBundleId) { toast.error('Enter a Bundle ID first'); return; }
-                  const deviceId = selectedDevice?.id || selectedDevice;
+                  const deviceId = selectedDevice;
                   try {
                     const res = await mobile.uninstallApp(appBundleId, selectedPlatform, deviceId);
                     if (res.success) { await mobile.installApp(installPath, selectedPlatform, deviceId); toast.success('App data cleared (re-installed)'); }
@@ -433,7 +443,7 @@ export default function MobileDeviceLab() {
                 <Button variant="outline" size="sm" className="h-8 text-xs justify-start" onClick={async () => {
                   if (!appBundleId) { toast.error('Enter a Bundle ID first'); return; }
                   try {
-                    const deviceId = selectedDevice?.id || selectedDevice;
+                    const deviceId = selectedDevice;
                     // Android: am force-stop, iOS: simctl terminate
                     const res = selectedPlatform === 'android'
                       ? await mobile.openDeepLink('android', deviceId, `shell:am force-stop ${appBundleId}`)
@@ -452,7 +462,7 @@ export default function MobileDeviceLab() {
                 <Button variant="outline" size="sm" className="h-8 text-xs justify-start" onClick={async () => {
                   if (!appBundleId) { toast.error('Enter a Bundle ID first'); return; }
                   try {
-                    const deviceId = selectedDevice?.id || selectedDevice;
+                    const deviceId = selectedDevice;
                     const res = await mobile.uninstallApp(appBundleId, selectedPlatform, deviceId);
                     if (res.success) {
                       removeInstalledApp(appBundleId);

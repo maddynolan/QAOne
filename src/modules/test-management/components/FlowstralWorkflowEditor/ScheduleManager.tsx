@@ -93,7 +93,13 @@ export default function ScheduleManager({ testSuites, onRunSchedule }: ScheduleM
     try {
       const saved = localStorage.getItem('test_schedules');
       if (saved) {
-        setSchedules(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setSchedules(parsed);
+        } else {
+          console.warn('[ScheduleManager] Invalid test_schedules format in localStorage, expected array');
+          setSchedules([]);
+        }
       } else {
         // Mock data
         setSchedules([
@@ -359,6 +365,7 @@ export default function ScheduleManager({ testSuites, onRunSchedule }: ScheduleM
                       size="sm"
                       onClick={() => runNow(schedule)}
                       disabled={schedule.lastRun?.status === 'running'}
+                      aria-label={schedule.lastRun?.status === 'running' ? `${schedule.name} is running` : `Run ${schedule.name} now`}
                     >
                       {schedule.lastRun?.status === 'running' ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -374,6 +381,7 @@ export default function ScheduleManager({ testSuites, onRunSchedule }: ScheduleM
                         setNewSchedule(schedule);
                         setShowDialog(true);
                       }}
+                      aria-label={`Edit schedule ${schedule.name}`}
                     >
                       <Edit2 className="h-4 w-4" />
                     </Button>
@@ -381,6 +389,7 @@ export default function ScheduleManager({ testSuites, onRunSchedule }: ScheduleM
                       variant="ghost"
                       size="sm"
                       onClick={() => deleteSchedule(schedule.id)}
+                      aria-label={`Delete schedule ${schedule.name}`}
                     >
                       <Trash2 className="h-4 w-4 text-red-500" />
                     </Button>

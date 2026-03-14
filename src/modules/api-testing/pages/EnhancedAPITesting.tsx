@@ -265,7 +265,9 @@ function DbQueryEditor({ connections, onAddAssertion, onAddStep }: {
     // Build a WHERE clause from the row's primary/first field to target this specific record
     const firstCol = resultColumns[0];
     const firstVal = row[firstCol];
-    const whereQuery = `SELECT * FROM (${query.replace(/;\s*$/, "")}) sub WHERE ${firstCol} = '${firstVal}'`;
+    // Escape single quotes to prevent SQL injection (doubles them per SQL standard)
+    const escapedVal = String(firstVal).replace(/'/g, "''");
+    const whereQuery = `SELECT * FROM (${query.replace(/;\s*$/, "")}) sub WHERE ${firstCol} = '${escapedVal}'`;
     const fields = Object.fromEntries(
       Object.entries(row).filter(([k]) => k !== "__rownum").slice(0, 5)
     );
@@ -289,7 +291,9 @@ function DbQueryEditor({ connections, onAddAssertion, onAddStep }: {
     if (!onAddAssertion) return;
     const firstCol = resultColumns[0];
     const firstVal = row[firstCol];
-    const whereQuery = `SELECT ${col} FROM (${query.replace(/;\s*$/, "")}) sub WHERE ${firstCol} = '${firstVal}'`;
+    // Escape single quotes to prevent SQL injection (doubles them per SQL standard)
+    const escapedVal = String(firstVal).replace(/'/g, "''");
+    const whereQuery = `SELECT ${col} FROM (${query.replace(/;\s*$/, "")}) sub WHERE ${firstCol} = '${escapedVal}'`;
     onAddAssertion({
       id: `db_xverify_${Date.now()}_${rowIdx}_${col}`,
       type: "database",

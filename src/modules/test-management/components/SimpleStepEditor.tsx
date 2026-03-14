@@ -279,9 +279,9 @@ export default function SimpleStepEditor({
         console.error('[SimpleStepEditor] Picker failed:', errorMsg);
         toast.error(errorMsg);
       }
-    } catch (e: any) {
+    } catch (e) {
       console.error('[SimpleStepEditor] Picker exception:', e);
-      toast.error(e.message || 'Picker failed unexpectedly');
+      toast.error(e instanceof Error ? e.message : 'Picker failed unexpectedly');
     } finally {
       setIsPicking(false);
     }

@@ -171,6 +171,7 @@ export default function TestRepository() {
     if (tabFromUrl && tabFromUrl !== activeTab) {
       setActiveTab(tabFromUrl);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to URL changes, not activeTab state changes
   }, [tabFromUrl]);
   const [suites, setSuites] = useState<TestSuite[]>([]);
   const [testPlans, setTestPlans] = useState<TestPlan[]>([]);
@@ -188,7 +189,7 @@ export default function TestRepository() {
   // Clipboard state for copy/paste
   const [clipboard, setClipboard] = useState<{
     type: 'test' | 'suite' | 'plan' | 'release' | null;
-    data: any;
+    data: TestCase | TestSuite | TestPlan | Release | null;
   }>({ type: null, data: null });
   
   // Track deleted IDs to prevent reloading from backend
@@ -1315,7 +1316,7 @@ export default function TestRepository() {
     
     try {
       // Set up event listeners for progress
-      const unsubStepStart = electronAPI.on?.('test-step-start', ({ index, step }: { index: number; step: any }) => {
+      const unsubStepStart = electronAPI.on?.('test-step-start', ({ index, step }: { index: number; step: Record<string, unknown> }) => {
         setExecutingStepIndex(index);
         executionLogs.push(`[${new Date().toISOString()}] Starting step ${index + 1}: ${step?.description || step?.qword || 'Unknown'}`);
         
@@ -1330,7 +1331,7 @@ export default function TestRepository() {
         }
       });
       
-      const unsubStepComplete = electronAPI.on?.('test-step-complete', ({ index, step, result }: any) => {
+      const unsubStepComplete = electronAPI.on?.('test-step-complete', ({ index, step, result }: { index: number; step: Record<string, unknown>; result: Record<string, unknown> }) => {
         console.log(`[Run] Step ${index + 1} completed:`, result?.status);
         const stepName = step?.description || step?.name || step?.qword || `Step ${index + 1}`;
         executionLogs.push(`[${new Date().toISOString()}] Step ${index + 1} ${result?.status}: ${stepName}`);
@@ -1375,7 +1376,7 @@ export default function TestRepository() {
       
       // Process final results from executor
       if (results.steps) {
-        results.steps.forEach((stepResult: any, idx: number) => {
+        results.steps.forEach((stepResult: Record<string, unknown>, idx: number) => {
           const existingResult = stepResultsMap.get(idx);
           stepResultsMap.set(idx, {
             stepIndex: idx,
@@ -1421,25 +1422,26 @@ export default function TestRepository() {
       toast.success(`Test ${results.status}: ${passed} passed, ${failed} failed`);
       return results.status === 'passed';
       
-    } catch (error: any) {
-      console.error('[Run] Execution error:', error);
-      executionLogs.push(`[${new Date().toISOString()}] ERROR: ${error.message}`);
-      
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown execution error';
+      console.error('[Run] Execution error:', errorMsg);
+      executionLogs.push(`[${new Date().toISOString()}] ERROR: ${errorMsg}`);
+
       setTestRuns(prev => {
-        const updated = prev.map(r => 
-          r.id === runId ? { 
-            ...r, 
-            status: 'failed' as const, 
+        const updated = prev.map(r =>
+          r.id === runId ? {
+            ...r,
+            status: 'failed' as const,
             endTime: new Date().toISOString(),
             stepResults: Array.from(stepResultsMap.values()),
             logs: executionLogs,
-            errorMessage: error.message
+            errorMessage: errorMsg
           } : r
         );
         localStorage.setItem('test_execution_history', JSON.stringify(updated));
         return updated;
       });
-      toast.error(`Execution failed: ${error.message}`);
+      toast.error(`Execution failed: ${errorMsg}`);
       return false;
     } finally {
       setExecutingRunId(null);
@@ -1548,13 +1550,13 @@ export default function TestRepository() {
             const results = await electronAPI.testRunner.executeTest(testData);
             const duration = Date.now() - startTime;
 
-            const stepResults: StepResult[] = (results.steps || []).map((s: any, idx: number) => ({
+            const stepResults: StepResult[] = (results.steps || []).map((s: Record<string, unknown>, idx: number) => ({
               stepIndex: idx,
-              stepName: s.name || convertedSteps[idx]?.description || `Step ${idx + 1}`,
-              status: s.status || 'failed',
-              duration: s.duration,
-              error: s.error,
-              screenshot: s.screenshot
+              stepName: String(s.name || convertedSteps[idx]?.description || `Step ${idx + 1}`),
+              status: (s.status as StepResult['status']) || 'failed',
+              duration: s.duration as number | undefined,
+              error: s.error as string | undefined,
+              screenshot: s.screenshot as string | undefined
             }));
 
             const passed = stepResults.filter(s => s.status === 'passed').length;
@@ -1585,11 +1587,12 @@ export default function TestRepository() {
               return { ...r, testResults, logs: [...executionLogs] };
             }));
 
-          } catch (testError: any) {
+          } catch (testError: unknown) {
             totalFailed++;
             allPassed = false;
-            executionLogs.push(`[${new Date().toISOString()}] ✗ ERROR: ${testCase.name} - ${testError.message}`);
-            
+            const testErrMsg = testError instanceof Error ? testError.message : 'Unknown test error';
+            executionLogs.push(`[${new Date().toISOString()}] ✗ ERROR: ${testCase.name} - ${testErrMsg}`);
+
             setTestRuns(prev => prev.map(r => {
               if (r.id !== runId) return r;
               const testResults = [...(r.testResults || [])];
@@ -1597,7 +1600,7 @@ export default function TestRepository() {
                 testResults[i] = {
                   ...testResults[i],
                   status: 'failed',
-                  errorMessage: testError.message
+                  errorMessage: testErrMsg
                 };
               }
               return { ...r, testResults, logs: [...executionLogs] };
@@ -1635,8 +1638,8 @@ export default function TestRepository() {
               duration: Date.now() - startTime,
               testName: testCase.name 
             };
-          } catch (e: any) {
-            return { index: i, status: 'failed', error: e.message, testName: testCase.name };
+          } catch (e: unknown) {
+            return { index: i, status: 'failed', error: e instanceof Error ? e.message : 'Unknown error', testName: testCase.name };
           }
         });
 
@@ -1662,16 +1665,16 @@ export default function TestRepository() {
           const testResults = parallelResults.map((result, i) => ({
             testCaseId: testCaseIds[i],
             testName: result.testName || 'Unknown',
-            status: result.status as any,
+            status: (result.status as 'passed' | 'failed' | 'skipped') || 'failed',
             duration: result.duration,
             errorMessage: result.error,
-            stepResults: result.results?.steps?.map((s: any, idx: number) => ({
+            stepResults: result.results?.steps?.map((s: Record<string, unknown>, idx: number) => ({
               stepIndex: idx,
-              stepName: s.name || `Step ${idx + 1}`,
-              status: s.status,
-              duration: s.duration,
-              error: s.error,
-              screenshot: s.screenshot
+              stepName: String(s.name || `Step ${idx + 1}`),
+              status: (s.status as StepResult['status']) || 'failed',
+              duration: s.duration as number | undefined,
+              error: s.error as string | undefined,
+              screenshot: s.screenshot as string | undefined
             })) || []
           }));
           return { ...r, testResults, logs: [...executionLogs] };
@@ -1699,22 +1702,23 @@ export default function TestRepository() {
       toast.success(`Run complete: ${totalPassed} passed, ${totalFailed} failed`);
       return allPassed;
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown execution error';
       console.error('[Run] Multi-test execution error:', error);
       setTestRuns(prev => {
-        const updated = prev.map(r => 
-          r.id === runId ? { 
-            ...r, 
-            status: 'failed' as const, 
+        const updated = prev.map(r =>
+          r.id === runId ? {
+            ...r,
+            status: 'failed' as const,
             endTime: new Date().toISOString(),
-            logs: [...executionLogs, `ERROR: ${error.message}`],
-            errorMessage: error.message
+            logs: [...executionLogs, `ERROR: ${errorMsg}`],
+            errorMessage: errorMsg
           } : r
         );
         localStorage.setItem('test_execution_history', JSON.stringify(updated));
         return updated;
       });
-      toast.error(`Run failed: ${error.message}`);
+      toast.error(`Run failed: ${errorMsg}`);
       return false;
     } finally {
       setExecutingRunId(null);
@@ -1868,8 +1872,8 @@ export default function TestRepository() {
                           }
                         }
                         toast.success(`Imported ${importedCount} test case(s)`);
-                      } catch (err: any) {
-                        toast.error(`Import failed: ${err.message}`);
+                      } catch (err: unknown) {
+                        toast.error(`Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
                       }
                     };
                     input.click();
@@ -1962,7 +1966,7 @@ export default function TestRepository() {
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id as typeof activeTab)}
               className={cn(
                 "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
                 activeTab === tab.id
@@ -1970,11 +1974,11 @@ export default function TestRepository() {
                   : "border-transparent text-gray-500 dark:text-gray-400 hover:text-white"
               )}
             >
-              <tab.icon className={cn("w-4 h-4", tab.id === 'defects' && (tab as any).highlight && "text-red-400")} />
+              <tab.icon className={cn("w-4 h-4", tab.id === 'defects' && 'highlight' in tab && tab.highlight && "text-red-400")} />
               {tab.label}
               <Badge className={cn(
                 "h-5 px-1.5 text-xs",
-                tab.id === 'defects' && (tab as any).highlight
+                tab.id === 'defects' && 'highlight' in tab && tab.highlight
                   ? "bg-red-500/20 text-red-400 border border-red-500/50"
                   : "bg-secondary text-gray-500 dark:text-gray-400"
               )}>{tab.count}</Badge>
@@ -2096,7 +2100,7 @@ export default function TestRepository() {
                   {/* Filters for scale testing */}
                   <select
                     value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value as any)}
+                    onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
                     className="text-xs bg-secondary border border-border text-foreground rounded px-2 py-1 focus:outline-none focus:border-amber-500"
                   >
                     <option value="all">All Status</option>
@@ -2107,7 +2111,7 @@ export default function TestRepository() {
                   
                   <select
                     value={priorityFilter}
-                    onChange={(e) => setPriorityFilter(e.target.value as any)}
+                    onChange={(e) => setPriorityFilter(e.target.value as typeof priorityFilter)}
                     className="text-xs bg-secondary border border-border text-foreground rounded px-2 py-1 focus:outline-none focus:border-amber-500"
                   >
                     <option value="all">All Priority</option>
@@ -2160,7 +2164,7 @@ export default function TestRepository() {
                   
                   <select
                     value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as any)}
+                    onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
                     className="text-xs bg-secondary border border-border text-foreground rounded px-2 py-1 focus:outline-none focus:border-amber-500"
                   >
                     <option value="updated">Sort by Updated</option>

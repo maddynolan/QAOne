@@ -86,8 +86,8 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
     if (!open) return;
     
     const handleProgress = (_event: any, data: any) => {
-      console.log('[AIGenerator] Progress:', data);
-      
+      if (import.meta.env.DEV) console.log('[AIGenerator] Progress:', data);
+
       switch (data.type) {
         case 'page_start':
           setProgressMessage(`Analyzing ${data.url}...`);
@@ -113,7 +113,7 @@ export function AITestGenerator({ open, onOpenChange, onTestsGenerated }: AITest
     };
     
     const handleTest = (_event: any, test: GeneratedTest) => {
-      console.log('[AIGenerator] Test generated:', test.name);
+      if (import.meta.env.DEV) console.log('[AIGenerator] Test generated:', test.name);
       setGeneratedTests(prev => [...prev, test]);
     };
     

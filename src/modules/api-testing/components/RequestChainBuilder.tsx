@@ -4,7 +4,7 @@
  * assertions, and conditional flow control.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,9 +49,13 @@ export default function RequestChainBuilder() {
   const [savedChains, setSavedChains] = useState<SavedChain[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("api_saved_chains") || "[]");
-    } catch { return []; }
+    } catch (err) { console.warn('[RequestChainBuilder] Failed to load saved chains:', err); return []; }
   });
   const [showSaved, setShowSaved] = useState(false);
+
+  // Refs for variable input fields (replaces document.getElementById anti-pattern)
+  const newVarNameRef = useRef<HTMLInputElement>(null);
+  const newVarValueRef = useRef<HTMLInputElement>(null);
 
   // --- Step management ---
   const addStep = () => {
@@ -421,20 +425,20 @@ export default function RequestChainBuilder() {
               <Input
                 className="flex-1 h-7 text-xs"
                 placeholder="Variable name"
-                id="new-var-name"
+                ref={newVarNameRef}
               />
               <Input
                 className="flex-1 h-7 text-xs"
                 placeholder="Value"
-                id="new-var-value"
+                ref={newVarValueRef}
               />
               <Button
                 variant="outline"
                 size="sm"
                 className="h-7 text-xs"
                 onClick={() => {
-                  const nameEl = document.getElementById("new-var-name") as HTMLInputElement;
-                  const valueEl = document.getElementById("new-var-value") as HTMLInputElement;
+                  const nameEl = newVarNameRef.current;
+                  const valueEl = newVarValueRef.current;
                   if (nameEl?.value.trim()) {
                     setVariables({ ...variables, [nameEl.value.trim()]: valueEl?.value || "" });
                     nameEl.value = "";

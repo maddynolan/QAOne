@@ -322,7 +322,7 @@ export function AppSidebar() {
                               <item.icon className={`h-4 w-4 ${itemHighlight && !isActive ? 'text-blue-600 dark:text-amber-500' : ''}`} />
                               <span>{item.title}</span>
                               {itemHighlight && !isActive && (
-                                <span className="ml-auto text-[10px] bg-blue-600 dark:bg-amber-500 text-white dark:text-gray-900 px-1.5 py-0.5 rounded font-medium">★</span>
+                                <span className="ml-auto text-[10px] bg-blue-600 dark:bg-amber-500 text-white dark:text-gray-900 px-1.5 py-0.5 rounded font-medium">NEW</span>
                               )}
                             </NavLink>
                           </SidebarMenuButton>

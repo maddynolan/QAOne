@@ -10,7 +10,7 @@
  * - Orientation & Locale - Test rotation & language changes
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -87,18 +87,18 @@ export default function MobileAdvancedTools() {
   const [biometricResult, setBiometricResult] = useState<'success' | 'failure' | null>(null);
   const [selectedLocale, setSelectedLocale] = useState('en-US');
 
-  const tools: { id: ToolSection; label: string; icon: React.FC<any>; badge?: string }[] = [
+  const tools = useMemo<{ id: ToolSection; label: string; icon: React.FC<{ className?: string }>; badge?: string }[]>(() => [
     { id: 'deeplinks', label: 'Deep Links', icon: Link2 },
     { id: 'notifications', label: 'Push Notifications', icon: Bell },
     { id: 'biometrics', label: 'Biometrics', icon: Fingerprint },
     { id: 'network', label: 'Network Simulation', icon: Wifi },
     { id: 'geolocation', label: 'Geolocation', icon: MapPin },
     { id: 'device-config', label: 'Device Config', icon: Smartphone },
-  ];
+  ], []);
 
   const handleOpenDeepLink = async (link: DeepLinkConfig) => {
     try {
-      const deviceId = selectedDevice?.id || selectedDevice;
+      const deviceId = selectedDevice;
       const result = await mobile.openDeepLink(selectedPlatform, deviceId, link.url);
       if (result.success) {
         toast.success(`Deep link opened: ${link.url}`);
@@ -129,7 +129,7 @@ export default function MobileAdvancedTools() {
   const handleSendNotification = async () => {
     setIsSending(true);
     try {
-      const deviceId = selectedDevice?.id || selectedDevice;
+      const deviceId = selectedDevice;
       const result = await mobile.sendPush(selectedPlatform, deviceId, pushNotificationPayload, appBundleId);
       if (result.success) {
         toast.success('Push notification sent to device!');
@@ -146,7 +146,7 @@ export default function MobileAdvancedTools() {
   const handleBiometricTest = async (result: 'success' | 'failure') => {
     setBiometricResult(result);
     try {
-      const deviceId = selectedDevice?.id || selectedDevice;
+      const deviceId = selectedDevice;
       const res = await mobile.simulateBiometric(selectedPlatform, deviceId, result);
       if (res.success) {
         toast.success(`Biometric ${result === 'success' ? 'authentication' : 'failure'} simulated on device`);
@@ -160,12 +160,15 @@ export default function MobileAdvancedTools() {
 
   const handleSetLocation = async (loc: GeoLocation) => {
     setCurrentLocation(loc);
-    const deviceId = selectedDevice?.id || selectedDevice;
-    const result = await mobile.setGeoLocation(selectedPlatform, deviceId, loc.latitude, loc.longitude);
-    if (result.success) {
-      toast.success(`Location set to ${loc.name}`);
-    } else {
-      toast.error(result.error || `Failed to set location to ${loc.name}`);
+    try {
+      const result = await mobile.setGeoLocation(selectedPlatform, selectedDevice, loc.latitude, loc.longitude);
+      if (result.success) {
+        toast.success(`Location set to ${loc.name}`);
+      } else {
+        toast.error(result.error || `Failed to set location to ${loc.name}`);
+      }
+    } catch (error: any) {
+      toast.error(error.message || `Failed to set location to ${loc.name}`);
     }
   };
 
@@ -202,13 +205,16 @@ export default function MobileAdvancedTools() {
 
   const handleSetNetworkProfile = async (profile: NetworkProfile) => {
     setActiveNetworkProfile(profile.id);
-    const deviceId = selectedDevice?.id || selectedDevice;
-    const result = await mobile.setNetworkCondition(selectedPlatform, deviceId, profile);
-    if (result.success) {
-      toast.success(`Network set to ${profile.name}`);
-      if (result.note) toast.info(result.note);
-    } else {
-      toast.error(result.error || `Failed to set network to ${profile.name}`);
+    try {
+      const result = await mobile.setNetworkCondition(selectedPlatform, selectedDevice, profile);
+      if (result.success) {
+        toast.success(`Network set to ${profile.name}`);
+        if (result.note) toast.info(result.note);
+      } else {
+        toast.error(result.error || `Failed to set network to ${profile.name}`);
+      }
+    } catch (error: any) {
+      toast.error(error.message || `Failed to set network to ${profile.name}`);
     }
   };
 
@@ -566,7 +572,7 @@ export default function MobileAdvancedTools() {
               <div className="mt-4">
                 <Button variant="outline" size="sm" onClick={async () => {
                   setActiveNetworkProfile(null);
-                  const deviceId = selectedDevice?.id || selectedDevice;
+                  const deviceId = selectedDevice;
                   // Enable wifi + data to restore default network
                   await mobile.setNetworkCondition(selectedPlatform, deviceId, { download_kbps: 50000, upload_kbps: 50000, latency_ms: 0, packet_loss: 0 });
                   toast.success('Network reset to default');
@@ -671,16 +677,18 @@ export default function MobileAdvancedTools() {
                 </h4>
                 <div className="flex gap-2">
                   <Button variant="outline" className="flex-1 h-10 text-xs" onClick={async () => {
-                    const deviceId = selectedDevice?.id || selectedDevice;
-                    const r = await mobile.setOrientation(selectedPlatform, deviceId, 'portrait');
-                    r.success ? toast.success('Set to Portrait') : toast.error(r.error || 'Failed');
+                    try {
+                      const r = await mobile.setOrientation(selectedPlatform, selectedDevice, 'portrait');
+                      r.success ? toast.success('Set to Portrait') : toast.error(r.error || 'Failed');
+                    } catch (e: any) { toast.error(e.message || 'Failed to set orientation'); }
                   }}>
                     <Smartphone className="w-4 h-4 mr-1.5" /> Portrait
                   </Button>
                   <Button variant="outline" className="flex-1 h-10 text-xs" onClick={async () => {
-                    const deviceId = selectedDevice?.id || selectedDevice;
-                    const r = await mobile.setOrientation(selectedPlatform, deviceId, 'landscape');
-                    r.success ? toast.success('Set to Landscape') : toast.error(r.error || 'Failed');
+                    try {
+                      const r = await mobile.setOrientation(selectedPlatform, selectedDevice, 'landscape');
+                      r.success ? toast.success('Set to Landscape') : toast.error(r.error || 'Failed');
+                    } catch (e: any) { toast.error(e.message || 'Failed to set orientation'); }
                   }}>
                     <Smartphone className="w-4 h-4 mr-1.5 rotate-90" /> Landscape
                   </Button>
@@ -694,16 +702,18 @@ export default function MobileAdvancedTools() {
                 </h4>
                 <div className="flex gap-2">
                   <Button variant="outline" className="flex-1 h-10 text-xs" onClick={async () => {
-                    const deviceId = selectedDevice?.id || selectedDevice;
-                    const r = await mobile.setAppearance(selectedPlatform, deviceId, 'light');
-                    r.success ? toast.success('Set to Light Mode') : toast.error(r.error || 'Failed');
+                    try {
+                      const r = await mobile.setAppearance(selectedPlatform, selectedDevice, 'light');
+                      r.success ? toast.success('Set to Light Mode') : toast.error(r.error || 'Failed');
+                    } catch (e: any) { toast.error(e.message || 'Failed to set appearance'); }
                   }}>
                     <Sun className="w-4 h-4 mr-1.5" /> Light
                   </Button>
                   <Button variant="outline" className="flex-1 h-10 text-xs" onClick={async () => {
-                    const deviceId = selectedDevice?.id || selectedDevice;
-                    const r = await mobile.setAppearance(selectedPlatform, deviceId, 'dark');
-                    r.success ? toast.success('Set to Dark Mode') : toast.error(r.error || 'Failed');
+                    try {
+                      const r = await mobile.setAppearance(selectedPlatform, selectedDevice, 'dark');
+                      r.success ? toast.success('Set to Dark Mode') : toast.error(r.error || 'Failed');
+                    } catch (e: any) { toast.error(e.message || 'Failed to set appearance'); }
                   }}>
                     <Moon className="w-4 h-4 mr-1.5" /> Dark
                   </Button>
@@ -733,14 +743,15 @@ export default function MobileAdvancedTools() {
                     <option value="pt-BR">pt-BR (Portuguese)</option>
                   </select>
                   <Button variant="outline" className="h-10 text-xs" onClick={async () => {
-                    const deviceId = selectedDevice?.id || selectedDevice;
-                    const r = await mobile.setLocale(selectedPlatform, deviceId, selectedLocale);
-                    if (r.success) {
-                      toast.success(`Locale set to ${selectedLocale}`);
-                      if (r.note) toast.info(r.note);
-                    } else {
-                      toast.error(r.error || 'Failed to set locale');
-                    }
+                    try {
+                      const r = await mobile.setLocale(selectedPlatform, selectedDevice, selectedLocale);
+                      if (r.success) {
+                        toast.success(`Locale set to ${selectedLocale}`);
+                        if (r.note) toast.info(r.note);
+                      } else {
+                        toast.error(r.error || 'Failed to set locale');
+                      }
+                    } catch (e: any) { toast.error(e.message || 'Failed to set locale'); }
                   }}>
                     Apply
                   </Button>
@@ -760,9 +771,10 @@ export default function MobileAdvancedTools() {
                     { label: 'XL', value: 1.5 },
                   ].map(scale => (
                     <Button key={scale.value} variant="outline" className="flex-1 h-10 text-xs" onClick={async () => {
-                      const deviceId = selectedDevice?.id || selectedDevice;
-                      const r = await mobile.setFontScale(selectedPlatform, deviceId, scale.value);
-                      r.success ? toast.success(`Font scale set to ${scale.value}x`) : toast.error(r.error || 'Failed');
+                      try {
+                        const r = await mobile.setFontScale(selectedPlatform, selectedDevice, scale.value);
+                        r.success ? toast.success(`Font scale set to ${scale.value}x`) : toast.error(r.error || 'Failed');
+                      } catch (e: any) { toast.error(e.message || 'Failed to set font scale'); }
                     }}>
                       {scale.label}
                     </Button>

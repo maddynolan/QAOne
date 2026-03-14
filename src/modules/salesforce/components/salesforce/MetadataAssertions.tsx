@@ -41,12 +41,12 @@ import { cn } from '@/lib/utils';
 // Types
 interface MetadataAssertion {
   id: string;
-  type: 'field_exists' | 'field_type' | 'field_required' | 'picklist_values' | 
+  type: 'field_exists' | 'field_type' | 'field_required' | 'picklist_values' |
         'validation_rule' | 'flow_active' | 'record_type_exists' | 'permission' |
         'field_visible' | 'owd_setting';
   object?: string;
   field?: string;
-  expectedValue?: any;
+  expectedValue?: string | boolean | string[] | { profile: string; access: string };
   description: string;
 }
 
@@ -138,9 +138,9 @@ export function MetadataAssertions({
   
   // Metadata lists
   const [allObjects, setAllObjects] = useState<{ name: string; label: string }[]>([]);
-  const [validationRules, setValidationRules] = useState<any[]>([]);
-  const [flows, setFlows] = useState<any[]>([]);
-  const [profiles, setProfiles] = useState<any[]>([]);
+  const [validationRules, setValidationRules] = useState<Record<string, unknown>[]>([]);
+  const [flows, setFlows] = useState<Record<string, unknown>[]>([]);
+  const [profiles, setProfiles] = useState<Record<string, unknown>[]>([]);
   
   // Load objects
   useEffect(() => {
@@ -158,35 +158,44 @@ export function MetadataAssertions({
     try {
       const result = await salesforceApi.describeGlobal();
       setAllObjects(result.sobjects
-        .filter((o: any) => o.queryable)
-        .map((o: any) => ({ name: o.name, label: o.label }))
-        .sort((a: any, b: any) => a.label.localeCompare(b.label))
+        .filter((o: { queryable: boolean }) => o.queryable)
+        .map((o: { name: string; label: string }) => ({ name: o.name, label: o.label }))
+        .sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label))
       );
     } catch (e) {
       console.error('Failed to load objects:', e);
+      toast.error('Failed to load Salesforce objects');
     }
   };
   
+  // Escape single quotes in SOQL values to prevent injection
+  const escapeSoql = (value: string): string => {
+    return value.replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+  };
+
   const loadObjectDescribe = async (objectName: string) => {
     setLoading(true);
     try {
       const describe = await salesforceApi.describeSObject(objectName);
       setObjectDescribe(describe);
-      
+
       // Also load validation rules for this object
       try {
-        const rules = await salesforceApi.query(`
-          SELECT Id, ValidationName, Active, Description, ErrorMessage 
-          FROM ValidationRule 
-          WHERE EntityDefinition.QualifiedApiName = '${objectName}'
-        `);
+        const sanitizedName = escapeSoql(objectName);
+        const rules = await salesforceApi.query(
+          `SELECT Id, ValidationName, Active, Description, ErrorMessage ` +
+          `FROM ValidationRule ` +
+          `WHERE EntityDefinition.QualifiedApiName = '${sanitizedName}'`
+        );
         setValidationRules(rules.records || []);
-      } catch (e) {
-        // Validation rules query might fail without certain permissions
+      } catch (rulesError) {
+        // Validation rules query may fail without Tooling API permissions - expected in some orgs
+        console.warn('Could not load validation rules (may require Tooling API permissions):', rulesError);
         setValidationRules([]);
       }
     } catch (e) {
       console.error('Failed to load object:', e);
+      toast.error('Failed to load object metadata');
     } finally {
       setLoading(false);
     }
@@ -605,8 +614,8 @@ export function MetadataAssertions({
                     </SelectTrigger>
                     <SelectContent className="bg-secondary border-border">
                       {objectDescribe.recordTypeInfos
-                        .filter((rt: any) => rt.developerName !== 'Master')
-                        .map((rt: any) => (
+                        .filter((rt: { developerName: string }) => rt.developerName !== 'Master')
+                        .map((rt: { recordTypeId: string; developerName: string; name: string }) => (
                           <SelectItem key={rt.recordTypeId} value={rt.developerName} className="text-xs">
                             {rt.name}
                           </SelectItem>

@@ -257,13 +257,14 @@ export default function ThresholdManager({
                     <Input
                       type="number"
                       min={0}
+                      max={1000000}
                       step={threshold.metric === 'error_rate' ? 0.1 : 1}
                       value={threshold.value}
                       onChange={(e) =>
                         updateThreshold(
                           threshold.id,
                           'value',
-                          parseFloat(e.target.value) || 0
+                          Math.min(1000000, parseFloat(e.target.value) || 0)
                         )
                       }
                       className="h-8 w-[100px] text-xs"

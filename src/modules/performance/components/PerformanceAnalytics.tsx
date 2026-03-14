@@ -287,7 +287,8 @@ export default function PerformanceAnalytics({ testHistory, customConfig }: Perf
     a.href = url;
     a.download = filename;
     a.click();
-    URL.revokeObjectURL(url);
+    // Delay revocation to ensure download completes before blob is freed
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
     toast.success(`Downloaded ${filename}`);
   };
 
@@ -316,7 +317,8 @@ export default function PerformanceAnalytics({ testHistory, customConfig }: Perf
     a.href = url;
     a.download = `perf-report-${entry.testId}.json`;
     a.click();
-    URL.revokeObjectURL(url);
+    // Delay revocation to ensure download completes before blob is freed
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
     toast.success('JSON report downloaded');
   };
 

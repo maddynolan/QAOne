@@ -109,18 +109,30 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
   // Console: last request/response for inspection (zero-code)
   const [lastRequest, setLastRequest] = useState<{ method: string; url: string; headers: Record<string, string>; body: string } | null>(null);
   // Cookie jar: domain -> list of { name, value } (zero-code; from Set-Cookie, sent as Cookie header)
+  // Capped at 50 hosts and 50 cookies per host to prevent unbounded localStorage growth.
+  const MAX_COOKIE_HOSTS = 50;
+  const MAX_COOKIES_PER_HOST = 50;
   const [cookieJar, setCookieJar] = useState<Record<string, Array<{ name: string; value: string }>>>(() => {
     try {
       const raw = localStorage.getItem("api_cookie_jar");
       return raw ? JSON.parse(raw) : {};
-    } catch {
+    } catch (err) {
+      console.warn('[RequestBuilder] Failed to load cookie jar:', err);
       return {};
     }
   });
   useEffect(() => {
     try {
-      localStorage.setItem("api_cookie_jar", JSON.stringify(cookieJar));
-    } catch {}
+      // Enforce size cap before persisting
+      const capped: typeof cookieJar = {};
+      const hosts = Object.keys(cookieJar).slice(0, MAX_COOKIE_HOSTS);
+      for (const host of hosts) {
+        capped[host] = cookieJar[host].slice(0, MAX_COOKIES_PER_HOST);
+      }
+      localStorage.setItem("api_cookie_jar", JSON.stringify(capped));
+    } catch (err) {
+      console.warn('[RequestBuilder] Failed to save cookie jar:', err);
+    }
   }, [cookieJar]);
 
   // --- Merge pending DB assertions from Database Workbench ---
@@ -208,7 +220,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
       // Persist to localStorage for app restart survival
       try {
         localStorage.setItem('api_builder_active_state', JSON.stringify(dirtyState));
-      } catch { /* ignore quota errors */ }
+      } catch (err) { console.warn('[RequestBuilder] Failed to persist builder state:', err); }
     }
   }, [editingId, request.method, request.url, request.headers, request.params, request.body, request.bodyType, request.authType, request.authToken, assertions]);
 
@@ -242,7 +254,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
             (window as any).__apiTestingStore.setState({ collections: { ...store.collections } });
           }
         }
-      } catch { /* best effort */ }
+      } catch (err) { console.warn('[RequestBuilder] beforeunload save failed:', err); }
     }
   };
   useEffect(() => {
@@ -294,7 +306,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
       const next = [entry, ...prev.filter((h) => !(h.method === method && h.url === url))].slice(0, HISTORY_MAX);
       try {
         localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
-      } catch {}
+      } catch (err) { console.warn('[RequestBuilder] Failed to save request history:', err); }
       return next;
     });
   }, []);

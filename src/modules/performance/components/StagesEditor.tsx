@@ -205,12 +205,13 @@ export default function StagesEditor({
                   <Input
                     type="number"
                     min={1}
+                    max={3600}
                     value={stage.duration}
                     onChange={(e) =>
                       updateStage(
                         index,
                         'duration',
-                        parseInt(e.target.value) || 1
+                        Math.min(3600, parseInt(e.target.value) || 1)
                       )
                     }
                     className="h-8 text-sm"
@@ -218,12 +219,13 @@ export default function StagesEditor({
                   <Input
                     type="number"
                     min={0}
+                    max={10000}
                     value={stage.target}
                     onChange={(e) =>
                       updateStage(
                         index,
                         'target',
-                        parseInt(e.target.value) || 0
+                        Math.min(10000, parseInt(e.target.value) || 0)
                       )
                     }
                     className="h-8 text-sm"
