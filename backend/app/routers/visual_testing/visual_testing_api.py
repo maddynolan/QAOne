@@ -71,6 +71,17 @@ class IgnoreRegionModel(BaseModel):
 VALID_COMPARISON_MODES = {"pixel_perfect", "anti_aliased", "perceptual", "structural", "layout", "ai_semantic", "dynamic"}
 
 
+class StepVisualAssertRequest(BaseModel):
+    """Request to compare a step screenshot against its baseline, or save as new baseline."""
+    test_name: str = Field(..., max_length=200, description="Test name for baseline grouping")
+    step_index: int = Field(0, ge=0, le=100000, description="Step index within the test")
+    screenshot: str = Field(..., description="Step screenshot as base64-encoded PNG")
+    mode: str = Field("anti_aliased", description="Comparison mode")
+    threshold: float = Field(0.1, ge=0.0, le=1.0, description="Allowed difference (0.0-1.0)")
+    auto_baseline: bool = Field(True, description="Automatically save as baseline on first run")
+    ignore_regions: List[IgnoreRegionModel] = Field(default_factory=list)
+
+
 class CompareRequest(BaseModel):
     """Request to compare two images"""
     baseline: str = Field(..., description="Baseline image (path or base64)")
@@ -110,6 +121,109 @@ class BatchCompareRequest(BaseModel):
 
 
 # ==================== API Endpoints ====================
+
+@router.post("/step-assert")
+async def step_visual_assert(request: StepVisualAssertRequest) -> Dict[str, Any]:
+    """
+    Compare a step screenshot against its baseline, or save as new baseline.
+
+    Used by the test execution pipeline to add per-step visual assertions.
+    On the first run (no baseline exists), the screenshot is saved as the baseline
+    if auto_baseline is True. On subsequent runs, the screenshot is compared
+    against the stored baseline using the specified comparison mode and threshold.
+    """
+    # Validate test_name for path traversal
+    _validate_test_name(request.test_name)
+
+    # Validate base64 image size
+    _validate_base64_image_size(request.screenshot, "screenshot")
+
+    # Build the composite baseline name: {test_name}_step_{step_index}
+    baseline_name = f"{request.test_name}_step_{request.step_index}"
+
+    # Validate the composite name as well
+    _validate_test_name(baseline_name)
+
+    try:
+        from app.services.automation.visual_testing_engine import (
+            VisualTestingEngine,
+            ComparisonOptions,
+            ComparisonMode,
+            IgnoreRegion
+        )
+
+        engine = VisualTestingEngine()
+
+        # Check if baseline exists
+        baseline_path = engine.get_baseline(baseline_name)
+
+        if not baseline_path:
+            if request.auto_baseline:
+                # First run — save as new baseline
+                screenshot_bytes = base64.b64decode(request.screenshot)
+                engine.save_baseline(screenshot_bytes, baseline_name, {
+                    "source_test": request.test_name,
+                    "step_index": request.step_index,
+                    "auto_created": True
+                })
+                return {
+                    "success": True,
+                    "passed": True,
+                    "baseline_saved": True,
+                    "message": f"Baseline saved for step {request.step_index} (first run)"
+                }
+            else:
+                return {
+                    "success": True,
+                    "passed": True,
+                    "baseline_saved": False,
+                    "message": "No baseline exists and auto_baseline is disabled"
+                }
+
+        # Baseline exists — compare against it
+        screenshot_bytes = base64.b64decode(request.screenshot)
+
+        # Parse comparison mode
+        try:
+            mode = ComparisonMode(request.mode)
+        except ValueError:
+            mode = ComparisonMode.ANTI_ALIASED
+
+        # Build ignore regions
+        regions = [
+            IgnoreRegion(
+                x=r.x, y=r.y, width=r.width, height=r.height,
+                name=r.name, reason=r.reason
+            )
+            for r in request.ignore_regions
+        ]
+
+        options = ComparisonOptions(
+            mode=mode,
+            threshold=request.threshold,
+            ignore_regions=regions,
+            generate_diff=True
+        )
+
+        result = engine.compare(baseline_path, screenshot_bytes, options, baseline_name)
+
+        return {
+            "success": True,
+            "passed": result.passed,
+            "diff_percentage": result.diff_percentage,
+            "diff_image_base64": result.diff_image_base64,
+            "baseline_saved": False,
+            "mode": request.mode,
+            "threshold": request.threshold,
+            "ssim_score": result.ssim_score
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in step visual assert: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error during step visual assertion")
+
 
 @router.post("/compare")
 async def compare_images(request: CompareRequest) -> Dict[str, Any]:

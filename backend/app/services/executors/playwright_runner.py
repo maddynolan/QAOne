@@ -343,6 +343,50 @@ except Exception as e:
                     await self._run_sync(lambda: self.page.evaluate('window.scrollBy(0, 500)'))
                 else:
                     await self._run_sync(lambda: self.page.evaluate('window.scrollBy(0, -500)'))
+            elif action in ('visual_assert', 'visual_assertion', 'screenshot_compare'):
+                # Take screenshot and compare against baseline
+                screenshot_bytes = await self._run_sync(lambda: self.page.screenshot(full_page=data.get('full_page', False)))
+                screenshot_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
+
+                from app.services.automation.visual_testing_engine import (
+                    VisualTestingEngine, ComparisonOptions, ComparisonMode
+                )
+                engine = VisualTestingEngine()
+
+                test_name = data.get('baseline_name', 'test')
+                step_idx = data.get('step_index', 0)
+                baseline_name = f"{test_name}_step_{step_idx}"
+                mode_str = data.get('mode', 'anti_aliased')
+                threshold = float(data.get('threshold', 0.1))
+
+                baseline_path = engine.get_baseline(baseline_name)
+
+                if not baseline_path:
+                    # First run — save baseline
+                    engine.save_baseline(screenshot_bytes, baseline_name, {
+                        "source_test": test_name,
+                        "step_index": step_idx,
+                        "auto_created": True
+                    })
+                    logger.info(f"Visual baseline saved: {baseline_name}")
+                else:
+                    # Compare against baseline
+                    try:
+                        cmp_mode = ComparisonMode(mode_str)
+                    except ValueError:
+                        cmp_mode = ComparisonMode.ANTI_ALIASED
+                    options = ComparisonOptions(
+                        mode=cmp_mode,
+                        threshold=threshold,
+                        generate_diff=True
+                    )
+                    result = engine.compare(baseline_path, screenshot_bytes, options, baseline_name)
+                    if not result.passed:
+                        raise Exception(
+                            f"Visual assertion failed: {result.diff_percentage:.2%} diff "
+                            f"(threshold: {threshold:.2%})"
+                        )
+                    logger.info(f"Visual assertion passed: {baseline_name} ({result.diff_percentage:.2%} diff)")
         else:
             # Linux/Mac: Use async operations
             if 'navigate' in action:
@@ -405,6 +449,50 @@ except Exception as e:
                     await self.page.evaluate('window.scrollBy(0, 500)')
                 else:
                     await self.page.evaluate('window.scrollBy(0, -500)')
+            elif action in ('visual_assert', 'visual_assertion', 'screenshot_compare'):
+                # Take screenshot and compare against baseline
+                screenshot_bytes = await self.page.screenshot(full_page=data.get('full_page', False))
+                screenshot_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
+
+                from app.services.automation.visual_testing_engine import (
+                    VisualTestingEngine, ComparisonOptions, ComparisonMode
+                )
+                engine = VisualTestingEngine()
+
+                test_name = data.get('baseline_name', 'test')
+                step_idx = data.get('step_index', 0)
+                baseline_name = f"{test_name}_step_{step_idx}"
+                mode_str = data.get('mode', 'anti_aliased')
+                threshold = float(data.get('threshold', 0.1))
+
+                baseline_path = engine.get_baseline(baseline_name)
+
+                if not baseline_path:
+                    # First run — save baseline
+                    engine.save_baseline(screenshot_bytes, baseline_name, {
+                        "source_test": test_name,
+                        "step_index": step_idx,
+                        "auto_created": True
+                    })
+                    logger.info(f"Visual baseline saved: {baseline_name}")
+                else:
+                    # Compare against baseline
+                    try:
+                        cmp_mode = ComparisonMode(mode_str)
+                    except ValueError:
+                        cmp_mode = ComparisonMode.ANTI_ALIASED
+                    options = ComparisonOptions(
+                        mode=cmp_mode,
+                        threshold=threshold,
+                        generate_diff=True
+                    )
+                    result = engine.compare(baseline_path, screenshot_bytes, options, baseline_name)
+                    if not result.passed:
+                        raise Exception(
+                            f"Visual assertion failed: {result.diff_percentage:.2%} diff "
+                            f"(threshold: {threshold:.2%})"
+                        )
+                    logger.info(f"Visual assertion passed: {baseline_name} ({result.diff_percentage:.2%} diff)")
 
     async def _verify_expected(self, expected: str):
         """Verify expected result"""
