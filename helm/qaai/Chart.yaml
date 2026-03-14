@@ -3,7 +3,7 @@ name: qaai
 description: QA-AI Platform Helm Chart
 type: application
 version: 1.0.0
-appVersion: "1.0.0"
+appVersion: "3.21.0"
 keywords:
   - qa
   - testing
@@ -21,6 +21,3 @@ dependencies:
   - name: redis
     version: 17.15.0
     repository: https://charts.bitnami.com/bitnami
-
-
-

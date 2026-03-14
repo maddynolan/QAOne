@@ -54,3 +54,33 @@ jobs:
           build-args: VITE_API_BASE_URL=${{ vars.PRODUCTION_API_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Build and push worker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.worker
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/worker:latest
+            ghcr.io/${{ github.repository }}/worker:${{ github.event.release.tag_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Post-deploy health check
+        if: vars.PRODUCTION_API_URL != ''
+        run: |
+          echo "Waiting 30s for deployment to propagate..."
+          sleep 30
+          echo "Checking health endpoint..."
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ vars.PRODUCTION_API_URL }}/health" || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (HTTP 200)"
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $STATUS — retrying in 10s..."
+            sleep 10
+          done
+          echo "WARNING: Health check did not return 200 after 5 attempts"
+          exit 1

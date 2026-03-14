@@ -40,8 +40,8 @@ services:
       AIR_GAPPED_MODE: "true"
       OLLAMA_URL: http://ollama:11434
       
-      # JWT
-      JWT_SECRET: ${JWT_SECRET:-change-in-production}
+      # JWT — REQUIRED: generate a secure random secret before deploying
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
       JWT_ALGORITHM: HS256
       
       # No external API keys (air-gapped)
@@ -75,7 +75,7 @@ services:
       dockerfile: Dockerfile.frontend
     container_name: qa-ai-frontend
     environment:
-      VITE_API_BASE_URL: http://localhost:8000
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
     ports:
       - "8080:80"
     depends_on:

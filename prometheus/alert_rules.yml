@@ -3,8 +3,11 @@ groups:
     rules:
       # ── Application Health ──
 
+      # NOTE: FastAPI instrumentators (e.g., prometheus-fastapi-instrumentator) typically
+      # emit the label "status_code" (not "status"). Verify your backend's metric labels
+      # match these PromQL expressions.
       - alert: HighErrorRate
-        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        expr: rate(http_requests_total{status_code=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
         for: 5m
         labels:
           severity: critical
@@ -42,6 +45,8 @@ groups:
           description: "PostgreSQL is unreachable. Application will fall back to in-memory storage."
 
       # ── AI/LLM Budget ──
+      # NOTE: The "llm_tokens_total" metric requires custom instrumentation in the backend.
+      # See backend/app/services/core/ai_settings_service.py for usage tracking.
 
       - alert: AIBudgetExceeded
         expr: rate(llm_tokens_total[1h]) * 0.00001 > 100
@@ -72,6 +77,8 @@ groups:
           summary: "Low disk space ({{ $value | humanizePercentage }} free)"
           description: "Less than 10% disk space remaining on root filesystem."
 
+      # NOTE: The "flowstral_active_sessions" metric requires custom instrumentation.
+      # Expose via Prometheus client in the backend (e.g., prometheus_client Gauge).
       - alert: HighSessionCount
         expr: flowstral_active_sessions > 1000
         for: 5m
@@ -82,6 +89,9 @@ groups:
           description: "More than 1000 active sessions. Consider scaling or investigating for session leaks."
 
       # ── Test Execution ──
+      # NOTE: The "flowstral_test_queue_size" and "flowstral_test_results_total" metrics
+      # require custom instrumentation. These should be exposed as Prometheus counters/gauges
+      # in the test execution service.
 
       - alert: TestQueueBacklog
         expr: flowstral_test_queue_size > 100

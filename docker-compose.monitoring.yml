@@ -2,8 +2,8 @@ version: '3.8'
 
 services:
   prometheus:
-    image: prom/prometheus:latest
-    container_name: qa-ai-prometheus
+    image: prom/prometheus:v2.51.0
+    container_name: qaai-prometheus
     ports:
       - "9090:9090"
     volumes:
@@ -13,11 +13,11 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
     networks:
-      - qa-ai-network
+      - qaai-network
 
   grafana:
-    image: grafana/grafana:latest
-    container_name: qa-ai-grafana
+    image: grafana/grafana:10.4.0
+    container_name: qaai-grafana
     ports:
       - "3001:3000"
     environment:
@@ -29,7 +29,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - qa-ai-network
+      - qaai-network
     depends_on:
       - prometheus
 
@@ -38,6 +38,5 @@ volumes:
   grafana_data:
 
 networks:
-  qa-ai-network:
+  qaai-network:
     external: true
-

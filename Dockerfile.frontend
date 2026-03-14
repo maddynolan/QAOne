@@ -12,7 +12,7 @@ ARG VITE_API_BASE_URL=http://localhost:8000
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build
 
-FROM nginx:alpine
+FROM nginx:1.27-alpine
 
 # Copy built app
 COPY --from=builder /app/dist /usr/share/nginx/html
@@ -29,4 +29,8 @@ RUN addgroup -g 1001 -S appuser && \
     touch /var/run/nginx.pid && chown appuser:appuser /var/run/nginx.pid
 
 EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1
+
 CMD ["nginx", "-g", "daemon off;"]
