@@ -4,7 +4,7 @@ AI Testing API Router
 Provides streaming endpoint for AI-driven testing.
 Takes plain English instructions and returns real-time test execution events.
 
-@version 1.0.0
+@version 2.0.0
 """
 
 import json
@@ -25,6 +25,13 @@ MAX_SSE_EVENTS = int(os.getenv("AI_TESTING_MAX_SSE_EVENTS", "500"))
 # Configurable LLM model (no longer hardcoded)
 AI_TESTING_MODEL = os.getenv("AI_TESTING_MODEL", "gpt-4o-mini")
 
+# Check Playwright availability at module level
+try:
+    from playwright.sync_api import sync_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+
 router = APIRouter(prefix="/api/ai-testing", tags=["AI Testing"])
 
 
@@ -32,12 +39,14 @@ class StartTestingRequest(BaseModel):
     """Request to start AI testing"""
     instruction: str
     project_id: Optional[str] = None
-    
+    headless: Optional[bool] = True
+
     class Config:
         json_schema_extra = {
             "example": {
                 "instruction": "Test login on https://example.com with valid and invalid credentials",
-                "project_id": "proj_123"
+                "project_id": "proj_123",
+                "headless": True
             }
         }
 
@@ -46,13 +55,15 @@ class TestingStatusResponse(BaseModel):
     """Response for testing status check"""
     status: str
     message: str
+    playwright: bool = False
+    ai_configured: bool = False
 
 
 @router.post("/start")
 async def start_testing(request: StartTestingRequest):
     """
     Start AI-driven testing with plain English instruction.
-    
+
     Returns a streaming response with real-time test events:
     - phase: Current testing phase (understanding, preparing, exploring, planning, executing, complete)
     - step: Current step being performed
@@ -60,13 +71,13 @@ async def start_testing(request: StartTestingRequest):
     - test_complete: Individual test result
     - complete: Final results and summary
     - error: Error message if something fails
-    
+
     Event format (Server-Sent Events):
     ```
     data: {"type": "phase", "phase": "understanding", "message": "Analyzing your request..."}
-    
+
     data: {"type": "step", "message": "Found login form with email and password fields"}
-    
+
     data: {"type": "test_complete", "result": {...}}
     ```
     """
@@ -75,10 +86,12 @@ async def start_testing(request: StartTestingRequest):
 
     if len(request.instruction) > 5000:
         raise HTTPException(status_code=400, detail="Instruction cannot exceed 5000 characters")
-    
+
+    headless = request.headless if request.headless is not None else True
+
     async def event_stream():
         """Generate SSE events from orchestrator with event cap"""
-        orchestrator = create_orchestrator()
+        orchestrator = create_orchestrator(headless=headless)
         event_count = 0
 
         try:
@@ -107,10 +120,25 @@ async def start_testing(request: StartTestingRequest):
 
 @router.get("/status")
 async def get_status() -> TestingStatusResponse:
-    """Check if AI testing service is available"""
+    """Check if AI testing service is available with real capability checks"""
+    ai_key = os.getenv("OPENAI_API_KEY", "")
+    ai_configured = bool(ai_key and ai_key.startswith("sk-") and len(ai_key) > 20)
+
+    if PLAYWRIGHT_AVAILABLE:
+        status = "ready"
+        message = "AI Testing service is ready. Send a POST request to /start with your testing instruction."
+    else:
+        status = "degraded"
+        message = "Playwright is not installed. Browser automation is unavailable. Install with: pip install playwright && playwright install chromium"
+
+    if not ai_configured:
+        message += " Note: No OpenAI API key configured — AI parsing will fall back to pattern matching."
+
     return TestingStatusResponse(
-        status="ready",
-        message="AI Testing service is ready. Send a POST request to /start with your testing instruction."
+        status=status,
+        message=message,
+        playwright=PLAYWRIGHT_AVAILABLE,
+        ai_configured=ai_configured,
     )
 
 
@@ -128,21 +156,21 @@ async def explain_failure(request: ExplainFailureRequest):
     Ask AI to explain why a test failed and suggest fixes.
     """
     import os
-    
+
     failed_step = request.failed_step or {}
     # Truncate user inputs before passing to LLM to mitigate prompt injection
     test_name = request.test_name[:200]
     action = failed_step.get("action", "unknown")[:200]
     target = failed_step.get("target", "unknown")[:500]
     error = failed_step.get("error", "Element not found")[:500]
-    
+
     # Try to use AI for analysis
     api_key = os.getenv("OPENAI_API_KEY")
     if api_key and api_key.startswith("sk-"):
         try:
             import openai
             client = openai.OpenAI(api_key=api_key)
-            
+
             # SECURITY: Wrap user-provided content in XML tags to isolate from system instructions
             # This prevents prompt injection where test names/selectors contain LLM instructions
             all_steps_str = json.dumps(request.all_steps)[:2000] if request.all_steps else "[]"
@@ -174,9 +202,9 @@ Be specific to the actual selectors and actions shown."""
                 ],
                 max_tokens=1000
             )
-            
+
             analysis = response.choices[0].message.content
-            
+
             return {
                 "explanation": f"The step '{action} {target}' failed with error: {error}",
                 "possible_causes": [
@@ -186,21 +214,21 @@ Be specific to the actual selectors and actions shown."""
                     "Page redirected or element is in a different frame"
                 ],
                 "suggested_fixes": [
-                    f"Try alternative selector: input[name='username'], #username, [data-aura-class*='input']",
+                    "Try alternative selector strategies (getByLabel, getByRole, getByText)",
                     "Add explicit wait: wait for element to be visible before interacting",
-                    "Check if Salesforce is blocking: verify IP whitelist in Setup",
-                    "Use Salesforce API authentication instead of UI login"
+                    "Check if the application is blocking automated access",
+                    "Use Vision AI healing for dynamic or complex page structures"
                 ],
                 "ai_analysis": analysis
             }
         except Exception as e:
             logger.warning(f"AI analysis failed: {e}")
-    
+
     # Fallback analysis based on error type
     causes = []
     fixes = []
-    
-    if "not found" in error.lower():
+
+    if "not found" in error.lower() or "no match" in error.lower():
         causes = [
             "The CSS selector doesn't match any element on the page",
             "The element hasn't loaded yet (page still loading)",
@@ -208,7 +236,7 @@ Be specific to the actual selectors and actions shown."""
             "The page structure changed since test was created"
         ]
         fixes = [
-            f"Try more generic selector: [type='email'], [type='text'], input[name*='user']",
+            "Try more generic selector: [type='email'], [type='text'], input[name*='user']",
             "Add wait: await page.waitForSelector('{target}', {{timeout: 10000}})",
             "Check for iframes: await page.frameLocator('iframe').locator('{target}')",
             "Use data-testid if available: [data-testid='login-email']"
@@ -235,8 +263,8 @@ Be specific to the actual selectors and actions shown."""
         ]
         fixes = [
             "Use a stealth browser: playwright-extra with stealth plugin",
-            "Whitelist IP in Salesforce Setup > Network Access",
-            "Use Salesforce Connected App with API authentication",
+            "Whitelist IP in your application's security settings",
+            "Use API authentication instead of UI automation",
             "Add delays between actions to appear more human-like"
         ]
     else:
@@ -252,7 +280,7 @@ Be specific to the actual selectors and actions shown."""
             "Check if element is in an iframe",
             "Try using text-based selectors"
         ]
-    
+
     return {
         "explanation": f"The step '{action} {target}' failed with error: {error}",
         "possible_causes": causes,
@@ -264,12 +292,14 @@ class RerunWithFixRequest(BaseModel):
     """Request to re-run a failed test with AI fixes"""
     original_instruction: str  # Max 5000 chars enforced below
     failed_test: dict
+    headless: Optional[bool] = True
 
     class Config:
         json_schema_extra = {
             "example": {
                 "original_instruction": "Test login on https://example.com",
-                "failed_test": {"steps": []}
+                "failed_test": {"steps": []},
+                "headless": True
             }
         }
 
@@ -289,21 +319,22 @@ async def rerun_with_fix(request: RerunWithFixRequest):
         raise HTTPException(status_code=400, detail="Instruction cannot exceed 5000 characters")
 
     import os
+    headless = request.headless if request.headless is not None else True
 
     async def event_stream():
         failed_test = request.failed_test
         failed_steps = [s for s in failed_test.get('steps', []) if not s.get('success', True)]
-        
+
         if not failed_steps:
             yield f"data: {json.dumps({'type': 'error', 'error': 'No failed steps found'})}\n\n"
             return
-        
+
         failed_step = failed_steps[0]
-        
+
         # Step 1: Generate fix using AI
         api_key = os.getenv("OPENAI_API_KEY")
         improved_selectors = []
-        
+
         if api_key and api_key.startswith("sk-"):
             try:
                 import openai
@@ -327,10 +358,12 @@ Error: {failed_error}
 
 Generate 5 alternative CSS/XPath selectors that might work better.
 Consider:
-- Salesforce Lightning components use data-aura-class, data-component-id
-- Login forms often have: #username, #password, input[type="email"], input[type="password"]
-- Try aria-label, placeholder, name attributes
+- Enterprise apps use data attributes (data-testid, data-component-id, data-aura-class)
+- Form fields: input[type="email"], input[type="password"], textarea
+- Buttons: button[type="submit"], input[type="submit"]
+- Try aria-label, placeholder, name, title attributes
 - Try text-based: text=, :has-text()
+- Try role-based: role=button, role=textbox
 
 Return ONLY a JSON array of alternative selectors, nothing else:
 ["selector1", "selector2", ...]"""
@@ -343,39 +376,39 @@ Return ONLY a JSON array of alternative selectors, nothing else:
                     ],
                     max_tokens=500
                 )
-                
+
                 import re
                 content = response.choices[0].message.content
                 json_match = re.search(r'\[.*\]', content, re.DOTALL)
                 if json_match:
                     improved_selectors = json.loads(json_match.group(0))
-                    
+
             except Exception as e:
                 logger.warning(f"AI selector generation failed: {e}")
-        
+
         # Fallback selectors based on common patterns
         if not improved_selectors:
             action = failed_step.get('action', '').lower()
             target = failed_step.get('target', '')
-            
+
             if 'username' in target.lower() or 'email' in target.lower() or 'user' in target.lower():
                 improved_selectors = [
-                    '#username', '#email', '#user', 
+                    '#username', '#email', '#user',
                     'input[type="email"]', 'input[type="text"][name*="user"]',
                     'input[placeholder*="Username"]', 'input[placeholder*="Email"]',
-                    '[data-aura-class*="input"]', 'input[aria-label*="Username"]'
+                    'input[aria-label*="Username"]', 'input[aria-label*="Email"]'
                 ]
             elif 'password' in target.lower():
                 improved_selectors = [
                     '#password', 'input[type="password"]',
                     'input[placeholder*="Password"]', 'input[name="pw"]',
-                    '[data-aura-class*="input"][type="password"]'
+                    'input[aria-label*="Password"]'
                 ]
             elif 'login' in target.lower() or 'submit' in target.lower() or 'button' in target.lower():
                 improved_selectors = [
                     '#Login', 'button[type="submit"]', 'input[type="submit"]',
                     'button:has-text("Log In")', 'button:has-text("Sign In")',
-                    '[data-aura-class*="button"]', '.slds-button'
+                    'button:has-text("Submit")'
                 ]
             else:
                 improved_selectors = [
@@ -383,11 +416,11 @@ Return ONLY a JSON array of alternative selectors, nothing else:
                     f'[data-testid*="{target}"]',
                     f'[aria-label*="{target}"]'
                 ]
-        
+
         yield f"data: {json.dumps({'type': 'fix_applied', 'message': f'Generated {len(improved_selectors)} alternative selectors'})}\n\n"
 
         # Step 2: Re-run with improved selectors
-        orchestrator = create_orchestrator()
+        orchestrator = create_orchestrator(headless=headless)
 
         # Modify the instruction to include fix hints
         enhanced_instruction = f"""{request.original_instruction}
@@ -407,7 +440,7 @@ IMPORTANT: For element "{failed_step.get('target', '')[:200]}", try these select
         except Exception as e:
             logger.exception(f"Re-run failed: {e}")
             yield f"data: {json.dumps({'type': 'error', 'error': 'An internal error occurred during test execution'})}\n\n"
-    
+
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",

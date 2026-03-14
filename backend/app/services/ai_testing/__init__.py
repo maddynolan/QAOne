@@ -23,7 +23,7 @@ from .ai_testing_orchestrator import (
     create_orchestrator as create_legacy_orchestrator,
 )
 
-# Default: Use v2.0
+# Default: Use v4.0 (accepts headless parameter)
 create_orchestrator = create_agentic_orchestrator
 
 __all__ = [
