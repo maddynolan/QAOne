@@ -33,3 +33,5 @@ jsonschema>=4.19.0  # JSON Schema validation for assertions
 lxml>=5.1.0  # XML/XPath support for SOAP and XML assertions
 Pillow>=10.0.0  # Image processing for visual testing
 scikit-image>=0.22.0  # Advanced image comparison (SSIM, etc.)
+pytest>=7.4.0  # Test framework
+pytest-asyncio>=0.23.0  # Async test support

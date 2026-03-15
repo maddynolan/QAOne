@@ -27,7 +27,7 @@ AI_TESTING_MODEL = os.getenv("AI_TESTING_MODEL", "gpt-4o-mini")
 
 # Check Playwright availability at module level
 try:
-    from playwright.sync_api import sync_playwright
+    from playwright.async_api import async_playwright
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
@@ -38,6 +38,7 @@ router = APIRouter(prefix="/api/ai-testing", tags=["AI Testing"])
 class StartTestingRequest(BaseModel):
     """Request to start AI testing"""
     instruction: str
+    format: Optional[str] = "natural"  # "natural", "gherkin", or "steps"
     project_id: Optional[str] = None
     headless: Optional[bool] = True
 
@@ -45,6 +46,7 @@ class StartTestingRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "instruction": "Test login on https://example.com with valid and invalid credentials",
+                "format": "natural",
                 "project_id": "proj_123",
                 "headless": True
             }
@@ -89,13 +91,57 @@ async def start_testing(request: StartTestingRequest):
 
     headless = request.headless if request.headless is not None else True
 
+    # Preprocess: Convert Gherkin or step-by-step format to natural language
+    instruction = request.instruction
+    fmt = (request.format or "natural").lower()
+
+    if fmt == "gherkin":
+        # Convert Gherkin Given/When/Then into natural language instructions
+        import re as _re
+        lines = instruction.strip().splitlines()
+        steps = []
+        url = ""
+        for line in lines:
+            line = line.strip()
+            # Skip Feature/Scenario/Background headers
+            if _re.match(r'^(Feature|Scenario|Background|@|#)', line, _re.IGNORECASE):
+                continue
+            # Extract the action from Given/When/Then/And/But
+            m = _re.match(r'^(Given|When|Then|And|But)\s+(.+)', line, _re.IGNORECASE)
+            if m:
+                step_text = m.group(2).strip()
+                # Extract URL if present
+                url_m = _re.search(r'https?://[^\s"\']+', step_text)
+                if url_m and not url:
+                    url = url_m.group(0)
+                steps.append(step_text)
+        if steps:
+            instruction = ". ".join(steps)
+            if url and url not in instruction:
+                instruction = f"On {url}: {instruction}"
+
+    elif fmt == "steps":
+        # Convert numbered steps to natural language
+        import re as _re
+        lines = instruction.strip().splitlines()
+        steps = []
+        for line in lines:
+            line = line.strip()
+            # Remove leading numbers/bullets
+            cleaned = _re.sub(r'^[\d]+[.):\-]\s*', '', line).strip()
+            cleaned = _re.sub(r'^[-*]\s*', '', cleaned).strip()
+            if cleaned:
+                steps.append(cleaned)
+        if steps:
+            instruction = ". ".join(steps)
+
     async def event_stream():
         """Generate SSE events from orchestrator with event cap"""
         orchestrator = create_orchestrator(headless=headless)
         event_count = 0
 
         try:
-            async for event in orchestrator.run_testing(request.instruction):
+            async for event in orchestrator.run_testing(instruction):
                 event_count += 1
                 # SECURITY: Cap SSE events to prevent unbounded resource consumption
                 if event_count > MAX_SSE_EVENTS:

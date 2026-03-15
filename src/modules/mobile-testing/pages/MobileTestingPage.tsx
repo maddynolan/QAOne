@@ -42,7 +42,11 @@ import {
   CircleDot,
   Gauge,
   Grid3X3,
+  AlertTriangle,
+  Download,
 } from 'lucide-react';
+
+const isElectron = () => !!(window as any).electron || navigator.userAgent.toLowerCase().includes('electron');
 
 interface TabConfig {
   id: MobileTab;
@@ -114,8 +118,31 @@ export default function MobileTestingPage() {
     }
   }, [activeTab]);
 
+  const inBrowser = !isElectron();
+
   return (
     <div className={cn("min-h-screen", isDark ? 'bg-gray-950' : 'bg-gray-50')}>
+      {/* Browser Mode Banner */}
+      {inBrowser && (
+        <div className={cn(
+          "px-6 py-3 flex items-center gap-3 border-b",
+          isDark ? 'bg-amber-900/20 border-amber-800/30' : 'bg-amber-50 border-amber-200'
+        )}>
+          <AlertTriangle className={cn("w-4 h-4 flex-shrink-0", isDark ? 'text-amber-400' : 'text-amber-600')} />
+          <p className={cn("text-sm", isDark ? 'text-amber-300' : 'text-amber-700')}>
+            <strong>Desktop app required for real device testing.</strong> Recording, execution, screenshots, and device control require the{' '}
+            <a href="/download" className="underline font-medium hover:opacity-80">Flowstral Desktop App</a> with Maestro CLI.
+            You can still manage test flows, view run history, browse the inspector demo, and use the simulated profiler and device matrix.
+          </p>
+          <a href="/download" className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap",
+            isDark ? 'bg-amber-600 text-white hover:bg-amber-500' : 'bg-amber-600 text-white hover:bg-amber-700'
+          )}>
+            <Download className="w-3 h-3" /> Get Desktop App
+          </a>
+        </div>
+      )}
+
       {/* Header */}
       <div className={cn(
         "border-b px-6 py-4",
