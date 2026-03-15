@@ -243,11 +243,11 @@ async def get_settings(
     in plaintext -- only boolean flags indicating whether keys are stored.
     """
     try:
-        from backend.app.services.core.ai_settings_service import get_ai_settings_service
+        from app.services.core.ai_settings_service import get_ai_settings_service
         service = get_ai_settings_service()
         org_id = _get_org_id(request)
 
-        settings = await service.get_settings(org_id=org_id, project_id=project_id)
+        settings = service.get_settings(org_id=org_id, project_id=project_id)
 
         return AISettingsResponse(
             enabled=settings.get("enabled", True),
@@ -290,7 +290,7 @@ async def update_settings(
     partial updates without overwriting other settings.
     """
     try:
-        from backend.app.services.core.ai_settings_service import get_ai_settings_service
+        from app.services.core.ai_settings_service import get_ai_settings_service
         service = get_ai_settings_service()
         org_id = _get_org_id(request)
 
@@ -317,8 +317,8 @@ async def update_settings(
             raise HTTPException(status_code=400, detail="No fields provided to update")
 
         logger.info(f"Updating AI settings for org={org_id}: {list(updates.keys())}")
-        settings = await service.update_settings(
-            org_id=org_id, project_id=project_id, updates=updates
+        settings = service.update_settings(
+            org_id=org_id, project_id=project_id, **updates
         )
 
         return AISettingsResponse(
@@ -365,11 +365,11 @@ async def store_api_key(
         )
 
     try:
-        from backend.app.services.core.ai_settings_service import get_ai_settings_service
+        from app.services.core.ai_settings_service import get_ai_settings_service
         service = get_ai_settings_service()
         org_id = _get_org_id(request)
 
-        await service.store_api_key(
+        service.store_api_key(
             org_id=org_id,
             provider=body.provider,
             api_key=body.api_key,
@@ -409,11 +409,11 @@ async def delete_api_key(
         )
 
     try:
-        from backend.app.services.core.ai_settings_service import get_ai_settings_service
+        from app.services.core.ai_settings_service import get_ai_settings_service
         service = get_ai_settings_service()
         org_id = _get_org_id(request)
 
-        await service.delete_api_key(org_id=org_id, provider=provider)
+        service.delete_api_key(org_id=org_id, provider=provider)
         logger.info(f"Deleted {provider} API key for org={org_id}")
 
         return {"success": True}
@@ -440,7 +440,7 @@ async def test_connection(
     Returns connection status, resolved model name, and round-trip latency.
     """
     try:
-        from backend.app.services.core.ai_settings_service import get_ai_settings_service
+        from app.services.core.ai_settings_service import get_ai_settings_service
         service = get_ai_settings_service()
         org_id = _get_org_id(request)
 
@@ -449,12 +449,12 @@ async def test_connection(
 
         # Resolve provider from current settings if not specified
         if not provider:
-            settings = await service.get_settings(org_id=org_id)
+            settings = service.get_settings(org_id=org_id)
             provider = settings.get("provider", "openai")
 
         # If no key provided, try to retrieve stored key
         if not api_key:
-            api_key = await service.get_api_key(org_id=org_id, provider=provider)
+            api_key = service.resolve_api_key(org_id=org_id, provider=provider)
 
         if not api_key:
             return TestConnectionResponse(
@@ -502,11 +502,11 @@ async def list_providers(
     is stored for the requesting organization.
     """
     try:
-        from backend.app.services.core.ai_settings_service import get_ai_settings_service
+        from app.services.core.ai_settings_service import get_ai_settings_service
         service = get_ai_settings_service()
         org_id = _get_org_id(request)
 
-        settings = await service.get_settings(org_id=org_id)
+        settings = service.get_settings(org_id=org_id)
 
         providers = [
             ProviderInfo(
@@ -589,11 +589,11 @@ async def get_usage(
     for the requested time window.
     """
     try:
-        from backend.app.services.core.ai_settings_service import get_ai_settings_service
+        from app.services.core.ai_settings_service import get_ai_settings_service
         service = get_ai_settings_service()
         org_id = _get_org_id(request)
 
-        usage = await service.get_usage(org_id=org_id, days=days)
+        usage = service.get_usage_stats(org_id=org_id, days=days)
 
         by_day = [
             DailyUsage(
