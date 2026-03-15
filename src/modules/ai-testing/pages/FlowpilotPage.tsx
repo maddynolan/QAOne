@@ -350,6 +350,7 @@ export default function FlowpilotPage() {
   const [selectedAgent, setSelectedAgent] = useState(getInitialAgent);
   const [goal, setGoal] = useState('');
   const [targetUrl, setTargetUrl] = useState('');
+  const [testFormat, setTestFormat] = useState<'natural' | 'gherkin' | 'steps'>('natural');
 
   // Sync selected agent when URL path changes (e.g. sidebar navigation)
   useEffect(() => {
@@ -506,9 +507,10 @@ export default function FlowpilotPage() {
 
     await streamSSE(`${API_BASE_URL}/api/ai-testing/start`, {
       instruction,
+      format: testFormat,
       headless: settings.headless,
     });
-  }, [goal, targetUrl, streamSSE, settings.headless]);
+  }, [goal, targetUrl, testFormat, streamSSE, settings.headless]);
 
   // ---- Execute: Self-Healer Agent (SSE with fix) ----
 
@@ -1015,20 +1017,49 @@ export default function FlowpilotPage() {
               </div>
 
               {(selectedAgent.id === 'generator' || selectedAgent.id === 'self-healer') && (
-                <div>
-                  <label className={cn("text-sm font-medium mb-2 block", theme === 'light' ? 'text-gray-700' : 'text-gray-300')}>
-                    Test Goal (Natural Language) <span className="text-red-400">*</span>
-                  </label>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className={cn("text-sm font-medium", theme === 'light' ? 'text-gray-700' : 'text-gray-300')}>
+                      Test Goal <span className="text-red-400">*</span>
+                    </label>
+                    <Select value={testFormat} onValueChange={(v: 'natural' | 'gherkin' | 'steps') => setTestFormat(v)}>
+                      <SelectTrigger className={cn("w-[180px] h-8 text-xs", theme === 'light' ? "bg-white border-gray-200" : "bg-gray-800 border-gray-700")}>
+                        <FileText className="w-3 h-3 mr-1" />
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="natural">Natural Language</SelectItem>
+                        <SelectItem value="gherkin">Gherkin (BDD)</SelectItem>
+                        <SelectItem value="steps">Step-by-Step</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <Textarea
                     value={goal}
                     onChange={(e) => setGoal(e.target.value)}
-                    placeholder={selectedAgent.id === 'self-healer'
-                      ? "Describe the test to re-run with AI healing...\nExample: 'Test login with valid credentials'"
-                      : "Describe what to test in plain English...\nExample: 'Test login with invalid credentials and verify error message'"
+                    placeholder={
+                      testFormat === 'gherkin'
+                        ? "Feature: User Authentication\n  Scenario: Login with valid credentials\n    Given I navigate to https://example.com/login\n    When I fill email with \"user@example.com\"\n    And I fill password with \"password123\"\n    And I click the Login button\n    Then I should see the Dashboard"
+                        : testFormat === 'steps'
+                        ? "1. Navigate to https://example.com/login\n2. Enter \"user@example.com\" in the email field\n3. Enter \"password123\" in the password field\n4. Click the Login button\n5. Verify the dashboard page loads"
+                        : selectedAgent.id === 'self-healer'
+                        ? "Describe the test to re-run with AI healing...\nExample: 'Test login with valid credentials'"
+                        : "Describe what to test in plain English...\nExample: 'Test login with invalid credentials and verify error message'"
                     }
-                    rows={4}
-                    className={cn(theme === 'light' ? "bg-white border-gray-200" : "bg-gray-800 border-gray-700")}
+                    rows={testFormat === 'gherkin' ? 7 : testFormat === 'steps' ? 6 : 4}
+                    className={cn(
+                      testFormat === 'gherkin' ? "font-mono text-sm" : "",
+                      theme === 'light' ? "bg-white border-gray-200" : "bg-gray-800 border-gray-700"
+                    )}
                   />
+                  {testFormat !== 'natural' && (
+                    <p className={cn("text-xs", theme === 'light' ? 'text-gray-500' : 'text-gray-500')}>
+                      {testFormat === 'gherkin'
+                        ? "Write BDD scenarios using Given/When/Then syntax. The AI will parse and execute each step."
+                        : "Write numbered steps. The AI will execute them sequentially."
+                      }
+                    </p>
+                  )}
                 </div>
               )}
 

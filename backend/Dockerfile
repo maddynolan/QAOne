@@ -1,11 +1,12 @@
 # Backend API - Enterprise Deploy-ready
-# Python 3.12+, uvicorn. Use cloud LLM API keys (OpenAI/Anthropic); OLLAMA not used for SaaS.
+# Uses official Playwright base image for browser automation (Flowpilot agents, self-healing).
+# Cloud LLM API keys (OpenAI/Anthropic); OLLAMA not used for SaaS.
 
-FROM python:3.12-slim
+FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy
 
 WORKDIR /app
 
-# System deps
+# System deps (curl for healthcheck)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*

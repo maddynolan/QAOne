@@ -17,6 +17,8 @@ import os
 import re
 import base64
 import json
+import asyncio
+import subprocess
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from pathlib import Path
@@ -872,33 +874,53 @@ async def capture_screenshot(
     _validate_test_name(test_name)
 
     try:
-        from playwright.async_api import async_playwright
+        import subprocess
+        import sys
+        import json as json_mod
         from app.services.automation.visual_testing_engine import VisualTestingEngine
 
         engine = VisualTestingEngine()
-        
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(
-                viewport={'width': viewport_width, 'height': viewport_height}
-            )
-            page = await context.new_page()
-            
-            # Navigate
-            await page.goto(url, wait_until='networkidle')
-            
-            # Wait for selector if specified
-            if wait_for_selector:
-                await page.wait_for_selector(wait_for_selector, timeout=10000)
-            
-            # Small delay for rendering
-            await page.wait_for_timeout(500)
-            
-            # Capture screenshot
-            screenshot_bytes = await page.screenshot(full_page=full_page)
-            
-            await browser.close()
-        
+
+        # Run Playwright in a subprocess to avoid Windows asyncio event loop
+        # incompatibilities with uvicorn (NotImplementedError on create_subprocess_exec)
+        script_path = os.path.join(
+            os.path.dirname(__file__),
+            "..", "..", "services", "automation", "visual_capture_subprocess.py"
+        )
+        script_path = os.path.abspath(script_path)
+
+        cmd = [
+            sys.executable, script_path,
+            url,
+            str(viewport_width),
+            str(viewport_height),
+            str(full_page),
+            wait_for_selector or "None"
+        ]
+
+        logger.info(f"[Visual] Capturing screenshot via subprocess: {url}")
+        result = await asyncio.to_thread(
+            subprocess.run,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=os.path.dirname(script_path)
+        )
+
+        if result.returncode != 0 or not result.stdout:
+            error_msg = result.stderr[:500] if result.stderr else f"Capture exited with code {result.returncode}"
+            logger.error(f"[Visual] Capture subprocess failed: {error_msg}")
+            raise HTTPException(status_code=500, detail="Screenshot capture failed")
+
+        data = json_mod.loads(result.stdout)
+        if data.get("error"):
+            logger.error(f"[Visual] Capture error: {data['error']}")
+            raise HTTPException(status_code=500, detail="Screenshot capture failed")
+
+        screenshot_bytes = base64.b64decode(data["screenshot_base64"])
+        logger.info(f"[Visual] Screenshot captured: {len(screenshot_bytes)} bytes")
+
         # Save as baseline if requested
         if save_as_baseline:
             path = engine.save_baseline(screenshot_bytes, test_name, {
@@ -906,29 +928,34 @@ async def capture_screenshot(
                 "viewport": f"{viewport_width}x{viewport_height}",
                 "full_page": full_page
             })
-            
+
             return {
                 "success": True,
                 "message": "Screenshot captured and saved as baseline",
                 "test_name": test_name,
                 "path": path,
-                "image_base64": base64.b64encode(screenshot_bytes).decode('utf-8')
+                "image_base64": data["screenshot_base64"]
             }
         else:
             # Save to actuals directory
             safe_name = engine._safe_filename(test_name)
             actual_path = engine.actuals_dir / f"{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            
+
             with open(actual_path, 'wb') as f:
                 f.write(screenshot_bytes)
-            
+
             return {
                 "success": True,
                 "message": "Screenshot captured",
                 "path": str(actual_path),
-                "image_base64": base64.b64encode(screenshot_bytes).decode('utf-8')
+                "image_base64": data["screenshot_base64"]
             }
-        
+
+    except HTTPException:
+        raise
+    except subprocess.TimeoutExpired:
+        logger.error("[Visual] Screenshot capture timed out after 120s")
+        raise HTTPException(status_code=504, detail="Screenshot capture timed out")
     except Exception as e:
         logger.error(f"Error capturing screenshot: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error while capturing screenshot")
