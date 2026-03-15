@@ -337,6 +337,66 @@ class WCAGPipeline:
                     "suggested_fix": "Set maximum-scale=5 or remove the maximum-scale restriction"
                 })
 
+        # 13. Tables without headers (WCAG 1.3.1)
+        tables = re.findall(r'<table[^>]*>.*?</table>', html, re.IGNORECASE | re.DOTALL)
+        for table in tables[:5]:  # Cap at 5
+            has_th = '<th' in table.lower()
+            has_scope = 'scope=' in table.lower()
+            has_role = 'role="' in table.lower()
+            if not has_th and not has_scope and not has_role:
+                snippet = table[:200].replace('\n', ' ').strip()
+                violations.append({
+                    "id": "table-header",
+                    "rule": "Data tables must have headers",
+                    "impact": "serious",
+                    "description": "Table element does not have <th> elements or scope attributes. Screen readers cannot determine column/row relationships.",
+                    "help": "Add <th> elements for column and/or row headers with appropriate scope attributes",
+                    "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/td-headers-attr",
+                    "nodes": [{"html": snippet}],
+                    "wcag_criterion": "WCAG 1.3.1",
+                    "suggested_fix": "Add <th scope=\"col\"> for column headers and <th scope=\"row\"> for row headers"
+                })
+
+        # 14. Autoplay media without muted (WCAG 1.4.2)
+        autoplay_media = re.findall(r'<(?:video|audio)[^>]*autoplay[^>]*>', html, re.IGNORECASE)
+        for media in autoplay_media:
+            if 'muted' not in media.lower():
+                violations.append({
+                    "id": "no-autoplay-audio",
+                    "rule": "Autoplaying media must be muted or have controls",
+                    "impact": "moderate",
+                    "description": "Media element has autoplay without muted attribute. Users may be startled by unexpected audio, and screen reader users cannot hear their assistive technology.",
+                    "help": "Add the muted attribute to autoplaying media, or remove autoplay",
+                    "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/no-autoplay-audio",
+                    "nodes": [{"html": media[:200]}],
+                    "wcag_criterion": "WCAG 1.4.2",
+                    "suggested_fix": "Add muted attribute to <video autoplay muted> or <audio autoplay muted>"
+                })
+
+        # 15. Inline color contrast heuristic — detect color + background-color on same element (WCAG 1.4.3)
+        inline_styles = re.findall(r'<[^>]+style=["\']([^"\']*color[^"\']*)["\'][^>]*>', html, re.IGNORECASE)
+        for style_match in inline_styles[:10]:  # Cap at 10
+            style = style_match.lower()
+            has_fg = bool(re.search(r'(?<![a-z-])color\s*:', style))
+            has_bg = 'background-color:' in style or 'background:' in style
+            if has_fg and has_bg:
+                # Extract color values for a basic luminance check
+                fg_match = re.search(r'(?<![a-z-])color\s*:\s*([^;]+)', style)
+                bg_match = re.search(r'background(?:-color)?\s*:\s*([^;]+)', style)
+                fg_val = fg_match.group(1).strip() if fg_match else '?'
+                bg_val = bg_match.group(1).strip() if bg_match else '?'
+                violations.append({
+                    "id": "color-contrast-inline",
+                    "rule": "Inline styles set both text and background color — verify contrast ratio",
+                    "impact": "serious",
+                    "description": f"Element sets both color ({fg_val}) and background-color ({bg_val}) via inline style. Verify the contrast ratio meets WCAG 1.4.3 (4.5:1 for normal text, 3:1 for large text).",
+                    "help": "Ensure the color contrast ratio between text and background meets WCAG AA requirements",
+                    "helpUrl": "https://dequeuniversity.com/rules/axe/4.8/color-contrast",
+                    "nodes": [{"html": f"style contains color: {fg_val}; background: {bg_val}"}],
+                    "wcag_criterion": "WCAG 1.4.3",
+                    "suggested_fix": f"Check contrast ratio between {fg_val} and {bg_val} using a tool like WebAIM Contrast Checker"
+                })
+
         return violations
     
     def get_violations_by_impact(self, violations: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:

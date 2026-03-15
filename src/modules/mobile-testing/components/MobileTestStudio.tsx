@@ -123,8 +123,9 @@ export default function MobileTestStudio() {
 
   const checkMaestro = useCallback(async () => {
     if (!inElectron) {
-      // In browser mode, treat as installed (features work in demo/mock mode)
-      setMaestroInstalled(true);
+      // Browser mode: Maestro is N/A — set null to indicate "not applicable"
+      // UI will show "Desktop Required" state instead of "Maestro Not Installed"
+      setMaestroInstalled(null);
       return;
     }
     setIsCheckingMaestro(true);
@@ -207,6 +208,10 @@ export default function MobileTestStudio() {
   };
 
   const handleRunTest = async () => {
+    if (!inElectron) {
+      toast.error('Running tests on real devices requires the Flowstral Desktop App');
+      return;
+    }
     if (!appBundleId) {
       toast.error('Please enter an App Bundle ID');
       return;
@@ -341,7 +346,19 @@ export default function MobileTestStudio() {
           </div>
 
           <div className="flex items-center gap-3">
-            {isStudioRunning ? (
+            {!inElectron ? (
+              /* Browser mode: show Demo Mode badge + download link */
+              <div className="flex items-center gap-3">
+                <Badge variant="outline" className="text-xs px-2.5 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-600">
+                  Demo Mode
+                </Badge>
+                <a href="/download">
+                  <Button variant="outline" size="sm">
+                    <ExternalLink className="w-4 h-4 mr-2" /> Get Desktop App
+                  </Button>
+                </a>
+              </div>
+            ) : isStudioRunning ? (
               <>
                 <Button variant="outline" onClick={() => window.open('http://localhost:9999', '_blank')}
                   className={cn(isDark ? "border-gray-600 text-gray-300" : "border-gray-300 text-gray-700")}>
@@ -362,6 +379,15 @@ export default function MobileTestStudio() {
           </div>
         </div>
 
+        {!inElectron && (
+          <div className={cn("mt-4 p-3 rounded-lg", isDark ? 'bg-sky-500/10' : 'bg-sky-50')}>
+            <p className={cn("text-sm", isDark ? 'text-sky-300' : 'text-sky-700')}>
+              <strong>Browser Mode:</strong> You can edit YAML test flows below, but recording and execution
+              require the <a href="/download" className="underline font-medium">Flowstral Desktop App</a> with Maestro CLI installed.
+            </p>
+          </div>
+        )}
+
         {isStudioRunning && (
           <div className={cn("mt-4 p-3 rounded-lg", isDark ? 'bg-gray-900/50' : 'bg-white/80')}>
             <p className={cn("text-sm", isDark ? 'text-gray-300' : 'text-gray-700')}>
@@ -371,7 +397,7 @@ export default function MobileTestStudio() {
           </div>
         )}
 
-        {!maestroInstalled && maestroInstalled !== null && (
+        {inElectron && !maestroInstalled && maestroInstalled !== null && (
           <div className={cn("mt-4 p-3 rounded-lg", isDark ? 'bg-amber-500/10' : 'bg-amber-50')}>
             <p className={cn("text-sm", isDark ? 'text-amber-400' : 'text-amber-700')}>
               Install Maestro first to enable native app recording. See setup below.
@@ -515,7 +541,8 @@ export default function MobileTestStudio() {
               className={cn("font-mono text-xs", isDark ? "bg-gray-950 border-gray-700" : "bg-gray-50 border-gray-200")} />
 
             <div className="flex gap-2 mt-4">
-              <Button onClick={handleRunTest} disabled={!maestroInstalled || isRunningTest || !appBundleId}
+              <Button onClick={handleRunTest} disabled={!inElectron || !maestroInstalled || isRunningTest || !appBundleId}
+                title={!inElectron ? 'Requires Flowstral Desktop App' : !maestroInstalled ? 'Install Maestro CLI first' : ''}
                 className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground">
                 {isRunningTest ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Running...</> : <><Play className="w-4 h-4 mr-2" /> Run Test</>}
               </Button>

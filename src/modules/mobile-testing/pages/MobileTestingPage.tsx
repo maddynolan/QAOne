@@ -128,12 +128,14 @@ export default function MobileTestingPage() {
           "px-6 py-3 flex items-center gap-3 border-b",
           isDark ? 'bg-amber-900/20 border-amber-800/30' : 'bg-amber-50 border-amber-200'
         )}>
-          <AlertTriangle className={cn("w-4 h-4 flex-shrink-0", isDark ? 'text-amber-400' : 'text-amber-600')} />
-          <p className={cn("text-sm", isDark ? 'text-amber-300' : 'text-amber-700')}>
-            <strong>Desktop app required for real device testing.</strong> Recording, execution, screenshots, and device control require the{' '}
-            <a href="/download" className="underline font-medium hover:opacity-80">Flowstral Desktop App</a> with Maestro CLI.
-            You can still manage test flows, view run history, browse the inspector demo, and use the simulated profiler and device matrix.
-          </p>
+          <AlertTriangle className={cn("w-4 h-4 flex-shrink-0 mt-0.5", isDark ? 'text-amber-400' : 'text-amber-600')} />
+          <div className={cn("text-sm flex-1", isDark ? 'text-amber-300' : 'text-amber-700')}>
+            <strong>Browser Mode — limited functionality.</strong>
+            <span className={cn("text-xs ml-1", isDark ? 'text-amber-400' : 'text-amber-600')}>
+              <span className="font-medium">Works now:</span> Test Flows (CRUD, import/export), Run History (analytics), Inspector (demo data), App Profiler (simulated), Device Matrix (config).
+              <span className="font-medium ml-1">Requires Desktop:</span> Recording, execution, device screenshots, logs, app install, and all device control.
+            </span>
+          </div>
           <a href="/download" className={cn(
             "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap",
             isDark ? 'bg-amber-600 text-white hover:bg-amber-500' : 'bg-amber-600 text-white hover:bg-amber-700'

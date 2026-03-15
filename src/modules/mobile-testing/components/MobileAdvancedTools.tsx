@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useMobileTestingStore } from '@/modules/mobile-testing/store/mobileTestingStore';
 import type { DeepLinkConfig, GeoLocation, NetworkProfile } from '@/modules/mobile-testing/store/mobileTestingStore';
-import { mobile } from '@/lib/electron-bridge';
+import { mobile, isElectron } from '@/lib/electron-bridge';
 import { toast } from 'sonner';
 import {
   Link2,
@@ -58,6 +58,7 @@ type ToolSection = 'deeplinks' | 'notifications' | 'biometrics' | 'network' | 'g
 export default function MobileAdvancedTools() {
   const { theme } = useTheme();
   const isDark = theme !== 'light';
+  const inElectron = isElectron();
 
   // Individual selectors
   const deepLinks = useMobileTestingStore(s => s.deepLinks);
@@ -287,7 +288,7 @@ export default function MobileAdvancedTools() {
                       <div className={cn("text-xs font-mono truncate", isDark ? 'text-gray-400' : 'text-gray-500')}>{link.url}</div>
                     </div>
                     <Badge variant="outline" className="text-[10px] h-4 shrink-0">{link.platform === 'ios' ? 'iOS' : 'Android'}</Badge>
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleOpenDeepLink(link)}>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleOpenDeepLink(link)} disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}>
                       <Play className="w-3 h-3 mr-1" /> Open
                     </Button>
                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={() => deleteDeepLink(link.id)}>
@@ -359,10 +360,11 @@ export default function MobileAdvancedTools() {
                 <Button
                   className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleSendNotification}
-                  disabled={isSending}
+                  disabled={isSending || !inElectron}
+                  title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}
                 >
                   {isSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-                  Send Notification
+                  {!inElectron ? 'Desktop App Required' : 'Send Notification'}
                 </Button>
               </div>
 
@@ -402,6 +404,12 @@ export default function MobileAdvancedTools() {
               Simulate Face ID, Touch ID, and fingerprint authentication responses
             </p>
 
+            {!inElectron && (
+              <div className={cn("p-3 rounded-lg mb-4 text-xs", isDark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-50 text-amber-700')}>
+                ⚠️ Biometric simulation requires the Flowstral Desktop App with a connected device or simulator.
+              </div>
+            )}
+
             <div className="grid md:grid-cols-2 gap-6">
               {/* iOS */}
               <div className={cn("rounded-lg border p-5", isDark ? 'border-gray-700' : 'border-gray-200')}>
@@ -417,6 +425,8 @@ export default function MobileAdvancedTools() {
                       <Button
                         className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
                         onClick={() => handleBiometricTest('success')}
+                        disabled={!inElectron}
+                        title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}
                       >
                         <Check className="w-3 h-3 mr-1" /> Match
                       </Button>
@@ -424,6 +434,8 @@ export default function MobileAdvancedTools() {
                         variant="destructive"
                         className="flex-1 h-9 text-xs"
                         onClick={() => handleBiometricTest('failure')}
+                        disabled={!inElectron}
+                        title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}
                       >
                         <X className="w-3 h-3 mr-1" /> No Match
                       </Button>
@@ -436,6 +448,8 @@ export default function MobileAdvancedTools() {
                       <Button
                         className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
                         onClick={() => handleBiometricTest('success')}
+                        disabled={!inElectron}
+                        title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}
                       >
                         <Fingerprint className="w-3 h-3 mr-1" /> Match
                       </Button>
@@ -443,6 +457,8 @@ export default function MobileAdvancedTools() {
                         variant="destructive"
                         className="flex-1 h-9 text-xs"
                         onClick={() => handleBiometricTest('failure')}
+                        disabled={!inElectron}
+                        title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}
                       >
                         <X className="w-3 h-3 mr-1" /> No Match
                       </Button>
@@ -465,6 +481,8 @@ export default function MobileAdvancedTools() {
                       <Button
                         className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
                         onClick={() => handleBiometricTest('success')}
+                        disabled={!inElectron}
+                        title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}
                       >
                         <Fingerprint className="w-3 h-3 mr-1" /> Authenticate
                       </Button>
@@ -472,6 +490,8 @@ export default function MobileAdvancedTools() {
                         variant="destructive"
                         className="flex-1 h-9 text-xs"
                         onClick={() => handleBiometricTest('failure')}
+                        disabled={!inElectron}
+                        title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}
                       >
                         <X className="w-3 h-3 mr-1" /> Reject
                       </Button>
@@ -484,6 +504,8 @@ export default function MobileAdvancedTools() {
                       <Button
                         className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
                         onClick={() => handleBiometricTest('success')}
+                        disabled={!inElectron}
+                        title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}
                       >
                         <ScanFace className="w-3 h-3 mr-1" /> Recognize
                       </Button>
@@ -491,6 +513,8 @@ export default function MobileAdvancedTools() {
                         variant="destructive"
                         className="flex-1 h-9 text-xs"
                         onClick={() => handleBiometricTest('failure')}
+                        disabled={!inElectron}
+                        title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}
                       >
                         <X className="w-3 h-3 mr-1" /> Reject
                       </Button>
@@ -541,6 +565,8 @@ export default function MobileAdvancedTools() {
                   <button
                     key={profile.id}
                     onClick={() => handleSetNetworkProfile(profile)}
+                    disabled={!inElectron}
+                    title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}
                     className={cn(
                       "p-4 rounded-xl border text-left transition-all",
                       isActive
@@ -570,7 +596,7 @@ export default function MobileAdvancedTools() {
 
             {activeNetworkProfile && (
               <div className="mt-4">
-                <Button variant="outline" size="sm" onClick={async () => {
+                <Button variant="outline" size="sm" disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined} onClick={async () => {
                   setActiveNetworkProfile(null);
                   const deviceId = selectedDevice;
                   // Enable wifi + data to restore default network
@@ -631,6 +657,8 @@ export default function MobileAdvancedTools() {
                   <button
                     key={loc.id}
                     onClick={() => handleSetLocation(loc)}
+                    disabled={!inElectron}
+                    title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}
                     className={cn(
                       "p-3 rounded-lg border text-left transition-all group",
                       isActive
@@ -676,7 +704,7 @@ export default function MobileAdvancedTools() {
                   <RotateCw className="w-4 h-4" /> Orientation
                 </h4>
                 <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1 h-10 text-xs" onClick={async () => {
+                  <Button variant="outline" className="flex-1 h-10 text-xs" disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined} onClick={async () => {
                     try {
                       const r = await mobile.setOrientation(selectedPlatform, selectedDevice, 'portrait');
                       r.success ? toast.success('Set to Portrait') : toast.error(r.error || 'Failed');
@@ -684,7 +712,7 @@ export default function MobileAdvancedTools() {
                   }}>
                     <Smartphone className="w-4 h-4 mr-1.5" /> Portrait
                   </Button>
-                  <Button variant="outline" className="flex-1 h-10 text-xs" onClick={async () => {
+                  <Button variant="outline" className="flex-1 h-10 text-xs" disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined} onClick={async () => {
                     try {
                       const r = await mobile.setOrientation(selectedPlatform, selectedDevice, 'landscape');
                       r.success ? toast.success('Set to Landscape') : toast.error(r.error || 'Failed');
@@ -701,7 +729,7 @@ export default function MobileAdvancedTools() {
                   <Sun className="w-4 h-4" /> Appearance
                 </h4>
                 <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1 h-10 text-xs" onClick={async () => {
+                  <Button variant="outline" className="flex-1 h-10 text-xs" disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined} onClick={async () => {
                     try {
                       const r = await mobile.setAppearance(selectedPlatform, selectedDevice, 'light');
                       r.success ? toast.success('Set to Light Mode') : toast.error(r.error || 'Failed');
@@ -709,7 +737,7 @@ export default function MobileAdvancedTools() {
                   }}>
                     <Sun className="w-4 h-4 mr-1.5" /> Light
                   </Button>
-                  <Button variant="outline" className="flex-1 h-10 text-xs" onClick={async () => {
+                  <Button variant="outline" className="flex-1 h-10 text-xs" disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined} onClick={async () => {
                     try {
                       const r = await mobile.setAppearance(selectedPlatform, selectedDevice, 'dark');
                       r.success ? toast.success('Set to Dark Mode') : toast.error(r.error || 'Failed');
@@ -742,7 +770,7 @@ export default function MobileAdvancedTools() {
                     <option value="hi-IN">hi-IN (Hindi)</option>
                     <option value="pt-BR">pt-BR (Portuguese)</option>
                   </select>
-                  <Button variant="outline" className="h-10 text-xs" onClick={async () => {
+                  <Button variant="outline" className="h-10 text-xs" disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined} onClick={async () => {
                     try {
                       const r = await mobile.setLocale(selectedPlatform, selectedDevice, selectedLocale);
                       if (r.success) {
@@ -770,7 +798,7 @@ export default function MobileAdvancedTools() {
                     { label: 'Large', value: 1.3 },
                     { label: 'XL', value: 1.5 },
                   ].map(scale => (
-                    <Button key={scale.value} variant="outline" className="flex-1 h-10 text-xs" onClick={async () => {
+                    <Button key={scale.value} variant="outline" className="flex-1 h-10 text-xs" disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined} onClick={async () => {
                       try {
                         const r = await mobile.setFontScale(selectedPlatform, selectedDevice, scale.value);
                         r.success ? toast.success(`Font scale set to ${scale.value}x`) : toast.error(r.error || 'Failed');
