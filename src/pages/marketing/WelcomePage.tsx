@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { API_BASE_URL } from '@/lib/api-config';
 
 export default function WelcomePage() {
   const navigate = useNavigate();
@@ -40,8 +41,8 @@ export default function WelcomePage() {
     // TODO: Call API to resend verification email
   };
 
-  // Download URLs - proxied through backend API (GitHub repo is private)
-  const DOWNLOAD_BASE = 'https://qaone-production.up.railway.app/api/download';
+  // Download URLs - backend proxies to GitHub CDN via redirect
+  const DOWNLOAD_BASE = `${API_BASE_URL}/api/download`;
   
   const platforms = {
     windows: {
