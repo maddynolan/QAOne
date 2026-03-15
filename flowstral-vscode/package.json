@@ -1,0 +1,143 @@
+{
+  "name": "flowstral",
+  "displayName": "Flowstral - AI QA Platform",
+  "description": "Run tests, generate AI tests, scan accessibility, and explore apps from VS Code",
+  "version": "1.0.0",
+  "publisher": "flowstral",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Testing",
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:flowstralTestCases"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "flowstral",
+          "title": "Flowstral",
+          "icon": "resources/flowstral-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "flowstral": [
+        {
+          "id": "flowstralTestCases",
+          "name": "Test Cases"
+        },
+        {
+          "id": "flowstralTestRuns",
+          "name": "Recent Runs"
+        },
+        {
+          "id": "flowstralDefects",
+          "name": "Defects"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "flowstral.runTest",
+        "title": "Flowstral: Run Test Case",
+        "icon": "$(play)"
+      },
+      {
+        "command": "flowstral.aiGenerateTest",
+        "title": "Flowstral: AI Generate Test"
+      },
+      {
+        "command": "flowstral.scanAccessibility",
+        "title": "Flowstral: Scan Accessibility"
+      },
+      {
+        "command": "flowstral.exploreApp",
+        "title": "Flowstral: Explore Application"
+      },
+      {
+        "command": "flowstral.runApiTest",
+        "title": "Flowstral: Run API Test"
+      },
+      {
+        "command": "flowstral.openDashboard",
+        "title": "Flowstral: Open Dashboard"
+      },
+      {
+        "command": "flowstral.configure",
+        "title": "Flowstral: Configure"
+      },
+      {
+        "command": "flowstral.refresh",
+        "title": "Flowstral: Refresh",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "flowstral.refresh",
+          "when": "view =~ /flowstral/",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "flowstral.runTest",
+          "when": "view == flowstralTestCases && viewItem == testCase",
+          "group": "inline"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "flowstral.aiGenerateTest",
+        "key": "ctrl+shift+t",
+        "mac": "cmd+shift+t"
+      }
+    ],
+    "configuration": {
+      "title": "Flowstral",
+      "properties": {
+        "flowstral.apiUrl": {
+          "type": "string",
+          "default": "https://api.flowstral.com",
+          "description": "Flowstral API server URL"
+        },
+        "flowstral.projectId": {
+          "type": "string",
+          "default": "",
+          "description": "Default project ID"
+        },
+        "flowstral.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-refresh sidebar data"
+        },
+        "flowstral.refreshInterval": {
+          "type": "number",
+          "default": 30,
+          "description": "Refresh interval in seconds"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "eventsource-parser": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}
