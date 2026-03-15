@@ -1,0 +1,48 @@
+<idea-plugin>
+    <id>com.flowstral.intellij</id>
+    <name>Flowstral - AI QA Platform</name>
+    <vendor email="support@flowstral.com" url="https://flowstral.com">Flowstral</vendor>
+    <description><![CDATA[
+        Integrate Flowstral QA automation platform into your IDE.
+        Run tests, generate AI-powered tests, scan accessibility, explore applications, and view defects — all without leaving your IDE.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Flowstral" secondary="false" icon="/icons/flowstral-13.svg"
+                    anchor="right"
+                    factoryClass="com.flowstral.intellij.FlowstralToolWindowFactory"/>
+        <applicationConfigurable parentId="tools"
+                                 instance="com.flowstral.intellij.settings.FlowstralSettingsConfigurable"
+                                 id="com.flowstral.intellij.settings"
+                                 displayName="Flowstral"/>
+        <applicationService serviceImplementation="com.flowstral.intellij.settings.FlowstralSettingsState"/>
+        <statusBarWidgetFactory id="FlowstralStatusBar"
+                                implementation="com.flowstral.intellij.statusbar.FlowstralStatusBarWidgetFactory"/>
+        <notificationGroup id="Flowstral" displayType="BALLOON"/>
+    </extensions>
+
+    <actions>
+        <group id="Flowstral.ToolsMenu" text="Flowstral" popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <action id="Flowstral.RunTest" class="com.flowstral.intellij.actions.RunTestAction"
+                    text="Run Test Case" description="Run a Flowstral test case"
+                    icon="AllIcons.RunConfigurations.TestState.Run">
+                <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift F10"/>
+            </action>
+            <action id="Flowstral.AIGenerateTest" class="com.flowstral.intellij.actions.AIGenerateTestAction"
+                    text="AI Generate Test" description="Generate a test using AI from natural language">
+                <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift G"/>
+            </action>
+            <action id="Flowstral.ScanAccessibility" class="com.flowstral.intellij.actions.ScanAccessibilityAction"
+                    text="Scan Accessibility" description="Run WCAG accessibility scan on a URL"/>
+            <action id="Flowstral.ExploreApp" class="com.flowstral.intellij.actions.ExploreAppAction"
+                    text="Explore Application" description="Crawl and analyze a web application"/>
+            <separator/>
+            <action id="Flowstral.OpenDashboard" class="com.flowstral.intellij.actions.OpenDashboardAction"
+                    text="Open Dashboard" description="Open Flowstral dashboard in browser"
+                    icon="AllIcons.General.Web"/>
+        </group>
+    </actions>
+</idea-plugin>
