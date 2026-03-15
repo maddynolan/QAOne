@@ -40,6 +40,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useAI, AI_FEATURE_AREAS, type AIFeatureId } from '@/contexts/AIContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { cn } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/api-config';
 import { toast } from 'sonner';
 
@@ -106,6 +108,7 @@ interface AIConfigProps {
 // ---------------------------------------------------------------------------
 
 export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
+  const { theme } = useTheme();
   const {
     config,
     status,
@@ -135,6 +138,19 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
 
   // Map provider value to the key slot name used on the backend
   const keyProviderSlot = config.provider === 'custom' ? 'openai' : config.provider;
+
+  // Theme-aware class helpers
+  const isDark = theme === 'dark';
+  const cardClass = cn(isDark ? "border-gray-700 bg-gray-900/50" : "border-gray-200 bg-white");
+  const labelClass = cn("text-sm", isDark ? "text-gray-300" : "text-gray-700");
+  const mutedTextClass = cn(isDark ? "text-gray-400" : "text-gray-500");
+  const bodyTextClass = cn(isDark ? "text-gray-200" : "text-gray-900");
+  const subtleTextClass = cn(isDark ? "text-gray-500" : "text-gray-400");
+  const inputClass = cn(isDark ? "bg-gray-800 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-900");
+  const selectContentClass = cn(isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200");
+  const selectItemClass = cn(isDark ? "text-gray-200" : "text-gray-900");
+  const separatorClass = cn(isDark ? "bg-gray-700" : "bg-gray-200");
+  const innerBorderClass = cn(isDark ? "border-gray-700/50" : "border-gray-200");
 
   // -----------------------------------------------------------------------
   // Handlers
@@ -223,14 +239,17 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
   const statusBadge = (() => {
     if (!config.enabled) {
       return (
-        <Badge variant="outline" className="text-gray-400 border-gray-600">
+        <Badge variant="outline" className={cn(isDark ? "text-gray-400 border-gray-600" : "text-gray-500 border-gray-300")}>
           Disabled
         </Badge>
       );
     }
     if (status.connected) {
       return (
-        <Badge className="bg-green-500/20 text-green-400 border border-green-500/30 flex items-center gap-1">
+        <Badge className={cn(
+          "flex items-center gap-1",
+          isDark ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-green-50 text-green-700 border border-green-200"
+        )}>
           <CheckCircle className="h-3 w-3" />
           Connected
         </Badge>
@@ -238,14 +257,20 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
     }
     if (!activeProviderHasKey) {
       return (
-        <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+        <Badge className={cn(
+          "flex items-center gap-1",
+          isDark ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "bg-amber-50 text-amber-700 border border-amber-200"
+        )}>
           <Key className="h-3 w-3" />
           Not Configured
         </Badge>
       );
     }
     return (
-      <Badge className="bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
+      <Badge className={cn(
+        "flex items-center gap-1",
+        isDark ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-red-50 text-red-700 border border-red-200"
+      )}>
         <AlertCircle className="h-3 w-3" />
         Error
       </Badge>
@@ -260,7 +285,7 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
       {/* ================================================================
           1. AI Master Toggle Card (Hero)
           ================================================================ */}
-      <Card className="border-gray-700 bg-gray-900/50">
+      <Card className={cardClass}>
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <div>
@@ -268,7 +293,7 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
                 <Sparkles className="h-5 w-5 text-purple-500" />
                 AI Configuration
               </CardTitle>
-              <CardDescription className="text-gray-400">
+              <CardDescription className={mutedTextClass}>
                 Configure AI-powered features across the platform
               </CardDescription>
             </div>
@@ -276,13 +301,18 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-lg border border-purple-500/20">
+          <div className={cn(
+            "flex items-center justify-between p-4 rounded-lg border",
+            isDark
+              ? "bg-gradient-to-r from-purple-500/10 to-blue-500/10 border-purple-500/20"
+              : "bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200"
+          )}>
             <div className="space-y-0.5">
-              <Label htmlFor="ai-master-toggle" className="text-base font-semibold flex items-center gap-2 text-gray-100">
+              <Label htmlFor="ai-master-toggle" className={cn("text-base font-semibold flex items-center gap-2", bodyTextClass)}>
                 <Zap className="h-4 w-4 text-yellow-500" />
                 Enable AI Features
               </Label>
-              <p className="text-sm text-gray-400">
+              <p className={cn("text-sm", mutedTextClass)}>
                 When enabled, AI buttons appear throughout the app
               </p>
             </div>
@@ -295,16 +325,16 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
 
           {/* Summary when connected */}
           {config.enabled && status.connected && (
-            <div className="mt-3 flex items-center gap-3 text-sm text-gray-400">
+            <div className={cn("mt-3 flex items-center gap-3 text-sm", mutedTextClass)}>
               <span className="flex items-center gap-1">
                 <Server className="h-3.5 w-3.5" />
                 {PROVIDER_OPTIONS.find(p => p.value === config.provider)?.label || config.provider}
               </span>
-              <span className="text-gray-600">|</span>
-              <span className="font-mono text-gray-300">{config.model}</span>
+              <span className={subtleTextClass}>|</span>
+              <span className={cn("font-mono", bodyTextClass)}>{config.model}</span>
               {status.latency && (
                 <>
-                  <span className="text-gray-600">|</span>
+                  <span className={subtleTextClass}>|</span>
                   <span>{status.latency}ms</span>
                 </>
               )}
@@ -312,8 +342,11 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
           )}
 
           {!config.enabled && (
-            <div className="mt-4 bg-gray-800/50 p-4 rounded-lg text-center border border-gray-700/50">
-              <p className="text-gray-400">
+            <div className={cn(
+              "mt-4 p-4 rounded-lg text-center border",
+              isDark ? "bg-gray-800/50 border-gray-700/50" : "bg-gray-50 border-gray-200"
+            )}>
+              <p className={mutedTextClass}>
                 Enable AI to unlock smart test generation, self-healing selectors, and more
               </p>
             </div>
@@ -327,27 +360,27 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
           {/* ================================================================
               2. Provider Configuration
               ================================================================ */}
-          <Card className="border-gray-700 bg-gray-900/50">
+          <Card className={cardClass}>
             <CardHeader className="pb-4">
               <CardTitle className="text-base flex items-center gap-2">
-                <Server className="h-4 w-4 text-blue-400" />
+                <Server className={cn("h-4 w-4", isDark ? "text-blue-400" : "text-blue-600")} />
                 Provider & Model
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
               {/* Provider selector */}
               <div className="space-y-2">
-                <Label className="text-sm text-gray-300">Provider</Label>
+                <Label className={labelClass}>Provider</Label>
                 <Select value={config.provider} onValueChange={handleProviderChange}>
-                  <SelectTrigger className="bg-gray-800 border-gray-700 text-gray-200">
+                  <SelectTrigger className={inputClass}>
                     <SelectValue placeholder="Select provider" />
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
+                  <SelectContent className={selectContentClass}>
                     {PROVIDER_OPTIONS.map(opt => (
-                      <SelectItem key={opt.value} value={opt.value} className="text-gray-200">
+                      <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
                         <div className="flex flex-col">
                           <span>{opt.label}</span>
-                          <span className="text-xs text-gray-500">{opt.description}</span>
+                          <span className={cn("text-xs", subtleTextClass)}>{opt.description}</span>
                         </div>
                       </SelectItem>
                     ))}
@@ -357,15 +390,15 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
 
               {/* Model selector */}
               <div className="space-y-2">
-                <Label className="text-sm text-gray-300">Model</Label>
+                <Label className={labelClass}>Model</Label>
                 {models.length > 0 ? (
                   <Select value={config.model} onValueChange={handleModelChange}>
-                    <SelectTrigger className="bg-gray-800 border-gray-700 text-gray-200">
+                    <SelectTrigger className={inputClass}>
                       <SelectValue placeholder="Select model" />
                     </SelectTrigger>
-                    <SelectContent className="bg-gray-800 border-gray-700">
+                    <SelectContent className={selectContentClass}>
                       {models.map(m => (
-                        <SelectItem key={m.value} value={m.value} className="text-gray-200">
+                        <SelectItem key={m.value} value={m.value} className={selectItemClass}>
                           {m.label}
                         </SelectItem>
                       ))}
@@ -381,7 +414,7 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
                       }
                     }}
                     placeholder="e.g. gpt-4o-mini or custom-model-id"
-                    className="bg-gray-800 border-gray-700 text-gray-200 placeholder:text-gray-500"
+                    className={cn(inputClass, "placeholder:text-gray-400 dark:placeholder:text-gray-500")}
                   />
                 )}
               </div>
@@ -389,25 +422,28 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
               {/* Custom endpoint (custom/Azure only) */}
               {config.provider === 'custom' && (
                 <div className="space-y-2">
-                  <Label className="text-sm text-gray-300">Custom Endpoint</Label>
+                  <Label className={labelClass}>Custom Endpoint</Label>
                   <Input
                     value={config.endpoint || ''}
                     onChange={e => updateConfig({ endpoint: e.target.value })}
                     placeholder="https://your-deployment.openai.azure.com/v1"
-                    className="bg-gray-800 border-gray-700 text-gray-200 placeholder:text-gray-500 font-mono text-sm"
+                    className={cn(inputClass, "placeholder:text-gray-400 dark:placeholder:text-gray-500 font-mono text-sm")}
                   />
                 </div>
               )}
 
-              <Separator className="bg-gray-700" />
+              <Separator className={separatorClass} />
 
               {/* API Key management */}
               <div className="space-y-3">
-                <Label className="flex items-center gap-2 text-sm text-gray-300">
+                <Label className={cn("flex items-center gap-2 text-sm", isDark ? "text-gray-300" : "text-gray-700")}>
                   <Key className="h-4 w-4" />
                   API Key
                   {activeProviderHasKey && (
-                    <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/30 ml-1">
+                    <Badge variant="outline" className={cn(
+                      "text-xs ml-1",
+                      isDark ? "bg-green-500/10 text-green-400 border-green-500/30" : "bg-green-50 text-green-700 border-green-200"
+                    )}>
                       <Shield className="h-3 w-3 mr-1" />
                       Key stored securely
                     </Badge>
@@ -417,11 +453,14 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
                 {activeProviderHasKey ? (
                   /* Key exists — show status + remove */
                   <div className="space-y-3">
-                    <div className="p-3 rounded-lg bg-green-500/5 border border-green-500/20">
-                      <p className="text-sm text-green-400 font-mono">
+                    <div className={cn(
+                      "p-3 rounded-lg border",
+                      isDark ? "bg-green-500/5 border-green-500/20" : "bg-green-50 border-green-200"
+                    )}>
+                      <p className={cn("text-sm font-mono", isDark ? "text-green-400" : "text-green-700")}>
                         ********...****
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className={cn("text-xs mt-1", subtleTextClass)}>
                         Stored on the server. The key is never sent to the browser.
                       </p>
                     </div>
@@ -431,7 +470,7 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
                         variant="outline"
                         size="sm"
                         disabled={deletingKey}
-                        className="text-red-400 border-red-500/30 hover:bg-red-500/10"
+                        className={cn(isDark ? "text-red-400 border-red-500/30 hover:bg-red-500/10" : "text-red-600 border-red-200 hover:bg-red-50")}
                       >
                         {deletingKey ? (
                           <Loader2 className="h-4 w-4 mr-1 animate-spin" />
@@ -464,7 +503,7 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
                         value={apiKeyInput}
                         onChange={e => setApiKeyInput(e.target.value)}
                         placeholder={config.provider === 'anthropic' ? 'sk-ant-...' : 'sk-...'}
-                        className="flex-1 bg-gray-800 border-gray-700 text-gray-200 placeholder:text-gray-500 font-mono text-sm"
+                        className={cn("flex-1 font-mono text-sm", inputClass, "placeholder:text-gray-400 dark:placeholder:text-gray-500")}
                         onKeyDown={e => {
                           if (e.key === 'Enter') handleSaveKey();
                         }}
@@ -482,7 +521,7 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
                         Save Key
                       </Button>
                     </div>
-                    <p className="text-xs text-gray-500">
+                    <p className={cn("text-xs", subtleTextClass)}>
                       Your key is sent directly to the backend and stored encrypted. It is never persisted in the browser.
                     </p>
                   </div>
@@ -491,8 +530,11 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
 
               {/* Connection status */}
               {status.error && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                  <p className="text-sm text-red-400">{status.error}</p>
+                <div className={cn(
+                  "p-3 rounded-lg border",
+                  isDark ? "bg-red-500/10 border-red-500/20" : "bg-red-50 border-red-200"
+                )}>
+                  <p className={cn("text-sm", isDark ? "text-red-400" : "text-red-600")}>{status.error}</p>
                 </div>
               )}
             </CardContent>
@@ -501,25 +543,28 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
           {/* ================================================================
               3. Feature Toggles
               ================================================================ */}
-          <Card className="border-gray-700 bg-gray-900/50">
+          <Card className={cardClass}>
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-purple-400" />
+                  <Sparkles className={cn("h-4 w-4", isDark ? "text-purple-400" : "text-purple-600")} />
                   AI Features
                 </CardTitle>
-                <span className="text-xs text-gray-500">
+                <span className={cn("text-xs", subtleTextClass)}>
                   {enabledFeatureCount}/{Object.keys(AI_FEATURE_AREAS).length} enabled
                 </span>
               </div>
-              <CardDescription className="text-gray-400">
+              <CardDescription className={mutedTextClass}>
                 Enable or disable specific AI capabilities
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-1">
               {!featureTogglesEnabled && (
-                <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                  <p className="text-sm text-amber-400">
+                <div className={cn(
+                  "mb-4 p-3 rounded-lg border",
+                  isDark ? "bg-amber-500/10 border-amber-500/20" : "bg-amber-50 border-amber-200"
+                )}>
+                  <p className={cn("text-sm", isDark ? "text-amber-400" : "text-amber-700")}>
                     {!activeProviderHasKey
                       ? 'Store an API key above to enable feature toggles.'
                       : 'Connect to the AI provider to enable feature toggles.'}
@@ -532,25 +577,28 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
                 const groupEnabled = featureIds.filter(id => config.enabledFeatures.has(id)).length;
 
                 return (
-                  <div key={groupName} className="border border-gray-700/50 rounded-lg overflow-hidden">
+                  <div key={groupName} className={cn("border rounded-lg overflow-hidden", innerBorderClass)}>
                     {/* Group header */}
                     <button
                       type="button"
                       onClick={() => toggleGroup(groupName)}
-                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-800/50 transition-colors"
+                      className={cn(
+                        "w-full flex items-center justify-between px-4 py-2.5 transition-colors",
+                        isDark ? "hover:bg-gray-800/50" : "hover:bg-gray-50"
+                      )}
                     >
                       <div className="flex items-center gap-2">
                         {isExpanded
-                          ? <ChevronDown className="h-4 w-4 text-gray-500" />
-                          : <ChevronRight className="h-4 w-4 text-gray-500" />}
-                        <span className="text-sm font-medium text-gray-300">{groupName}</span>
+                          ? <ChevronDown className={cn("h-4 w-4", subtleTextClass)} />
+                          : <ChevronRight className={cn("h-4 w-4", subtleTextClass)} />}
+                        <span className={cn("text-sm font-medium", isDark ? "text-gray-300" : "text-gray-700")}>{groupName}</span>
                       </div>
-                      <span className="text-xs text-gray-500">{groupEnabled}/{featureIds.length}</span>
+                      <span className={cn("text-xs", subtleTextClass)}>{groupEnabled}/{featureIds.length}</span>
                     </button>
 
                     {/* Feature rows */}
                     {isExpanded && (
-                      <div className="border-t border-gray-700/50">
+                      <div className={cn("border-t", innerBorderClass)}>
                         {featureIds.map(featureId => {
                           const feature = Object.values(AI_FEATURE_AREAS).find(f => f.id === featureId);
                           if (!feature) return null;
@@ -558,13 +606,16 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
                           return (
                             <div
                               key={featureId}
-                              className="flex items-center justify-between px-4 py-2 pl-10 hover:bg-gray-800/30"
+                              className={cn(
+                                "flex items-center justify-between px-4 py-2 pl-10",
+                                isDark ? "hover:bg-gray-800/30" : "hover:bg-gray-50"
+                              )}
                             >
                               <div className="flex items-center gap-2 min-w-0">
                                 <span className="text-sm shrink-0">{feature.icon}</span>
                                 <div className="min-w-0">
-                                  <span className="text-sm text-gray-200 block truncate">{feature.name}</span>
-                                  <span className="text-xs text-gray-500 block truncate">{feature.description}</span>
+                                  <span className={cn("text-sm block truncate", bodyTextClass)}>{feature.name}</span>
+                                  <span className={cn("text-xs block truncate", subtleTextClass)}>{feature.description}</span>
                                 </div>
                               </div>
                               <Switch
@@ -587,10 +638,10 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
           {/* ================================================================
               4. Usage & Budget
               ================================================================ */}
-          <Card className="border-gray-700 bg-gray-900/50">
+          <Card className={cardClass}>
             <CardHeader className="pb-4">
               <CardTitle className="text-base flex items-center gap-2">
-                <Activity className="h-4 w-4 text-cyan-400" />
+                <Activity className={cn("h-4 w-4", isDark ? "text-cyan-400" : "text-cyan-600")} />
                 Usage & Budget
               </CardTitle>
             </CardHeader>
@@ -598,8 +649,8 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
               {/* Requests today */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-400">Requests today</span>
-                  <span className="text-gray-200 font-mono">
+                  <span className={mutedTextClass}>Requests today</span>
+                  <span className={cn("font-mono", bodyTextClass)}>
                     {config.requestsToday} / {config.maxRequestsPerDay}
                   </span>
                 </div>
@@ -609,8 +660,8 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
               {/* Cost tracking */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-400">Estimated cost (session)</span>
-                  <span className="text-gray-200 font-mono">
+                  <span className={mutedTextClass}>Estimated cost (session)</span>
+                  <span className={cn("font-mono", bodyTextClass)}>
                     ${config.totalCost.toFixed(4)}
                   </span>
                 </div>
@@ -618,17 +669,17 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
 
               {/* Total requests */}
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-400">Total requests (all time)</span>
-                <span className="text-gray-200 font-mono">{config.requestCount}</span>
+                <span className={mutedTextClass}>Total requests (all time)</span>
+                <span className={cn("font-mono", bodyTextClass)}>{config.requestCount}</span>
               </div>
 
-              <Separator className="bg-gray-700" />
+              <Separator className={separatorClass} />
 
               {/* Budget tracking toggle */}
               <div className="flex items-center justify-between">
                 <div>
-                  <Label className="text-sm text-gray-300">Cost Tracking</Label>
-                  <p className="text-xs text-gray-500">Track estimated token costs</p>
+                  <Label className={labelClass}>Cost Tracking</Label>
+                  <p className={cn("text-xs", subtleTextClass)}>Track estimated token costs</p>
                 </div>
                 <Switch
                   checked={config.costTracking}
