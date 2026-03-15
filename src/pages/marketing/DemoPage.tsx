@@ -9,7 +9,7 @@ import {
   ArrowRight, Play, Pause, SkipForward, RotateCcw, CheckCircle2,
   MousePointer, Type, Eye, Zap, Database, BarChart3, Shield, Workflow,
   ChevronRight, ChevronLeft, Maximize2, Volume2, VolumeX, Code,
-  Compass, Map, RefreshCw, Target, Smartphone, Wifi, Globe
+  Compass, Map, RefreshCw, Target, Smartphone, Wifi, Globe, Accessibility, AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -122,6 +122,21 @@ const demoSteps = [
     icon: Smartphone,
     color: 'sky'
   },
+  {
+    id: 'accessibility',
+    title: 'Accessibility',
+    subtitle: 'WCAG 2.1 compliance scanning',
+    description: 'Scan any page for accessibility issues with axe-core. Get severity-ranked results with element-level fix guidance for WCAG 2.1 A/AA/AAA compliance.',
+    duration: 50,
+    highlights: [
+      'WCAG 2.1 Level A / AA / AAA scanning',
+      'Severity-ranked issues (critical to minor)',
+      'Element-level fix guidance per issue',
+      'Batch scanning for multiple URLs'
+    ],
+    icon: Accessibility,
+    color: 'indigo'
+  },
 ];
 
 function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[0]; isPlaying: boolean; progress: number }) {
@@ -144,6 +159,7 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
     cyan: { bg: 'bg-cyan-500', text: 'text-cyan-600', border: 'border-cyan-300', light: 'bg-cyan-50' },
     fuchsia: { bg: 'bg-teal-500', text: 'text-teal-600', border: 'border-teal-300', light: 'bg-teal-50' },
     sky: { bg: 'bg-sky-500', text: 'text-sky-600', border: 'border-sky-300', light: 'bg-sky-50' },
+    indigo: { bg: 'bg-indigo-500', text: 'text-indigo-600', border: 'border-indigo-300', light: 'bg-indigo-50' },
   };
 
   const colors = colorClasses[step.color as keyof typeof colorClasses];
@@ -511,6 +527,72 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
           </div>
         );
 
+      case 'accessibility':
+        return (
+          <div className="h-full bg-white rounded-lg p-3 overflow-hidden border border-slate-200">
+            {/* Scan Header */}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Accessibility className="w-4 h-4 text-indigo-500" />
+                <span className="text-xs font-semibold text-slate-700">WCAG 2.1 AA Scan</span>
+              </div>
+              {isPlaying && <Badge className="text-[8px] bg-indigo-100 text-indigo-700">Scanning...</Badge>}
+            </div>
+
+            {/* Severity Summary */}
+            <div className="grid grid-cols-4 gap-1.5 mb-2">
+              {[
+                { label: 'Critical', count: isPlaying ? 2 : '--', color: 'text-red-600 bg-red-50 border-red-200' },
+                { label: 'Serious', count: isPlaying ? 5 : '--', color: 'text-orange-600 bg-orange-50 border-orange-200' },
+                { label: 'Moderate', count: isPlaying ? 8 : '--', color: 'text-yellow-600 bg-yellow-50 border-yellow-200' },
+                { label: 'Minor', count: isPlaying ? 3 : '--', color: 'text-blue-600 bg-blue-50 border-blue-200' },
+              ].map((item) => (
+                <div key={item.label} className={cn("rounded p-1.5 text-center border", item.color)}>
+                  <div className="text-sm font-bold">{item.count}</div>
+                  <div className="text-[7px] font-medium">{item.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Issue List */}
+            <div className="space-y-1.5">
+              {[
+                { rule: 'image-alt', impact: 'Critical', desc: 'Images must have alt text', el: '<img src="hero.jpg">' },
+                { rule: 'color-contrast', impact: 'Serious', desc: 'Text must meet 4.5:1 ratio', el: '<p class="light-text">' },
+                { rule: 'label', impact: 'Serious', desc: 'Form inputs must have labels', el: '<input type="email">' },
+                { rule: 'link-name', impact: 'Moderate', desc: 'Links must have text', el: '<a href="/page"></a>' },
+              ].map((issue, idx) => (
+                <div
+                  key={idx}
+                  className={cn(
+                    "p-2 rounded border transition-all duration-300",
+                    isPlaying && animationStep % 4 === idx
+                      ? "bg-indigo-50 border-indigo-300"
+                      : "bg-slate-50 border-slate-100"
+                  )}
+                >
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[10px] font-semibold text-slate-700">{issue.rule}</span>
+                    <Badge className={cn("text-[7px] border-0",
+                      issue.impact === 'Critical' ? 'bg-red-100 text-red-700' :
+                      issue.impact === 'Serious' ? 'bg-orange-100 text-orange-700' :
+                      'bg-yellow-100 text-yellow-700'
+                    )}>{issue.impact}</Badge>
+                  </div>
+                  <p className="text-[9px] text-slate-500">{issue.desc}</p>
+                  <code className="text-[8px] text-slate-400 font-mono">{issue.el}</code>
+                </div>
+              ))}
+            </div>
+
+            {isPlaying && (
+              <div className="mt-2 text-center">
+                <span className="text-[9px] text-slate-400">18 issues found across 47 elements</span>
+              </div>
+            )}
+          </div>
+        );
+
       case 'mobile':
         return (
           <div className="h-full bg-white rounded-lg p-3 overflow-hidden border border-slate-200">
@@ -700,6 +782,7 @@ const featureToStepMap: Record<string, string> = {
   'dashboards': 'dashboards',
   'smart-recorder': 'recorder',
   'mobile-testing': 'mobile',
+  'accessibility': 'accessibility',
 };
 
 export default function DemoPage() {
@@ -874,7 +957,7 @@ export default function DemoPage() {
           </div>
 
           {/* Step Navigation */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mt-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mt-8">
             {demoSteps.map((s, idx) => (
               <button
                 key={s.id}

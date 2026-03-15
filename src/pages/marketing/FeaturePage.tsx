@@ -2,7 +2,7 @@
  * Feature Pages - Reusable Template for Product Features
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
   MousePointer, Play, CheckCircle2, ArrowRight, Lightbulb,
@@ -205,7 +205,12 @@ export default function FeaturePage() {
   const { feature } = useParams<{ feature: string }>();
   
   const config = feature ? featureConfigs[feature] : null;
-  
+
+  // Scroll to top when navigating between feature pages
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [feature]);
+
   if (!config) {
     return (
       <div className="min-h-screen flex items-center justify-center">
