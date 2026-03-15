@@ -131,6 +131,30 @@ export default function Accessibility() {
   // Expanded issue details
   const [expandedIssues, setExpandedIssues] = useState<Set<string>>(new Set());
 
+  // Scanner setup status (from /check-setup diagnostic endpoint)
+  const [setupStatus, setSetupStatus] = useState<{
+    playwright_installed: boolean;
+    chromium_available: boolean;
+    scan_method: "axe_core" | "basic_html";
+    setup_instructions: string[];
+  } | null>(null);
+
+  // Check scanner setup on mount
+  useEffect(() => {
+    const checkSetup = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/accessibility/check-setup`);
+        if (res.ok) {
+          const data = await res.json();
+          setSetupStatus(data);
+        }
+      } catch {
+        // Silently fail — scan itself will show warnings
+      }
+    };
+    checkSetup();
+  }, []);
+
   // Cleanup abort controller on unmount
   useEffect(() => {
     return () => {
@@ -425,6 +449,49 @@ export default function Accessibility() {
         </div>
       </div>
 
+      {/* Scanner Setup Warning (shown before scan form if axe-core is unavailable) */}
+      {setupStatus && setupStatus.scan_method === 'basic_html' && (
+        <Card className="border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20">
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-amber-800 dark:text-amber-300 text-sm">Limited Scanner Mode</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                  The full axe-core scanner is not available. Scans will use basic HTML pattern matching
+                  which detects fewer issues. To enable full WCAG scanning:
+                </p>
+                {setupStatus.setup_instructions.length > 0 && (
+                  <ol className="text-xs text-amber-600 dark:text-amber-500 mt-2 list-decimal ml-4 space-y-1">
+                    {setupStatus.setup_instructions.map((instruction, i) => (
+                      <li key={i}><code className="bg-amber-100 dark:bg-amber-800/50 px-1.5 py-0.5 rounded text-[11px]">{instruction}</code></li>
+                    ))}
+                  </ol>
+                )}
+                <Button
+                  variant="ghost" size="sm" className="mt-2 h-7 text-xs text-amber-700 dark:text-amber-400"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/api/accessibility/check-setup`);
+                      if (res.ok) {
+                        const data = await res.json();
+                        setSetupStatus(data);
+                        toast.info(data.scan_method === 'axe_core'
+                          ? 'Full axe-core scanner is now available! Re-scan to get detailed results.'
+                          : `Setup incomplete: ${data.setup_instructions.join(', then ')}`
+                        );
+                      }
+                    } catch { toast.error('Could not check scanner setup'); }
+                  }}
+                >
+                  <RefreshCw className="w-3 h-3 mr-1" /> Re-check Setup
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -613,6 +680,26 @@ export default function Accessibility() {
                   For full axe-core scanning with detailed element-level violations, run the backend locally with Playwright installed:
                   <code className="bg-amber-100 dark:bg-amber-800/50 text-amber-900 dark:text-amber-200 px-1.5 py-0.5 rounded ml-1">pip install playwright && playwright install chromium</code>
                 </p>
+                <div className="flex items-center gap-2 mt-3">
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => scanPage()} disabled={isScanning}>
+                    <RefreshCw className={`w-3 h-3 mr-1 ${isScanning ? 'animate-spin' : ''}`} /> Re-scan
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-amber-700 dark:text-amber-400" onClick={async () => {
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/api/accessibility/check-setup`);
+                      if (res.ok) {
+                        const data = await res.json();
+                        setSetupStatus(data);
+                        toast.info(data.scan_method === 'axe_core'
+                          ? 'Full axe-core scanner is now available! Re-scan to get detailed results.'
+                          : `Setup incomplete: ${data.setup_instructions.join(', then ')}`
+                        );
+                      }
+                    } catch { toast.error('Could not check scanner setup'); }
+                  }}>
+                    Check Setup
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>

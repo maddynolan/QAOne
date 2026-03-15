@@ -883,6 +883,17 @@ export default function VisualTestingPage() {
                   ))}
                 </div>
 
+                {/* Comparison Warning / Error */}
+                {comparisonResult.error && (
+                  <div className="mb-4 p-3 rounded-lg border border-amber-500/50 bg-amber-500/10 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Comparison Warning</p>
+                      <p className="text-xs text-amber-600/80 dark:text-amber-400/80 mt-0.5">{comparisonResult.error}</p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Diff Viewer */}
                 {comparisonResult.diff_image_base64 && baselineImage && actualImage && (
                   <div className="space-y-3">

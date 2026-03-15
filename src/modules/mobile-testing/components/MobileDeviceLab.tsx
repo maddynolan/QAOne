@@ -351,12 +351,13 @@ export default function MobileDeviceLab() {
                     variant="outline"
                     className="flex-1 h-8 text-xs"
                     onClick={handleTakeScreenshot}
-                    disabled={isTakingScreenshot}
+                    disabled={isTakingScreenshot || !inElectron}
+                    title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}
                   >
                     {isTakingScreenshot ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Camera className="w-3 h-3 mr-1" />}
                     Screenshot
                   </Button>
-                  <Button size="sm" variant="outline" className="flex-1 h-8 text-xs">
+                  <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}>
                     <Power className="w-3 h-3 mr-1" /> Restart
                   </Button>
                 </div>
@@ -391,7 +392,7 @@ export default function MobileDeviceLab() {
                     placeholder={selectedPlatform === 'ios' ? '/path/to/MyApp.app' : '/path/to/app.apk'}
                     className="flex-1 text-xs"
                   />
-                  <Button size="sm" variant="outline" className="shrink-0" onClick={async () => {
+                  <Button size="sm" variant="outline" className="shrink-0" disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined} onClick={async () => {
                     const result = await mobile.browseForApp();
                     if (result?.success) setInstallPath(result.path);
                   }}>
@@ -415,7 +416,8 @@ export default function MobileDeviceLab() {
               <Button
                 className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                 onClick={handleInstallApp}
-                disabled={isInstalling || !installPath.trim()}
+                disabled={isInstalling || !installPath.trim() || !inElectron}
+                title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}
               >
                 {isInstalling ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Installing...</>
@@ -429,7 +431,7 @@ export default function MobileDeviceLab() {
             <div className="mt-4 pt-4 border-t border-inherit">
               <h4 className={cn("text-xs font-medium mb-2", isDark ? 'text-gray-400' : 'text-gray-600')}>Quick Actions</h4>
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" size="sm" className="h-8 text-xs justify-start" onClick={async () => {
+                <Button variant="outline" size="sm" className="h-8 text-xs justify-start" disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined} onClick={async () => {
                   if (!appBundleId) { toast.error('Enter a Bundle ID first'); return; }
                   const deviceId = selectedDevice;
                   try {
@@ -440,7 +442,7 @@ export default function MobileDeviceLab() {
                 }}>
                   <Trash2 className="w-3 h-3 mr-1.5" /> Clear App Data
                 </Button>
-                <Button variant="outline" size="sm" className="h-8 text-xs justify-start" onClick={async () => {
+                <Button variant="outline" size="sm" className="h-8 text-xs justify-start" disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined} onClick={async () => {
                   if (!appBundleId) { toast.error('Enter a Bundle ID first'); return; }
                   try {
                     const deviceId = selectedDevice;
@@ -453,13 +455,13 @@ export default function MobileDeviceLab() {
                 }}>
                   <PowerOff className="w-3 h-3 mr-1.5" /> Force Stop App
                 </Button>
-                <Button variant="outline" size="sm" className="h-8 text-xs justify-start" onClick={() => {
+                <Button variant="outline" size="sm" className="h-8 text-xs justify-start" disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined} onClick={() => {
                   loadDevices();
                   toast.info('Refreshing device list...');
                 }}>
                   <RotateCcw className="w-3 h-3 mr-1.5" /> Restart App
                 </Button>
-                <Button variant="outline" size="sm" className="h-8 text-xs justify-start" onClick={async () => {
+                <Button variant="outline" size="sm" className="h-8 text-xs justify-start" disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined} onClick={async () => {
                   if (!appBundleId) { toast.error('Enter a Bundle ID first'); return; }
                   try {
                     const deviceId = selectedDevice;
@@ -533,7 +535,7 @@ export default function MobileDeviceLab() {
                   Stop
                 </Button>
               ) : (
-                <Button size="sm" className="h-7 text-xs bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleStartLogs}>
+                <Button size="sm" className="h-7 text-xs bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleStartLogs} disabled={!inElectron} title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}>
                   <Play className="w-3 h-3 mr-1" /> Start Capture
                 </Button>
               )}
@@ -579,7 +581,8 @@ export default function MobileDeviceLab() {
               size="sm"
               className="h-7 text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
               onClick={handleTakeScreenshot}
-              disabled={isTakingScreenshot || !selectedDevice}
+              disabled={isTakingScreenshot || !selectedDevice || !inElectron}
+              title={!inElectron ? 'Requires Flowstral Desktop App' : undefined}
             >
               {isTakingScreenshot ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Camera className="w-3 h-3 mr-1" />}
               Capture

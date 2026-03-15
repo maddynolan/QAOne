@@ -114,6 +114,74 @@ async def run_axe_core_scan(url: str, component_selector: Optional[str] = None, 
     return {"violations": violations, "html": html_content, "scanner_error": scanner_error}
 
 
+@router.get("/check-setup")
+async def check_accessibility_setup() -> Dict[str, Any]:
+    """
+    Diagnostic endpoint — checks if the accessibility scanner is properly configured.
+    Returns status of Playwright, Chromium, and axe-core availability so the frontend
+    can show setup instructions before the user runs a scan.
+    """
+    import sys
+    import os
+    import subprocess
+
+    result = {
+        "playwright_installed": False,
+        "chromium_available": False,
+        "axe_scanner_script_exists": False,
+        "scan_method": "basic_html",
+        "setup_instructions": []
+    }
+
+    # Check 1: axe_scanner.py exists
+    script_path = os.path.join(
+        os.path.dirname(__file__),
+        "..", "..", "services", "accessibility", "axe_scanner.py"
+    )
+    script_path = os.path.abspath(script_path)
+    result["axe_scanner_script_exists"] = os.path.exists(script_path)
+
+    # Check 2: Playwright importable
+    try:
+        import playwright  # noqa: F401
+        result["playwright_installed"] = True
+    except ImportError:
+        result["setup_instructions"].append("pip install playwright")
+
+    # Check 3: Chromium browser binary available
+    if result["playwright_installed"]:
+        try:
+            # Check if the Playwright browsers registry path exists
+            check_result = await asyncio.to_thread(
+                subprocess.run,
+                [sys.executable, "-c",
+                 "from playwright._impl._driver import compute_driver_executable; print('ok')"],
+                capture_output=True, text=True, timeout=10
+            )
+            if check_result.returncode == 0 and 'ok' in check_result.stdout:
+                # Driver exists — check if chromium binary is actually installed
+                browser_check = await asyncio.to_thread(
+                    subprocess.run,
+                    [sys.executable, "-c",
+                     "from playwright.sync_api import sync_playwright; "
+                     "p = sync_playwright().start(); "
+                     "b = p.chromium.launch(headless=True); b.close(); p.stop(); print('ok')"],
+                    capture_output=True, text=True, timeout=30
+                )
+                result["chromium_available"] = browser_check.returncode == 0 and 'ok' in browser_check.stdout
+        except Exception as e:
+            logger.debug(f"Chromium check failed: {e}")
+
+        if not result["chromium_available"]:
+            result["setup_instructions"].append("python -m playwright install chromium")
+
+    # Determine scan method
+    if result["playwright_installed"] and result["chromium_available"] and result["axe_scanner_script_exists"]:
+        result["scan_method"] = "axe_core"
+
+    return {"success": True, **result}
+
+
 # Valid parameter constants
 VALID_SCAN_TYPES = {"full_page", "component", "site_wide"}
 VALID_WCAG_LEVELS = {"A", "AA", "AAA"}

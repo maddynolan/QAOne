@@ -277,22 +277,39 @@ async def compare_images(request: CompareRequest) -> Dict[str, Any]:
             generate_diff=True
         )
         
-        # Handle base64 input
+        # Handle base64 input vs file path
+        # base64 strings are always long (>200 chars); short strings might be file paths
         baseline = request.baseline
         actual = request.actual
-        
-        if not Path(baseline).exists() and len(baseline) > 200:
+
+        if len(baseline) > 200:
             baseline = base64.b64decode(baseline)
-        if not Path(actual).exists() and len(actual) > 200:
+        else:
+            try:
+                if not Path(baseline).exists():
+                    raise HTTPException(status_code=400, detail="Baseline image file not found")
+            except OSError:
+                # Invalid path characters — treat as base64
+                baseline = base64.b64decode(baseline)
+
+        if len(actual) > 200:
             actual = base64.b64decode(actual)
-        
+        else:
+            try:
+                if not Path(actual).exists():
+                    raise HTTPException(status_code=400, detail="Actual image file not found")
+            except OSError:
+                actual = base64.b64decode(actual)
+
         result = engine.compare(baseline, actual, options, request.test_name)
-        
+
         return {
             "success": True,
             "result": result.to_dict()
         }
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error comparing images: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error during image comparison")
