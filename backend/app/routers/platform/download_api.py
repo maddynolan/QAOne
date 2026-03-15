@@ -1,8 +1,8 @@
 """
-Download Proxy API - Serves GitHub release assets for private repos.
+Download Proxy API - Serves GitHub release assets.
 
-Since the GitHub repo is private, release asset download URLs require authentication.
-This endpoint proxies the download so users can download installers without a GitHub account.
+For public repos: redirects directly to GitHub's CDN download URL (fast, no memory usage).
+For private repos: proxies through the backend using GITHUB_TOKEN with true streaming.
 """
 
 import os
@@ -32,84 +32,59 @@ ALLOWED_FILES = {
 async def download_release_asset(filename: str):
     """
     Download a release asset from the latest GitHub release.
-    
-    Proxies the download from the private GitHub repo so users
-    don't need a GitHub account to download the installer.
+
+    Strategy:
+      1. Fetch latest release metadata from GitHub API (works for public repos without token)
+      2. For public repos: redirect to the browser_download_url (GitHub CDN)
+      3. For private repos: stream-proxy via the API using GITHUB_TOKEN
     """
     if filename not in ALLOWED_FILES:
         raise HTTPException(status_code=404, detail="File not found")
-    
-    if not GITHUB_TOKEN:
-        raise HTTPException(
-            status_code=503, 
-            detail="Download service not configured. Set GITHUB_TOKEN env var."
-        )
-    
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-    
+
+    # Build headers — token is optional for public repos
+    api_headers = {"Accept": "application/vnd.github.v3+json"}
+    if GITHUB_TOKEN:
+        api_headers["Authorization"] = f"token {GITHUB_TOKEN}"
+
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            # Get the latest release
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            # 1. Get the latest release metadata
             release_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
-            release_resp = await client.get(release_url, headers=headers)
-            
+            release_resp = await client.get(release_url, headers=api_headers)
+
             if release_resp.status_code != 200:
-                logger.error(f"[Download] Failed to fetch latest release: {release_resp.status_code}")
+                logger.error(f"[Download] Failed to fetch latest release: {release_resp.status_code} {release_resp.text[:200]}")
                 raise HTTPException(status_code=502, detail="Could not fetch release info from GitHub")
-            
+
             release_data = release_resp.json()
-            
-            # Find the matching asset
-            asset_url = None
+            tag = release_data.get("tag_name", "unknown")
+
+            # 2. Find the matching asset
+            browser_url = None
+            api_url = None
             asset_size = 0
             for asset in release_data.get("assets", []):
                 if asset["name"] == filename:
-                    asset_url = asset["url"]  # API URL (not browser URL)
-                    asset_size = asset["size"]
+                    browser_url = asset.get("browser_download_url")
+                    api_url = asset.get("url")
+                    asset_size = asset.get("size", 0)
                     break
-            
-            if not asset_url:
+
+            if not browser_url and not api_url:
                 raise HTTPException(
-                    status_code=404, 
-                    detail=f"{filename} not found in latest release ({release_data.get('tag_name', 'unknown')})"
+                    status_code=404,
+                    detail=f"{filename} not found in latest release ({tag})"
                 )
-            
-            # Stream the asset download
-            download_headers = {
-                "Authorization": f"token {GITHUB_TOKEN}",
-                "Accept": "application/octet-stream",
-            }
-            
-            # Use follow_redirects since GitHub API redirects to the actual download URL
-            asset_resp = await client.get(
-                asset_url, 
-                headers=download_headers, 
-                follow_redirects=True
-            )
-            
-            if asset_resp.status_code != 200:
-                logger.error(f"[Download] Failed to download asset: {asset_resp.status_code}")
-                raise HTTPException(status_code=502, detail="Could not download file from GitHub")
-            
-            # Determine content type
-            content_type = "application/octet-stream"
-            if filename.endswith(".yml"):
-                content_type = "text/yaml"
-            elif filename.endswith(".exe"):
-                content_type = "application/x-msdownload"
-            
-            return StreamingResponse(
-                iter([asset_resp.content]),
-                media_type=content_type,
-                headers={
-                    "Content-Disposition": f'attachment; filename="{filename}"',
-                    "Content-Length": str(len(asset_resp.content)),
-                }
-            )
-    
+
+            # 3. Public repo: redirect to GitHub CDN (fast, no server memory/bandwidth)
+            if browser_url:
+                logger.info(f"[Download] Redirecting {filename} from release {tag} -> GitHub CDN")
+                return RedirectResponse(
+                    url=browser_url,
+                    status_code=302,
+                    headers={"Cache-Control": "no-cache"},
+                )
+
     except HTTPException:
         raise
     except Exception as e:
