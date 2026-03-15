@@ -525,7 +525,7 @@ function AccessibilityDemoSection() {
               ))}
             </div>
             <Button
-              onClick={() => { trackCTAClick('try_accessibility', '/'); navigate('/app/accessibility'); }}
+              onClick={() => { trackCTAClick('try_accessibility', '/'); navigate('/accessibility'); }}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               Try Accessibility Scanner

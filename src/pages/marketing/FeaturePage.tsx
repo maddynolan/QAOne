@@ -243,14 +243,14 @@ export default function FeaturePage() {
               <Button
                 size="lg"
                 onClick={() => navigate('/signup')}
-                className="h-12 px-8 text-white font-semibold rounded-xl bg-slate-900 hover:bg-slate-800"
+                className="h-12 px-8 text-white font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700"
               >
                 Try It Free <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
-              <Button 
-                size="lg" 
-                variant="outline" 
-                className="h-12 px-8 rounded-xl"
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-12 px-8 rounded-xl border-slate-300 text-slate-700 hover:bg-slate-50"
                 onClick={() => navigate(`/demo?feature=${feature}`)}
               >
                 <Play className="w-5 h-5 mr-2" /> Watch Demo
@@ -299,7 +299,7 @@ export default function FeaturePage() {
 
       {/* Footer */}
       <footer className="py-8 px-6 bg-slate-900 text-center">
-        <p className="text-slate-400 text-sm">© 2024 Flowstral. All rights reserved.</p>
+        <p className="text-slate-400 text-sm">© 2026 Flowstral. All rights reserved.</p>
       </footer>
     </div>
   );
