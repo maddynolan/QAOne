@@ -56,10 +56,13 @@ function HeroSection() {
             <br className="hidden sm:block" />
             Test everything.
           </h1>
-          <p className="text-lg sm:text-xl text-slate-600 max-w-2xl leading-relaxed mb-8">
+          <p className="text-lg sm:text-xl text-slate-600 max-w-2xl leading-relaxed mb-3">
             Flowstral records your browser sessions and turns them into reliable automated tests —
             no code required. Run those tests for performance, visual regression, accessibility,
             and API coverage — all from one platform.
+          </p>
+          <p className="text-sm text-slate-400 mb-8 max-w-2xl font-mono">
+            Flow testing + System testing + Regression + API &amp; Accessibility + Load testing = <span className="text-emerald-600 font-semibold">Flowstral</span>
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 mb-12">
@@ -391,6 +394,198 @@ function SelfHealingSection() {
 }
 
 // ===================================================================
+// AI AGENTS — Flowpilot & Blaze Explorer
+// ===================================================================
+
+function AIAgentsSection() {
+  const navigate = useNavigate();
+
+  return (
+    <section className="py-20 bg-white">
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="flex items-center gap-3 mb-4">
+          <Badge className="bg-violet-50 text-violet-700 border border-violet-200 text-xs px-2 py-0.5">
+            AI-Powered
+          </Badge>
+        </div>
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">
+          Describe what to test. AI does the rest.
+        </h2>
+        <p className="text-slate-600 mb-12 max-w-xl">
+          Two autonomous agents that go beyond record-and-playback — they think, navigate, and find defects on their own.
+        </p>
+
+        <div className="grid md:grid-cols-2 gap-8">
+          {/* Flowpilot */}
+          <div className="p-6 rounded-xl border border-slate-200 hover:border-violet-200 hover:shadow-sm transition-all">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center">
+                <Compass className="w-5 h-5 text-violet-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Flowpilot</h3>
+                <p className="text-xs text-slate-400">One sentence to live test</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 leading-relaxed mb-4">
+              Type a plain English instruction like "Add a product to cart and checkout" —
+              Flowpilot launches a real browser, navigates the app, fills forms, clicks buttons,
+              and reports pass/fail with screenshots at every step.
+            </p>
+            <div className="space-y-2 mb-4">
+              {['15+ action types (forms, tables, modals, drag-drop)', 'Self-healing selectors auto-fix broken elements', 'Handles enterprise workflows: wizards, tabs, data grids'].map((item, idx) => (
+                <div key={idx} className="flex items-start gap-2 text-xs text-slate-500">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-violet-500 flex-shrink-0 mt-0.5" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+            <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+              <p className="text-xs text-slate-400 font-mono">
+                "Log in as admin, create a new project called 'Q3 Release', assign it to the QA team, and verify it appears in the dashboard"
+              </p>
+            </div>
+          </div>
+
+          {/* Blaze Explorer */}
+          <div className="p-6 rounded-xl border border-slate-200 hover:border-orange-200 hover:shadow-sm transition-all">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
+                <Zap className="w-5 h-5 text-orange-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Blaze Explorer</h3>
+                <p className="text-xs text-slate-400">Autonomous crawl + defect detection</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 leading-relaxed mb-4">
+              Give it a URL — Blaze crawls your entire application concurrently, checking every page
+              for broken links, JS errors, accessibility violations (axe-core), console errors, and
+              missing resources. Then auto-generates a test suite from what it found.
+            </p>
+            <div className="space-y-2 mb-4">
+              {['Concurrent crawling with configurable depth & page limits', 'Auth support: cookies, bearer tokens, basic auth, form login', 'WCAG scanning via axe-core on every discovered page'].map((item, idx) => (
+                <div key={idx} className="flex items-start gap-2 text-xs text-slate-500">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-orange-500 flex-shrink-0 mt-0.5" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-3">
+              <Badge className="bg-orange-50 text-orange-700 border-orange-200 text-xs">Auto-generates smoke tests</Badge>
+              <Badge className="bg-orange-50 text-orange-700 border-orange-200 text-xs">Form regression tests</Badge>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ===================================================================
+// ACCESSIBILITY DEMO
+// ===================================================================
+
+function AccessibilityDemoSection() {
+  const navigate = useNavigate();
+
+  return (
+    <section className="py-20 bg-slate-50 border-y border-slate-200">
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <Accessibility className="w-5 h-5 text-blue-600" />
+              <Badge className="bg-blue-50 text-blue-700 border border-blue-200 text-xs px-2 py-0.5">
+                WCAG 2.1 Compliance
+              </Badge>
+            </div>
+            <h2 className="text-3xl font-bold text-slate-900 mb-4">
+              Scan any page for accessibility issues in seconds
+            </h2>
+            <p className="text-slate-600 leading-relaxed mb-6">
+              Powered by axe-core — the same engine used by Google, Microsoft, and the US government.
+              Paste a URL, pick your compliance level, and get actionable results with severity
+              classification and fix guidance.
+            </p>
+            <div className="space-y-3 mb-6">
+              {[
+                { label: 'WCAG 2.1 Level A / AA / AAA', detail: 'Choose the compliance level that matches your requirements' },
+                { label: 'Severity-ranked issues', detail: 'Critical, serious, moderate, minor — fix what matters first' },
+                { label: 'Element-level fix guidance', detail: 'Each issue includes the failing HTML and how to fix it' },
+                { label: 'Batch scanning', detail: 'Scan multiple URLs concurrently with a single API call' },
+              ].map((item, idx) => (
+                <div key={idx} className="flex items-start gap-3">
+                  <CheckCircle2 className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className="text-sm font-medium text-slate-900">{item.label}</span>
+                    <p className="text-xs text-slate-400">{item.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Button
+              onClick={() => { trackCTAClick('try_accessibility', '/'); navigate('/app/accessibility'); }}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Try Accessibility Scanner
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </div>
+
+          {/* Mock scan result UI */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Accessibility className="w-4 h-4 text-blue-600" />
+                <span className="text-sm font-semibold text-slate-700">Scan Results</span>
+              </div>
+              <Badge className="bg-green-50 text-green-700 border-green-200 text-xs">WCAG 2.1 AA</Badge>
+            </div>
+            <div className="p-4 space-y-3">
+              {/* Summary cards */}
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: 'Critical', count: 2, color: 'text-red-600 bg-red-50' },
+                  { label: 'Serious', count: 5, color: 'text-orange-600 bg-orange-50' },
+                  { label: 'Moderate', count: 8, color: 'text-yellow-600 bg-yellow-50' },
+                  { label: 'Minor', count: 3, color: 'text-blue-600 bg-blue-50' },
+                ].map((item) => (
+                  <div key={item.label} className={cn("rounded-lg p-2.5 text-center", item.color)}>
+                    <div className="text-lg font-bold">{item.count}</div>
+                    <div className="text-[10px] font-medium">{item.label}</div>
+                  </div>
+                ))}
+              </div>
+              {/* Sample issues */}
+              <div className="space-y-2">
+                {[
+                  { rule: 'image-alt', impact: 'Critical', desc: 'Images must have alt text', el: '<img src="hero.jpg">' },
+                  { rule: 'color-contrast', impact: 'Serious', desc: 'Text must meet 4.5:1 contrast', el: '<p class="light-gray">' },
+                  { rule: 'label', impact: 'Serious', desc: 'Form inputs must have labels', el: '<input type="email">' },
+                ].map((issue, idx) => (
+                  <div key={idx} className="p-3 rounded-lg border border-slate-100 bg-slate-50">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-slate-700">{issue.rule}</span>
+                      <Badge className={cn("text-[10px]",
+                        issue.impact === 'Critical' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-orange-50 text-orange-700 border-orange-200'
+                      )}>{issue.impact}</Badge>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-1">{issue.desc}</p>
+                    <code className="text-[10px] text-slate-400 font-mono">{issue.el}</code>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-slate-400 text-center">18 issues found across 47 elements scanned</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ===================================================================
 // DEPLOYMENT OPTIONS
 // ===================================================================
 
@@ -590,6 +785,8 @@ function LandingPageContent() {
         <HowItWorksSection />
         <CapabilitiesSection />
         <SelfHealingSection />
+        <AIAgentsSection />
+        <AccessibilityDemoSection />
         <DeploymentSection />
         <CTASection />
       </main>
