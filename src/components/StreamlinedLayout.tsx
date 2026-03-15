@@ -129,6 +129,13 @@ const mainNavItems: NavItem[] = [
     description: 'Salesforce tools',
     plugin: 'salesforce',
   },
+  {
+    id: 'flowpilot',
+    label: 'Flowpilot',
+    path: '/flowpilot',
+    description: 'AI-powered testing agents',
+    plugin: 'flowpilot',
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -279,6 +286,8 @@ function Header() {
               isActive = currentPath.includes('/builder');
             } else if (item.id === 'tests') {
               isActive = currentPath.startsWith('/test-cases') && !currentPath.includes('/builder');
+            } else if (item.id === 'flowpilot') {
+              isActive = currentPath.startsWith('/flowpilot') || currentPath.startsWith('/ai-testing');
             } else {
               isActive = currentPath.startsWith(item.path);
             }
@@ -306,11 +315,11 @@ function Header() {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48">
-                {coreFeatures.map((item, idx) => 
+                {coreFeatures.map((item, idx) =>
                   item.divider ? (
                     <DropdownMenuSeparator key={idx} />
                   ) : (
-                    <DropdownMenuItem 
+                    <DropdownMenuItem
                       key={item.path}
                       className={cn(
                         "cursor-pointer",
