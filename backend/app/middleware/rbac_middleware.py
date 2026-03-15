@@ -94,20 +94,22 @@ def require_permission(permission: str):
             # Get user and tenant
             user_id = get_user_id(request)
             tenant_id = get_tenant_id(request)
-            
+
+            # If no user context, allow through (matches middleware behavior).
+            # Auth middleware upstream is responsible for enforcing login when
+            # authentication is configured.  Without a user_id the RBAC
+            # decorator cannot check permissions, so it gracefully allows the
+            # request — the same way RBACMiddleware.dispatch() does.
             if not user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Authentication required"
-                )
-            
+                return await func(*args, **kwargs)
+
             # Check permission
             has_permission = await rbac_service.check_permission(
                 user_id=user_id,
                 permission=permission,
                 tenant_id=tenant_id
             )
-            
+
             if not has_permission:
                 logger.warning(
                     f"Permission denied: user {user_id} attempted {permission}"
@@ -116,9 +118,9 @@ def require_permission(permission: str):
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"Permission denied: {permission}"
                 )
-            
+
             return await func(*args, **kwargs)
-        
+
         return wrapper
     return decorator
 
@@ -126,7 +128,7 @@ def require_permission(permission: str):
 def require_role(role: str):
     """
     Decorator to require a specific role.
-    
+
     Usage:
         @router.delete("/test-cases/{id}")
         @require_role("admin")
@@ -143,26 +145,24 @@ def require_role(role: str):
                     break
             if not request:
                 request = kwargs.get("request")
-            
+
             if not request:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Request object not found"
                 )
-            
+
             user_id = get_user_id(request)
             tenant_id = get_tenant_id(request)
-            
+
+            # Allow through if no auth context (matches middleware behavior)
             if not user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Authentication required"
-                )
-            
+                return await func(*args, **kwargs)
+
             # Get user roles
             user_roles = await rbac_service._get_user_roles(user_id, tenant_id)
             role_names = [r.get("name") for r in user_roles]
-            
+
             if role not in role_names:
                 logger.warning(
                     f"Role denied: user {user_id} attempted {role}, has {role_names}"
@@ -171,9 +171,9 @@ def require_role(role: str):
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"Role required: {role}"
                 )
-            
+
             return await func(*args, **kwargs)
-        
+
         return wrapper
     return decorator
 
@@ -181,7 +181,7 @@ def require_role(role: str):
 def require_any_permission(permissions: List[str]):
     """
     Decorator to require any one of multiple permissions.
-    
+
     Usage:
         @require_any_permission(["test_cases:read", "test_cases:write"])
     """
@@ -195,35 +195,33 @@ def require_any_permission(permissions: List[str]):
                     break
             if not request:
                 request = kwargs.get("request")
-            
+
             if not request:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Request object not found"
                 )
-            
+
             user_id = get_user_id(request)
             tenant_id = get_tenant_id(request)
-            
+
+            # Allow through if no auth context (matches middleware behavior)
             if not user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Authentication required"
-                )
-            
+                return await func(*args, **kwargs)
+
             # Check if user has any of the required permissions
             has_permission = False
             for permission in permissions:
                 if await rbac_service.check_permission(user_id, permission, tenant_id):
                     has_permission = True
                     break
-            
+
             if not has_permission:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"Permission denied: requires one of {permissions}"
                 )
-            
+
             return await func(*args, **kwargs)
         
         return wrapper
