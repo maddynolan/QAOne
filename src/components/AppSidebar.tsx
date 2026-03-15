@@ -1,9 +1,10 @@
-import { 
-  LayoutDashboard, FileText, Play, AlertCircle, Settings, CheckSquare, Bug, 
+import {
+  LayoutDashboard, FileText, Play, AlertCircle, Settings, CheckSquare, Bug,
   BookOpen, Sparkles, Plug, Code, FileCode, Zap, Scan, BarChart3, Activity,
-  TrendingUp, MousePointerClick, GitBranch, Workflow, ChevronDown, ChevronRight, 
+  TrendingUp, MousePointerClick, GitBranch, Workflow, ChevronDown, ChevronRight,
   Layers, Users, Calendar, Compass, TestTube, FlaskConical, Database, Shield, Map,
-  Video, Target, Gauge, Rocket, Wrench, Circle, Cloud, ClipboardList
+  Video, Target, Gauge, Rocket, Wrench, Circle, Cloud, ClipboardList,
+  Smartphone, Eye
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useState, useEffect, useMemo } from "react";
@@ -59,13 +60,14 @@ const navigationGroups = [
   },
   
   // ============================================
-  // SECTION 3: EXPLORATION & DISCOVERY
+  // SECTION 3: AI & EXPLORATION
   // ============================================
   {
-    label: "Exploration",
+    label: "AI & Exploration",
     items: [
-      { title: "Blaze (Auto)", url: "/nexus", icon: Zap, highlight: true, description: "Autonomous testing" },
-      { title: "Discovery", url: "/exploration", icon: Compass, description: "Explore app capabilities" },
+      { title: "Flowpilot", url: "/flowpilot", icon: Sparkles, highlight: true, description: "AI-powered testing agents" },
+      { title: "Blaze Explorer", url: "/flowpilot/explorer", icon: Zap, description: "Autonomous app crawling" },
+      { title: "Flowmap", url: "/flowpilot/flowmap", icon: Map, description: "App capability mapping" },
     ],
   },
   
@@ -105,13 +107,13 @@ const navigationGroups = [
     collapsible: true,
     defaultOpen: false,
     items: [
-      { title: "Salesforce Tools", url: "/salesforce-tools", icon: Cloud, highlight: true, description: "SF API, Data, Schema" },
-      { title: "API Testing", url: "/enhanced-api-testing", icon: Code },
-      { title: "Performance & Load", url: "/load-testing", icon: Gauge, description: "Load testing & performance" },
-      { title: "Accessibility", url: "/accessibility", icon: Scan },
+      { title: "API Testing", url: "/api", icon: Code, highlight: true, description: "Multi-protocol API testing" },
+      { title: "Performance", url: "/performance", icon: Gauge, description: "Load testing & virtual users" },
+      { title: "Visual Testing", url: "/visual-testing", icon: Eye, description: "Visual regression testing" },
+      { title: "Accessibility", url: "/accessibility", icon: Scan, description: "WCAG compliance scanning" },
+      { title: "Mobile Testing", url: "/mobile", icon: Smartphone, description: "iOS & Android via Maestro" },
+      { title: "Salesforce", url: "/salesforce", icon: Cloud, description: "SF API, Data, Schema" },
       { title: "Self-Healing", url: "/self-healing", icon: Wrench, description: "Auto-fix broken selectors" },
-      { title: "Gherkin", url: "/gherkin", icon: FileCode },
-      { title: "Framework Analyzer", url: "/framework-analyzer", icon: FlaskConical },
       { title: "CodeAlchemy", url: "/code-alchemy", icon: Sparkles, description: "Import repos as test cases" },
     ],
   },

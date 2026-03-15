@@ -370,6 +370,7 @@ const App = () => {
                   <Route path="/flowpilot/explorer" element={<Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense>} />
                   <Route path="/flowpilot/generator" element={<Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense>} />
                   <Route path="/flowpilot/self-healer" element={<Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense>} />
+                  <Route path="/flowpilot/flowmap" element={<Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense>} />
 
                   {/* ─────────────────────────────────────────────────────────
                       8. AI TESTING MODULE - REVOLUTIONARY
@@ -448,9 +449,9 @@ const App = () => {
                 <Route path="/flowstral" element={<Navigate to="/recorder" replace />} />
                 <Route path="/flowstral/*" element={<Navigate to="/recorder" replace />} />
                 <Route path="/trace" element={<Navigate to="/recorder" replace />} />
-                <Route path="/nexus" element={<Navigate to="/recorder" replace />} />
-                <Route path="/blaze" element={<Navigate to="/recorder" replace />} />
-                <Route path="/exploration" element={<Navigate to="/recorder" replace />} />
+                <Route path="/nexus" element={<Navigate to="/flowpilot/explorer" replace />} />
+                <Route path="/blaze" element={<Navigate to="/flowpilot/explorer" replace />} />
+                <Route path="/exploration" element={<Navigate to="/flowpilot/flowmap" replace />} />
                 <Route path="/cdp-recorder" element={<Navigate to="/recorder" replace />} />
                 <Route path="/desktop-recorder" element={<Navigate to="/recorder" replace />} />
                 <Route path="/test-builder" element={<Navigate to="/test-cases/builder" replace />} />

@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAI } from '@/contexts/AIContext';
 import { cn } from '@/lib/utils';
@@ -333,10 +334,30 @@ function getColors(color: string, theme: string) {
 export default function FlowpilotPage() {
   const { theme } = useTheme();
   const { config: aiConfig } = useAI();
+  const location = useLocation();
   const aiAvailable = aiConfig.enabled && aiConfig.hasApiKey;
-  const [selectedAgent, setSelectedAgent] = useState(agents[0]);
+
+  // Auto-select agent based on URL path
+  const getInitialAgent = () => {
+    const path = location.pathname;
+    if (path.includes('/explorer')) return agents.find(a => a.id === 'explorer') || agents[0];
+    if (path.includes('/generator')) return agents.find(a => a.id === 'generator') || agents[0];
+    if (path.includes('/self-healer')) return agents.find(a => a.id === 'self-healer') || agents[0];
+    if (path.includes('/flowmap')) return agents.find(a => a.id === 'flowmap') || agents[0];
+    return agents[0];
+  };
+
+  const [selectedAgent, setSelectedAgent] = useState(getInitialAgent);
   const [goal, setGoal] = useState('');
   const [targetUrl, setTargetUrl] = useState('');
+
+  // Sync selected agent when URL path changes (e.g. sidebar navigation)
+  useEffect(() => {
+    const newAgent = getInitialAgent();
+    if (newAgent.id !== selectedAgent.id) {
+      setSelectedAgent(newAgent);
+    }
+  }, [location.pathname]);
 
   // Execution state
   const [isProcessing, setIsProcessing] = useState(false);
