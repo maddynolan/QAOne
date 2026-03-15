@@ -290,7 +290,7 @@ export default function FeaturePage() {
           <Button
             size="lg"
             onClick={() => navigate('/signup')}
-            className="h-14 px-10 bg-white text-slate-800 hover:bg-slate-100 font-semibold rounded-xl"
+            className="h-14 px-10 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl"
           >
             Start Free Trial <ArrowRight className="w-5 h-5 ml-2" />
           </Button>
