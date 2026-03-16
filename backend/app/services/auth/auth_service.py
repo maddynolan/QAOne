@@ -140,33 +140,61 @@ class AuthService:
             except Exception as e:
                 logger.warning(f"[Auth] Failed to create trial subscription: {e}")
 
-        # Generate email verification token
-        verification_token = secrets.token_urlsafe(32)
-        await self._store_verification_token(user_id, verification_token)
-
-        # Send verification email (non-blocking — don't fail registration if email fails)
+        # Email verification flow — only if SMTP is configured
+        email_verification_sent = False
         try:
             from app.services.core.email_service import email_service
             if email_service.is_configured:
+                verification_token = secrets.token_urlsafe(32)
+                await self._store_verification_token(user_id, verification_token)
                 await email_service.send_verification_email(email, name, verification_token)
+                email_verification_sent = True
                 logger.info(f"[Auth] Verification email sent to {email}")
             else:
-                logger.warning(f"[Auth] SMTP not configured — skipping verification email for {email}")
+                logger.info(f"[Auth] SMTP not configured — auto-verifying user {email}")
         except Exception as e:
             logger.warning(f"[Auth] Failed to send verification email: {e}")
 
-        # Return requires_verification instead of auto-login
+        # If email was sent, require verification before login
+        if email_verification_sent:
+            return {
+                "requires_verification": True,
+                "message": "Please check your email to verify your account",
+                "user": {
+                    "id": user_id,
+                    "email": email,
+                    "name": name,
+                    "auth_provider": "local"
+                },
+                "org": org,
+                "project": project
+            }
+
+        # SMTP not configured — auto-verify and auto-login (SaaS/demo mode)
+        await self._mark_email_verified(user_id)
+
+        # Get roles and permissions
+        roles = await self._get_user_roles(user_id, org["id"] if org else None)
+        permissions = await self._get_user_permissions(user_id, org["id"] if org else None)
+
+        # Generate JWT
+        user_data = {
+            "id": user_id,
+            "email": email,
+            "name": name,
+            "auth_provider": "local"
+        }
+        tenant_id = org["id"] if org else None
+        proj_id = project["id"] if project else None
+        token = self._generate_token(user_data, tenant_id, proj_id, roles, permissions)
+
         return {
-            "requires_verification": True,
-            "message": "Please check your email to verify your account",
-            "user": {
-                "id": user_id,
-                "email": email,
-                "name": name,
-                "auth_provider": "local"
-            },
+            "token": token,
+            "user": user_data,
             "org": org,
-            "project": project
+            "project": project,
+            "roles": roles or ["admin"],
+            "permissions": permissions or []
         }
 
     # ==================== Login ====================
@@ -597,6 +625,37 @@ class AuthService:
         )
 
     # ==================== Database Helpers ====================
+
+    async def _mark_email_verified(self, user_id: str) -> None:
+        """Mark user's email as verified (used when SMTP is not configured)."""
+        if _is_postgres_available():
+            try:
+                from app.services.storage.postgres_direct import get_postgres_pool
+                pool = get_postgres_pool()
+                if pool:
+                    conn = pool.getconn()
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "UPDATE users SET email_verified = true, email_verified_at = NOW() WHERE id = %s",
+                                (user_id,)
+                            )
+                            conn.commit()
+                    except Exception as e:
+                        conn.rollback()
+                        logger.warning(f"[Auth] Failed to mark email verified: {e}")
+                    finally:
+                        pool.putconn(conn)
+            except Exception as e:
+                logger.warning(f"[Auth] Failed to mark email verified: {e}")
+        else:
+            user = None
+            for u in _users_store.values():
+                if u["id"] == user_id:
+                    user = u
+                    break
+            if user:
+                user["email_verified"] = True
 
     async def _get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Find user by email."""

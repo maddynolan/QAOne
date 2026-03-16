@@ -89,6 +89,11 @@ class PasswordService:
         """
         Verify a plaintext password against a hash.
 
+        Supports multiple hash formats:
+        - bcrypt ($2b$...) via passlib
+        - sha512$salt$hash (SHA-512 fallback with random salt)
+        - sha512:hash (legacy seed format with hardcoded salt — backward compat)
+
         Args:
             password: Plaintext password to check
             hashed: Previously hashed password
@@ -96,16 +101,8 @@ class PasswordService:
         Returns:
             True if password matches
         """
-        if _HAS_PASSLIB:
-            try:
-                return _pwd_context.verify(password, hashed)
-            except Exception as e:
-                logger.error(f"Password verification error: {e}")
-                return False
-        else:
-            # SHA-512 fallback verification
-            if not hashed.startswith("sha512$"):
-                return False
+        # Handle SHA-512 fallback format (sha512$salt$hash)
+        if hashed.startswith("sha512$"):
             parts = hashed.split("$")
             if len(parts) != 3:
                 return False
@@ -113,6 +110,33 @@ class PasswordService:
             actual_hash = hashlib.sha512((salt + password).encode()).hexdigest()
             # Constant-time comparison to prevent timing attacks
             return hashlib.sha256(actual_hash.encode()).digest() == hashlib.sha256(expected_hash.encode()).digest()
+
+        # Handle legacy seed format (sha512:hash — hardcoded salt, from old seed_demo_data)
+        if hashed.startswith("sha512:"):
+            legacy_salt = "flowstral-seed-salt"
+            expected_hash = hashed[7:]  # Strip "sha512:" prefix
+            actual_hash = hashlib.sha512((legacy_salt + password).encode()).hexdigest()
+            return hashlib.sha256(actual_hash.encode()).digest() == hashlib.sha256(expected_hash.encode()).digest()
+
+        # Handle bcrypt format ($2b$..., $2a$...) via passlib
+        if _HAS_PASSLIB and (hashed.startswith("$2b$") or hashed.startswith("$2a$")):
+            try:
+                return _pwd_context.verify(password, hashed)
+            except Exception as e:
+                logger.error(f"Password verification error: {e}")
+                return False
+
+        # If passlib is available, try it as catch-all for any other supported format
+        if _HAS_PASSLIB:
+            try:
+                return _pwd_context.verify(password, hashed)
+            except Exception as e:
+                logger.error(f"Password verification error: {e}")
+                return False
+
+        # Unknown hash format
+        logger.warning(f"Unknown password hash format: {hashed[:20]}...")
+        return False
 
     def validate_strength(self, password: str) -> List[str]:
         """
