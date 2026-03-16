@@ -22,16 +22,25 @@ from typing import List, Optional
 logger = logging.getLogger(__name__)
 
 # Try to import passlib with bcrypt; fall back to hashlib-based hashing
+_HAS_PASSLIB = False
+_pwd_context = None
 try:
     from passlib.context import CryptContext
     _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    # Verify passlib actually works at runtime (bcrypt 5.x breaks passlib 1.7.x)
+    _test_hash = _pwd_context.hash("__init_test__")
+    _pwd_context.verify("__init_test__", _test_hash)
     _HAS_PASSLIB = True
     logger.info("[PasswordService] Using passlib+bcrypt for password hashing")
 except ImportError:
-    _HAS_PASSLIB = False
     logger.warning(
         "[PasswordService] passlib not installed — using SHA-512 fallback. "
         "Install passlib[bcrypt] for production: pip install passlib[bcrypt]"
+    )
+except Exception as e:
+    logger.warning(
+        f"[PasswordService] passlib installed but bcrypt backend broken ({e}). "
+        "Using SHA-512 fallback. Fix: pip install 'bcrypt<5' or pip install 'passlib[bcrypt]'"
     )
 
 # Password policy configuration (via environment variables)

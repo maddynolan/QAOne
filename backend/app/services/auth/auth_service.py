@@ -604,7 +604,8 @@ class AuthService:
             from app.services.storage.postgres_direct import execute_query
             results = await execute_query(
                 "SELECT id, email, name, password_hash, auth_provider, idp_subject_id, "
-                "avatar_url, is_active, created_at FROM users WHERE email = %s LIMIT 1",
+                "avatar_url, is_active, email_verified, email_verified_at, created_at "
+                "FROM users WHERE email = %s LIMIT 1",
                 (email,)
             )
             if results:

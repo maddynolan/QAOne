@@ -178,15 +178,9 @@ def seed_projects(cur):
 
 
 def _hash_password(password: str) -> str:
-    """Hash a password using passlib+bcrypt if available, else SHA-512 fallback."""
-    try:
-        from passlib.context import CryptContext
-        ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        return ctx.hash(password)
-    except ImportError:
-        import hashlib
-        salt = "flowstral-seed-salt"
-        return "sha512:" + hashlib.sha512((salt + password).encode()).hexdigest()
+    """Hash a password using PasswordService (bcrypt or SHA-512 fallback)."""
+    from app.services.auth.password_service import PasswordService
+    return PasswordService().hash_password(password)
 
 
 # Pre-compute password hash for seed users (Password123! — meets all complexity requirements)
