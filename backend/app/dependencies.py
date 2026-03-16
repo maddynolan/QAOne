@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # In development mode, fall back to demo IDs when no auth context is present
 _IS_DEV = os.getenv("APP_ENV", "development") != "production"
-_DEMO_MODE = os.getenv("DEMO_MODE", "true").lower() in ("true", "1", "yes")
+_DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() in ("true", "1", "yes")
 
 # Import default IDs for backward compatibility
 from app.utils.endpoint_helpers import DEFAULT_ORG_ID, DEFAULT_PROJECT_ID, DEFAULT_USER_ID

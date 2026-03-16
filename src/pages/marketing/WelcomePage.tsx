@@ -4,14 +4,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { 
-  ArrowRight, Mail, Download, Monitor, Apple, CheckCircle2, 
-  Rocket, Globe, RefreshCw, Clock, Shield, Zap, Chrome
+import {
+  ArrowRight, Mail, Download, Monitor, Apple, CheckCircle2,
+  Rocket, Globe, RefreshCw, Clock, Shield, Zap, Chrome, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/api-config';
+import { apiClient } from '@/lib/api-client';
+import { toast } from 'sonner';
 
 export default function WelcomePage() {
   const navigate = useNavigate();
@@ -36,9 +38,14 @@ export default function WelcomePage() {
     }
   }, [resendCooldown]);
 
-  const handleResendEmail = () => {
+  const handleResendEmail = async () => {
     setResendCooldown(60);
-    // TODO: Call API to resend verification email
+    try {
+      await apiClient.post('/api/auth/resend-verification', { email });
+      toast.success('Verification email sent! Check your inbox.');
+    } catch {
+      toast.error('Failed to resend email. Please try again later.');
+    }
   };
 
   // Download URLs - backend proxies to GitHub CDN via redirect
@@ -214,37 +221,29 @@ export default function WelcomePage() {
             </p>
           </div>
 
-          {/* License Key Section */}
-          <div className="bg-white rounded-2xl shadow-lg border border-amber-200 p-6 mb-8">
+          {/* Trial Info Section */}
+          <div className="bg-white rounded-2xl shadow-lg border border-emerald-200 p-6 mb-8">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-                <Shield className="w-6 h-6 text-amber-600" />
+              <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                <Sparkles className="w-6 h-6 text-emerald-600" />
               </div>
               <div className="flex-1">
                 <h2 className="text-lg font-semibold text-slate-900 mb-1">
-                  License Key Activation
+                  Your 14-Day Free Trial is Active
                 </h2>
                 <p className="text-slate-600 mb-4">
-                  After installing the desktop app, you'll need to enter your license key:
+                  You have full access to all features during your trial. No credit card required.
                 </p>
-                <ol className="text-sm text-slate-600 space-y-2 mb-4">
-                  <li className="flex items-start gap-2">
-                    <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
-                    <span>Open the Flowstral Desktop app</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
-                    <span>Go to <strong>Settings</strong> → <strong>License</strong></span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
-                    <span>Enter your license key and click <strong>Activate</strong></span>
-                  </li>
-                </ol>
-                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
-                  <p className="text-sm text-amber-800">
-                    <strong>Trial users:</strong> Your license key will be sent to your email, or contact your administrator.
+                <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200">
+                  <p className="text-sm text-emerald-800 space-y-1">
+                    <strong>Your trial includes:</strong>
                   </p>
+                  <ul className="text-sm text-emerald-700 mt-2 space-y-1">
+                    <li>• Up to 10 team members</li>
+                    <li>• 5,000 test runs per month</li>
+                    <li>• 5 projects</li>
+                    <li>• All features unlocked</li>
+                  </ul>
                 </div>
               </div>
             </div>
@@ -281,7 +280,7 @@ export default function WelcomePage() {
           {/* Quick Start Steps */}
           <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-8 text-white">
             <h2 className="text-xl font-bold mb-6 text-center">Get Started in 4 Easy Steps</h2>
-            <div className="grid md:grid-cols-4 gap-6">
+            <div className="grid md:grid-cols-3 gap-6">
               {[
                 {
                   step: 1,
@@ -292,17 +291,11 @@ export default function WelcomePage() {
                 {
                   step: 2,
                   icon: Download,
-                  title: 'Download & Install',
+                  title: 'Download or Launch',
                   description: 'Install the desktop app or use the web version',
                 },
                 {
                   step: 3,
-                  icon: Shield,
-                  title: 'Enter License',
-                  description: 'Activate with your license key in Settings',
-                },
-                {
-                  step: 4,
                   icon: Rocket,
                   title: 'Start Testing',
                   description: 'Click Record and capture your first test!',

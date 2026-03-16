@@ -17,6 +17,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { AIBadge } from '@/contexts/AIContext';
 import { useLandingPlugins, LandingPluginsProvider, type PluginKey } from '@/contexts/LandingPluginsContext';
 import FlowstralLogo from '@/components/FlowstralLogo';
+import TrialBanner from '@/components/TrialBanner';
 import {
   Settings,
   Bell,
@@ -420,6 +421,7 @@ function StreamlinedLayoutContent({ children }: { children?: React.ReactNode }) 
         ? "bg-gray-50 text-gray-900" 
         : "bg-gray-950 text-white"
     )}>
+      <TrialBanner />
       <Header />
       <main className="flex-1 overflow-auto">
         {children || <Outlet />}

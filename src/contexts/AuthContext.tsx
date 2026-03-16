@@ -58,6 +58,16 @@ export interface Project {
   updated_at?: string
 }
 
+export interface Subscription {
+  plan: string            // trial, free, pro, enterprise
+  status: string          // active, expired, cancelled, suspended
+  daysRemaining: number   // -1 for unlimited (paid plans)
+  trialEnd?: string       // ISO date string
+  maxUsers?: number
+  maxTestRuns?: number
+  maxProjects?: number
+}
+
 interface AuthContextType {
   // User state
   user: AuthUser | null
@@ -69,6 +79,9 @@ interface AuthContextType {
   loading: boolean
   isAuthenticated: boolean
   isDemoMode: boolean
+
+  // Subscription / Trial
+  subscription: Subscription | null
 
   // RBAC
   roles: string[]
@@ -107,9 +120,7 @@ export const useAuth = () => {
 // ==================== Demo Mode Data ====================
 
 const IS_DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true' ||
-  import.meta.env.VITE_DEMO_MODE === '1' ||
-  // Auto-enable demo mode in development if no explicit setting
-  (import.meta.env.DEV && import.meta.env.VITE_DEMO_MODE !== 'false')
+  import.meta.env.VITE_DEMO_MODE === '1'
 
 const DEMO_USER: AuthUser = {
   id: '22222222-2222-2222-2222-222222222222',
@@ -162,6 +173,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentProject, setCurrentProjectState] = useState<Project | null>(null)
   const [roles, setRoles] = useState<string[]>([])
   const [permissions, setPermissions] = useState<string[]>([])
+  const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState<string | null>(getStoredToken())
   const initRef = useRef(false)
@@ -251,6 +263,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setRoles(session.roles || [])
     setPermissions(session.permissions || [])
+
+    // Apply subscription data if present
+    if (session.subscription) {
+      setSubscription({
+        plan: session.subscription.plan || 'free',
+        status: session.subscription.status || 'active',
+        daysRemaining: session.subscription.days_remaining ?? -1,
+        trialEnd: session.subscription.trial_end,
+        maxUsers: session.subscription.max_users,
+        maxTestRuns: session.subscription.max_test_runs_per_month,
+        maxProjects: session.subscription.max_projects,
+      })
+    }
 
     // Store session for offline/quick restore
     setStoredSession(session)
@@ -410,6 +435,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
 
       const data = response.data
+
+      // If email verification is required, don't auto-login
+      if (data.requires_verification) {
+        console.log('[Auth] Signed up — email verification required')
+        return // Let the caller (SignUpPage) handle navigation to /welcome
+      }
+
       if (!data.token) {
         throw new Error('No token in response')
       }
@@ -456,6 +488,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentProjectState(null)
       setRoles([])
       setPermissions([])
+      setSubscription(null)
       setToken(null)
       setCurrentProjectId(null)
       setCurrentOrgId(null)
@@ -536,6 +569,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loading,
     isAuthenticated: !!user,
     isDemoMode: IS_DEMO_MODE,
+    subscription,
     roles,
     permissions,
     hasRole,

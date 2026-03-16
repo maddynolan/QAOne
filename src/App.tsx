@@ -143,6 +143,7 @@ const FAQPage = lazy(() => import("./pages/marketing/FAQPage"));
 const DemoPage = lazy(() => import("./pages/marketing/DemoPage"));
 const DownloadPage = lazy(() => import("./pages/marketing/DownloadPage"));
 const WelcomePage = lazy(() => import("./pages/marketing/WelcomePage"));
+const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage"));
 const ComparePage = lazy(() => import("./pages/marketing/ComparePage"));
 const CostCalculatorPage = lazy(() => import("./pages/marketing/CostCalculatorPage"));
 const BlogPage = lazy(() => import("./pages/marketing/BlogPage"));
@@ -267,6 +268,7 @@ const App = () => {
                 <Route path="/signin" element={<SignInPage />} />
                 <Route path="/signup" element={<SignUpPage />} />
                 <Route path="/welcome" element={<Suspense fallback={<PageLoadingFallback />}><WelcomePage /></Suspense>} />
+                <Route path="/verify-email" element={<Suspense fallback={<PageLoadingFallback />}><VerifyEmailPage /></Suspense>} />
                 <Route path="/compare/:competitor" element={<Suspense fallback={<PageLoadingFallback />}><ComparePage /></Suspense>} />
                 <Route path="/tools/cost-calculator" element={<Suspense fallback={<PageLoadingFallback />}><CostCalculatorPage /></Suspense>} />
                 <Route path="/blog" element={<Suspense fallback={<PageLoadingFallback />}><BlogPage /></Suspense>} />

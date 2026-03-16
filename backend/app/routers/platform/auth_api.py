@@ -1,20 +1,23 @@
 """
 Authentication API Router
-Handles user registration, login, session management, and token refresh.
+Handles user registration, login, session management, token refresh,
+email verification, and resend verification.
 
 Endpoints:
-    POST /api/auth/login       - Email/password login
-    POST /api/auth/signup      - Register new user
-    POST /api/auth/refresh     - Refresh JWT token
-    POST /api/auth/logout      - Invalidate token
-    GET  /api/auth/me          - Get current user
-    GET  /api/auth/session     - Get full session (user + org + project + roles)
-    GET  /api/auth/members     - List org members
+    POST /api/auth/login                - Email/password login
+    POST /api/auth/signup               - Register new user
+    POST /api/auth/refresh              - Refresh JWT token
+    POST /api/auth/logout               - Invalidate token
+    GET  /api/auth/me                   - Get current user
+    GET  /api/auth/session              - Get full session (user + org + project + roles)
+    GET  /api/auth/members              - List org members
+    GET  /api/auth/verify-email         - Verify email with token
+    POST /api/auth/resend-verification  - Resend verification email
 """
 
 import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Request, Header
+from fastapi import APIRouter, HTTPException, Request, Header, Query
 from pydantic import BaseModel, EmailStr, Field
 
 logger = logging.getLogger(__name__)
@@ -42,13 +45,18 @@ class RefreshRequest(BaseModel):
     token: str = Field(..., description="Current JWT token to refresh")
 
 
+class ResendVerificationRequest(BaseModel):
+    email: str = Field(..., min_length=3, description="Email to resend verification to")
+
+
 class AuthResponse(BaseModel):
-    token: str
-    user: dict
+    token: Optional[str] = None
+    user: Optional[dict] = None
     org: Optional[dict] = None
     project: Optional[dict] = None
     roles: list = []
     permissions: list = []
+    requires_verification: bool = False
 
 
 # ==================== Endpoints ====================
@@ -86,6 +94,7 @@ async def signup(request: SignupRequest):
     """
     Register a new user account.
     Optionally creates a new organization or joins an existing one.
+    Returns requires_verification=true if email verification is needed.
     """
     try:
         from app.services.auth.auth_service import auth_service
@@ -96,9 +105,18 @@ async def signup(request: SignupRequest):
             org_name=request.org_name,
             org_id=request.org_id
         )
+
+        # New signup flow: requires email verification
+        if result.get("requires_verification"):
+            return AuthResponse(
+                requires_verification=True,
+                user=result.get("user"),
+            )
+
+        # Legacy/fallback: direct login after signup
         return AuthResponse(
-            token=result["token"],
-            user=result["user"],
+            token=result.get("token", ""),
+            user=result.get("user"),
             org=result.get("org"),
             project=result.get("project"),
             roles=result.get("roles", ["admin"]),
@@ -222,6 +240,45 @@ async def list_members(request: Request, authorization: Optional[str] = Header(N
     except Exception as e:
         logger.error(f"List members error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to list members")
+
+
+# ==================== Email Verification ====================
+
+@auth_router.get("/verify-email")
+async def verify_email(token: str = Query(..., description="Verification token from email link")):
+    """
+    Verify email address using the token from the verification email.
+    Marks user as verified, sends welcome email, returns success.
+    """
+    try:
+        from app.services.auth.auth_service import auth_service
+        result = await auth_service.verify_email(token)
+        return {
+            "status": "verified",
+            "message": "Email verified successfully. You can now sign in.",
+            "user_id": result.get("user_id"),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Email verification error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Email verification failed")
+
+
+@auth_router.post("/resend-verification")
+async def resend_verification(request: ResendVerificationRequest):
+    """
+    Resend email verification link. Rate limited to prevent abuse.
+    """
+    try:
+        from app.services.auth.auth_service import auth_service
+        await auth_service.resend_verification(request.email)
+        # Always return success to prevent email enumeration
+        return {"status": "sent", "message": "If the email is registered, a verification link has been sent."}
+    except Exception as e:
+        logger.error(f"Resend verification error: {e}", exc_info=True)
+        # Still return success to prevent enumeration
+        return {"status": "sent", "message": "If the email is registered, a verification link has been sent."}
 
 
 # ==================== Helpers ====================

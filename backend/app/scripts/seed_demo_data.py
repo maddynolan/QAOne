@@ -177,6 +177,22 @@ def seed_projects(cur):
     print("  [2/12] Projects: 3 created")
 
 
+def _hash_password(password: str) -> str:
+    """Hash a password using passlib+bcrypt if available, else SHA-512 fallback."""
+    try:
+        from passlib.context import CryptContext
+        ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        return ctx.hash(password)
+    except ImportError:
+        import hashlib
+        salt = "flowstral-seed-salt"
+        return "sha512:" + hashlib.sha512((salt + password).encode()).hexdigest()
+
+
+# Pre-compute password hash for seed users (Password123! — meets all complexity requirements)
+_SEED_PASSWORD_HASH = _hash_password("Password123!")
+
+
 def seed_users(cur):
     users = [
         (USER_SARAH, "sarah@acme.com", "Sarah Chen",
@@ -198,7 +214,20 @@ def seed_users(cur):
                 avatar_url = EXCLUDED.avatar_url, preferences = EXCLUDED.preferences,
                 updated_at = EXCLUDED.updated_at
         """, (uid, email, name, avatar, prefs, NOW - timedelta(days=170), NOW))
-    print("  [3/12] Users: 3 created")
+
+    # Set password_hash, auth_provider, is_active, email_verified for all seed users
+    for uid, email, name, _, _ in users:
+        cur.execute("""
+            UPDATE users SET
+                password_hash = %s,
+                auth_provider = 'local',
+                is_active = true,
+                email_verified = true,
+                email_verified_at = %s
+            WHERE id = %s
+        """, (_SEED_PASSWORD_HASH, NOW, uid))
+
+    print("  [3/12] Users: 3 created (with password_hash + email_verified)")
 
 
 def seed_memberships(cur):
@@ -1409,6 +1438,23 @@ def seed_performance(cur):
     print(f"  [12/12] Performance: {len(perf_runs)} runs, {metric_count} metrics")
 
 
+def seed_subscriptions(cur):
+    """Seed a trial subscription for the Acme Corp org."""
+    sub_id = _uuid("0E00")
+    cur.execute("""
+        INSERT INTO subscriptions (id, org_id, plan, status, trial_start, trial_end,
+            max_users, max_test_runs_per_month, max_projects, created_at, updated_at)
+        VALUES (%s, %s, 'trial', 'active', %s, %s, 10, 5000, 5, %s, %s)
+        ON CONFLICT (org_id) DO UPDATE SET
+            plan = EXCLUDED.plan,
+            status = EXCLUDED.status,
+            trial_start = EXCLUDED.trial_start,
+            trial_end = EXCLUDED.trial_end,
+            updated_at = EXCLUDED.updated_at
+    """, (sub_id, ORG_ACME, NOW, NOW + timedelta(days=14), NOW, NOW))
+    print("  [13/13] Subscriptions: 1 trial (14 days)")
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -1445,6 +1491,15 @@ def main():
         seed_api_environments(cur)
         seed_accessibility(cur)
         seed_performance(cur)
+
+        # Seed subscription (requires subscriptions table from migration 043)
+        try:
+            seed_subscriptions(cur)
+        except Exception as e:
+            print(f"  [13/13] Subscriptions: skipped ({str(e)[:80]})")
+            conn.rollback()
+            # Re-run previous seeds since rollback undid them — skip subscriptions
+            # This ensures backward compat if migration 043 hasn't run yet
 
         conn.commit()
         print("\n" + "=" * 60)

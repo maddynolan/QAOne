@@ -20,6 +20,7 @@ Usage:
 import logging
 import hashlib
 import os
+import secrets
 import uuid
 import json
 from typing import Optional, Dict, Any, List, Tuple
@@ -130,16 +131,34 @@ class AuthService:
             if project:
                 await self._create_project_membership(user_id, project["id"])
 
-        # Generate JWT
-        tenant_id = org["id"] if org else None
-        project_id = project["id"] if project else None
-        token = self._generate_token(user, tenant_id, project_id, ["admin"] if not org_id else ["member"])
+        # Auto-provision trial subscription for the org
+        org_id_for_sub = org["id"] if org else None
+        if org_id_for_sub:
+            try:
+                from app.services.core.subscription_service import subscription_service
+                await subscription_service.create_trial(org_id_for_sub)
+            except Exception as e:
+                logger.warning(f"[Auth] Failed to create trial subscription: {e}")
 
-        # Update last login
-        await self._update_last_login(user_id)
+        # Generate email verification token
+        verification_token = secrets.token_urlsafe(32)
+        await self._store_verification_token(user_id, verification_token)
 
+        # Send verification email (non-blocking — don't fail registration if email fails)
+        try:
+            from app.services.core.email_service import email_service
+            if email_service.is_configured:
+                await email_service.send_verification_email(email, name, verification_token)
+                logger.info(f"[Auth] Verification email sent to {email}")
+            else:
+                logger.warning(f"[Auth] SMTP not configured — skipping verification email for {email}")
+        except Exception as e:
+            logger.warning(f"[Auth] Failed to send verification email: {e}")
+
+        # Return requires_verification instead of auto-login
         return {
-            "token": token,
+            "requires_verification": True,
+            "message": "Please check your email to verify your account",
             "user": {
                 "id": user_id,
                 "email": email,
@@ -174,7 +193,7 @@ class AuthService:
         if not user.get("is_active", True):
             raise ValueError("Account is deactivated")
 
-        if user.get("auth_provider") != "local":
+        if user.get("auth_provider") and user.get("auth_provider") != "local":
             raise ValueError(f"This account uses {user.get('auth_provider')} SSO. Please use SSO to sign in.")
 
         # Verify password
@@ -184,6 +203,10 @@ class AuthService:
 
         if not self.password_service.verify_password(password, stored_hash):
             raise ValueError("Invalid email or password")
+
+        # Check email verification (skip for seed/legacy users who are pre-verified)
+        if user.get("email_verified") is False:
+            raise ValueError("Please verify your email before signing in. Check your inbox for a verification link.")
 
         # Get user's org and project
         org = await self._get_user_primary_org(user["id"])
@@ -214,6 +237,15 @@ class AuthService:
         # Update last login
         await self._update_last_login(user["id"])
 
+        # Load subscription data
+        subscription = None
+        if org:
+            try:
+                from app.services.core.subscription_service import subscription_service
+                subscription = await subscription_service.get_subscription(org["id"])
+            except Exception as e:
+                logger.warning(f"[Auth] Failed to load subscription: {e}")
+
         return {
             "token": token,
             "user": {
@@ -226,7 +258,8 @@ class AuthService:
             "org": org,
             "project": project,
             "roles": roles,
-            "permissions": permissions
+            "permissions": permissions,
+            "subscription": subscription
         }
 
     # ==================== Session ====================
@@ -263,6 +296,15 @@ class AuthService:
         roles = payload.get("roles", [])
         permissions = payload.get("permissions", [])
 
+        # Load subscription data
+        subscription = None
+        if org:
+            try:
+                from app.services.core.subscription_service import subscription_service
+                subscription = await subscription_service.get_subscription(org["id"])
+            except Exception as e:
+                logger.warning(f"[Auth] Failed to load subscription for session: {e}")
+
         return {
             "user": {
                 "id": user["id"],
@@ -274,7 +316,8 @@ class AuthService:
             "org": org,
             "project": project,
             "roles": roles,
-            "permissions": permissions
+            "permissions": permissions,
+            "subscription": subscription
         }
 
     async def refresh_token(self, token: str) -> Optional[str]:
@@ -397,6 +440,135 @@ class AuthService:
             "roles": roles,
             "permissions": permissions
         }
+
+    # ==================== Email Verification ====================
+
+    async def _store_verification_token(self, user_id: str, token: str) -> None:
+        """Store email verification token in database."""
+        if _is_postgres_available():
+            try:
+                from app.services.storage.postgres_direct import get_postgres_pool
+                pool = get_postgres_pool()
+                if pool:
+                    conn = pool.getconn()
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                """
+                                INSERT INTO email_verification_tokens (user_id, token, expires_at)
+                                VALUES (%s, %s, NOW() + INTERVAL '24 hours')
+                                """,
+                                (user_id, token)
+                            )
+                            conn.commit()
+                    except Exception as e:
+                        conn.rollback()
+                        logger.error(f"Error storing verification token: {e}")
+                    finally:
+                        pool.putconn(conn)
+            except Exception as e:
+                logger.error(f"Error storing verification token: {e}")
+
+    async def verify_email(self, token: str) -> Dict[str, Any]:
+        """
+        Verify email using token. Returns user info on success.
+        Marks user as verified and sends welcome email.
+        """
+        if not _is_postgres_available():
+            raise ValueError("Email verification requires database")
+
+        from app.services.storage.postgres_direct import execute_query, get_postgres_pool
+
+        # Find the token
+        results = await execute_query(
+            """
+            SELECT t.user_id, t.expires_at, t.used_at, u.email, u.name
+            FROM email_verification_tokens t
+            JOIN users u ON u.id = t.user_id
+            WHERE t.token = %s
+            LIMIT 1
+            """,
+            (token,)
+        )
+
+        if not results:
+            raise ValueError("Invalid verification token")
+
+        row = results[0]
+        user_id = row.get("user_id")
+        email = row.get("email")
+        name = row.get("name", "")
+
+        if row.get("used_at"):
+            raise ValueError("This verification link has already been used")
+
+        expires_at = row.get("expires_at")
+        if expires_at and isinstance(expires_at, datetime) and expires_at < datetime.utcnow():
+            raise ValueError("This verification link has expired. Please request a new one.")
+
+        # Mark token as used and user as verified
+        pool = get_postgres_pool()
+        if pool:
+            conn = pool.getconn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE email_verification_tokens SET used_at = NOW() WHERE token = %s",
+                        (token,)
+                    )
+                    cur.execute(
+                        "UPDATE users SET email_verified = true, email_verified_at = NOW() WHERE id = %s",
+                        (user_id,)
+                    )
+                    conn.commit()
+            except Exception as e:
+                conn.rollback()
+                raise ValueError(f"Verification failed: {e}")
+            finally:
+                pool.putconn(conn)
+
+        # Send welcome email with trial info
+        try:
+            from app.services.core.email_service import email_service
+            from app.services.core.subscription_service import subscription_service
+
+            # Get the user's org
+            org = await self._get_user_primary_org(user_id)
+            if org:
+                sub = await subscription_service.get_subscription(org["id"])
+                if sub and sub.get("trial_end"):
+                    trial_end_str = sub["trial_end"]
+                    trial_end = datetime.fromisoformat(trial_end_str.replace("Z", "+00:00"))
+                    if email_service.is_configured:
+                        await email_service.send_welcome_email(email, name, trial_end)
+        except Exception as e:
+            logger.warning(f"[Auth] Failed to send welcome email: {e}")
+
+        return {"user_id": user_id, "email": email, "name": name, "verified": True}
+
+    async def resend_verification(self, email: str) -> bool:
+        """Generate a new verification token and resend the email."""
+        user = await self._get_user_by_email(email)
+        if not user:
+            return False  # Don't reveal if email exists
+
+        if user.get("email_verified"):
+            return True  # Already verified
+
+        # Generate new token
+        new_token = secrets.token_urlsafe(32)
+        await self._store_verification_token(user["id"], new_token)
+
+        # Send email
+        try:
+            from app.services.core.email_service import email_service
+            if email_service.is_configured:
+                await email_service.send_verification_email(email, user.get("name", ""), new_token)
+                return True
+        except Exception as e:
+            logger.error(f"[Auth] Failed to resend verification: {e}")
+
+        return False
 
     # ==================== Token Helpers ====================
 
