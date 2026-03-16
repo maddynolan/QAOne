@@ -1,4 +1,4 @@
-// Data Storage Service for ArisTrace Platform
+// Data Storage Service for Flowstral Platform
 // Handles local storage of test cases, plans, requirements, and recordings
 
 // ============ RECORDING (from Flowstral) ============

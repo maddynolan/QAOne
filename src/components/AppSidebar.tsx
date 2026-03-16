@@ -194,17 +194,17 @@ export function AppSidebar() {
         {/* Logo */}
         <div className={`px-4 mb-4 ${collapsed ? "text-center" : ""}`}>
           <div className="flex items-center gap-2">
-            <img 
-              src="/aristrace-logo.svg" 
-              alt="ArisTrace" 
+            <img
+              src="/flowstral-logo.svg"
+              alt="Flowstral"
               className="w-9 h-9 rounded-lg"
             />
             {!collapsed && (
               <div>
                 <h2 className="font-bold text-lg text-gray-900 dark:text-white tracking-tight">
-                  Aris<span className="text-blue-600 dark:text-amber-500">Trace</span>
+                  Flow<span className="text-indigo-600 dark:text-cyan-400">stral</span>
                 </h2>
-                <p className="text-xs text-gray-600 dark:text-gray-400">QA Excellence Platform</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">QA Automation Platform</p>
               </div>
             )}
           </div>

@@ -700,10 +700,8 @@ function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
           <div className="col-span-2 md:col-span-1">
             <div className="flex items-center gap-2.5 mb-4 cursor-pointer" onClick={() => navigate('/')}>
-              <div className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center">
-                <span className="text-white font-bold text-sm">F</span>
-              </div>
-              <span className="text-lg font-bold">Flowstral</span>
+              <img src="/flowstral-logo.svg" alt="Flowstral" className="w-8 h-8 rounded-lg" />
+              <span className="text-lg font-bold">Flow<span className="text-cyan-400">stral</span></span>
             </div>
             <p className="text-slate-400 text-sm mb-6">
               Record browser sessions. Generate tests. Run them for every testing dimension.

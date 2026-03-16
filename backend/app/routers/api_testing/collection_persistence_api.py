@@ -12,6 +12,9 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from app.utils.endpoint_helpers import ensure_default_org_project
+from app.dependencies import get_current_project, get_current_user, get_current_tenant
+from app.services.core.locking_service import locking_service
+from app.services.core.universal_version_service import universal_version_service
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +62,21 @@ async def save_collection(request: Request, project_id: Optional[str] = None):
         result = await collection_service.save_collection(project_id, data)
         if not result:
             raise HTTPException(status_code=500, detail="Failed to save collection")
+        # Create version snapshot
+        try:
+            collection_id = result.get("id") if isinstance(result, dict) else str(result)
+            user_id = getattr(request.state, "user_id", None) or "22222222-2222-2222-2222-222222222222"
+            is_new = data.get("id") is None
+            await universal_version_service.create_version(
+                artifact_type="api_collection",
+                artifact_id=str(collection_id),
+                snapshot=data,
+                changed_by=user_id,
+                change_type="created" if is_new else "modified",
+                project_id=project_id,
+            )
+        except Exception:
+            pass  # Version creation is non-blocking
         return result
     except HTTPException:
         raise
@@ -68,9 +86,14 @@ async def save_collection(request: Request, project_id: Optional[str] = None):
 
 
 @router.delete("/{collection_id}")
-async def delete_collection(collection_id: str):
+async def delete_collection(collection_id: str, request: Request):
     """Delete a collection and all its contents"""
     try:
+        # Check artifact lock
+        user_id = getattr(request.state, "user_id", None) or "22222222-2222-2222-2222-222222222222"
+        if await locking_service.is_locked_by_other("api_collection", str(collection_id), str(user_id)):
+            raise HTTPException(status_code=409, detail="Artifact is checked out by another user")
+
         from app.services.api_testing.collection_persistence_service import collection_service
         deleted = await collection_service.delete_collection(collection_id)
         if not deleted:

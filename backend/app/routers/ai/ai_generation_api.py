@@ -23,6 +23,7 @@ from app.services.executors.playwright_runner import PlaywrightRunner, TestCase 
 from app.services.storage.postgres_direct import execute_query, execute_update, get_postgres_pool
 from app.services.storage.test_results_storage import store_test_run, store_test_run_step
 from app.utils.endpoint_helpers import ensure_default_org_project, map_priority, estimate_tokens, DEFAULT_USER_ID, map_priority_from_db
+from app.dependencies import get_current_project, get_current_user, get_current_tenant
 from app.schemas import (
     ReqToTestPlanRequest, ReqToTestPlanResponse, ReqToTestPlanOutput,
     ReqToTestsRequest, ReqToTestsResponse, ReqToTestsOutput

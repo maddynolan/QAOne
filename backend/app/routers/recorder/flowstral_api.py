@@ -18,6 +18,7 @@ from app.services.flowstral.flowstral_orchestrator import FlowstralOrchestrator
 from app.services.core.plugin_service import PluginService
 from app.services.flowstral.flowstral_gateway import flowstral_gateway
 from app.services.automation.test_execution_service import get_test_execution_service
+from app.dependencies import get_current_project, get_current_user, get_current_tenant
 
 logger = logging.getLogger(__name__)
 

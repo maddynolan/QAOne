@@ -6,6 +6,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 from app.services.core.orchestrator import orchestrator, WORKFLOW_TEMPLATES
 from app.utils.endpoint_helpers import ensure_default_org_project
+from app.dependencies import get_current_project, get_current_user, get_current_tenant
 
 logger = logging.getLogger(__name__)
 

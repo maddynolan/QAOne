@@ -13,6 +13,9 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.utils.endpoint_helpers import ensure_default_org_project
+from app.dependencies import get_current_project, get_current_user, get_current_tenant
+from app.services.core.locking_service import locking_service
+from app.services.core.universal_version_service import universal_version_service
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +92,21 @@ async def save_flow(request: Request, project_id: Optional[str] = None):
         result = await mobile_flow_service.save_flow(project_id, data)
         if not result:
             raise HTTPException(status_code=500, detail="Failed to save flow")
+        # Create version snapshot
+        try:
+            flow_id = result.get("id") if isinstance(result, dict) else str(result)
+            user_id = getattr(request.state, "user_id", None) or "22222222-2222-2222-2222-222222222222"
+            is_new = data.get("id") is None
+            await universal_version_service.create_version(
+                artifact_type="mobile_flow",
+                artifact_id=str(flow_id),
+                snapshot=data,
+                changed_by=user_id,
+                change_type="created" if is_new else "modified",
+                project_id=project_id,
+            )
+        except Exception:
+            pass  # Version creation is non-blocking
         return result
     except HTTPException:
         raise
@@ -98,10 +116,16 @@ async def save_flow(request: Request, project_id: Optional[str] = None):
 
 
 @router.delete("/flows/{flow_id}")
-async def delete_flow(flow_id: str):
+async def delete_flow(flow_id: str, request: Request):
     """Delete a mobile test flow"""
     try:
         _validate_id(flow_id, "flow_id")
+
+        # Check artifact lock
+        user_id = getattr(request.state, "user_id", None) or "22222222-2222-2222-2222-222222222222"
+        if await locking_service.is_locked_by_other("mobile_flow", str(flow_id), str(user_id)):
+            raise HTTPException(status_code=409, detail="Artifact is checked out by another user")
+
         from app.services.mobile.flow_persistence_service import mobile_flow_service
         deleted = await mobile_flow_service.delete_flow(flow_id)
         if not deleted:

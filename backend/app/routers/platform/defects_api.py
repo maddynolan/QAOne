@@ -14,6 +14,9 @@ from app.utils.endpoint_helpers import (
     map_priority_to_db,
     DEFAULT_USER_ID
 )
+from app.dependencies import get_current_project, get_current_user, get_current_tenant
+from app.services.core.locking_service import locking_service
+from app.services.core.universal_version_service import universal_version_service
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +159,18 @@ async def create_defect(request: Request):
                 pg_id = await execute_insert("defects", defect_data)
                 if pg_id:
                     logger.info(f"Created defect in PostgreSQL: {pg_id}")
+                    # Create version snapshot
+                    try:
+                        await universal_version_service.create_version(
+                            artifact_type="defect",
+                            artifact_id=str(pg_id),
+                            snapshot=defect_data,
+                            changed_by=DEFAULT_USER_ID,
+                            change_type="created",
+                            project_id=project_id,
+                        )
+                    except Exception:
+                        pass  # Version creation is non-blocking
                     return {"id": pg_id}
             except Exception as pg_error:
                 logger.warning(f"PostgreSQL insert failed: {pg_error}")
@@ -181,6 +196,17 @@ async def create_defect(request: Request):
         }
         _defects_store[defect_id] = defect
         logger.info(f"Created defect in memory: {defect_id}")
+        # Create version snapshot (in-memory fallback path)
+        try:
+            await universal_version_service.create_version(
+                artifact_type="defect",
+                artifact_id=str(defect_id),
+                snapshot=defect,
+                changed_by=DEFAULT_USER_ID,
+                change_type="created",
+            )
+        except Exception:
+            pass  # Version creation is non-blocking
         return {"id": defect_id}
     except HTTPException:
         raise
@@ -193,6 +219,11 @@ async def create_defect(request: Request):
 async def update_defect(defect_id: str, request: Request):
     """Update a defect"""
     try:
+        # Check artifact lock
+        user_id = getattr(request.state, "user_id", None) or "22222222-2222-2222-2222-222222222222"
+        if await locking_service.is_locked_by_other("defect", str(defect_id), str(user_id)):
+            raise HTTPException(status_code=409, detail="Artifact is checked out by another user")
+
         data = await request.json()
         
         pool = get_postgres_pool()
@@ -251,7 +282,20 @@ async def update_defect(defect_id: str, request: Request):
                 
                 if not result:
                     raise HTTPException(status_code=404, detail="Defect not found")
-                
+
+                # Create version snapshot
+                try:
+                    await universal_version_service.create_version(
+                        artifact_type="defect",
+                        artifact_id=str(defect_id),
+                        snapshot=data,
+                        changed_by=user_id,
+                        change_type="modified",
+                        project_id=getattr(request.state, "project_id", None),
+                    )
+                except Exception:
+                    pass  # Version creation is non-blocking
+
                 return {"id": str(result[0])}
         finally:
             pool.putconn(conn)
@@ -263,9 +307,14 @@ async def update_defect(defect_id: str, request: Request):
 
 
 @router.delete("/{defect_id}")
-async def delete_defect(defect_id: str):
+async def delete_defect(defect_id: str, request: Request):
     """Delete a defect"""
     try:
+        # Check artifact lock
+        user_id = getattr(request.state, "user_id", None) or "22222222-2222-2222-2222-222222222222"
+        if await locking_service.is_locked_by_other("defect", str(defect_id), str(user_id)):
+            raise HTTPException(status_code=409, detail="Artifact is checked out by another user")
+
         pool = get_postgres_pool()
         if not pool:
             raise HTTPException(status_code=404, detail="Defect not found")

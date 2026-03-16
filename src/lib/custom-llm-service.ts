@@ -1,4 +1,4 @@
-// Custom LLM Service for ArisTrace Platform
+// Custom LLM Service for Flowstral Platform
 // This integrates with the QAOne backend API
 
 import { API_BASE_URL } from '@/lib/api-config';

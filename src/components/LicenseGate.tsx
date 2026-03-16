@@ -256,9 +256,7 @@ export function LicenseGate({ children }: LicenseGateProps) {
       <div className="max-w-md w-full">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 mb-4">
-            <Shield className="w-10 h-10 text-white" />
-          </div>
+          <img src="/flowstral-logo.svg" alt="Flowstral" className="w-20 h-20 rounded-2xl mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-white mb-2">Flowstral Desktop</h1>
           <p className="text-slate-400">Test Automation Platform</p>
         </div>

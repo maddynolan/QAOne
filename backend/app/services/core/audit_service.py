@@ -33,12 +33,26 @@ logger = logging.getLogger(__name__)
 # Maximum in-memory audit log entries (circular buffer)
 MAX_MEMORY_ENTRIES = 10_000
 
+# Audit mode: "strict" = always persist to PostgreSQL (required for compliance)
+# Set AUDIT_MODE=strict in production for SOC 2/HIPAA compliance
+AUDIT_MODE = os.getenv("AUDIT_MODE", "best_effort")  # "strict" or "best_effort"
+
 # Security event types for explicit tracking
 SECURITY_EVENTS = {
     "login", "logout", "login_failed", "mfa_verified", "mfa_failed",
     "permission_denied", "secret_revealed", "data_export", "data_erasure",
     "password_changed", "mfa_enabled", "mfa_disabled", "api_key_stored",
     "suspicious_activity", "rate_limited",
+}
+
+# Enterprise events for locking and version control
+ENTERPRISE_EVENTS = {
+    "lock.acquire", "lock.release", "lock.force_release", "lock.expired",
+    "version.create", "version.revert", "branch.create", "branch.merge",
+    "service_account.create", "service_account.revoke", "service_account.regenerate_token",
+    "schema.isolate", "schema.migrate",
+    "compliance.report_generated", "compliance.audit_exported",
+    "sso.login", "sso.config_updated", "group_mapping.updated",
 }
 
 
@@ -234,34 +248,63 @@ class AuditService:
         }
 
     async def _persist_to_db(self, event: AuditEvent):
-        """Persist audit event to PostgreSQL (best-effort)."""
-        try:
-            from app.services.storage.database import get_database_client
+        """
+        Persist audit event to PostgreSQL.
 
-            db = await get_database_client()
-            if db:
-                await db.execute(
-                    """
-                    INSERT INTO audit_logs (id, timestamp, user_id, user_email, action,
+        In strict mode (AUDIT_MODE=strict), failures raise exceptions.
+        In best_effort mode, failures are logged but don't block operations.
+        """
+        try:
+            # Try psycopg2 connection pool first (matches rest of the app)
+            from app.services.storage.database import get_database_client
+            pool = get_database_client()
+            if pool and hasattr(pool, 'getconn'):
+                conn = pool.getconn()
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """INSERT INTO audit_logs
+                               (id, timestamp, user_id, user_email, action,
+                                resource_type, resource_id, details, ip_address,
+                                org_id, project_id, status, hash_chain)
+                               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                            (
+                                event.id,
+                                event.timestamp,
+                                event.user_id,
+                                event.user_email,
+                                event.action,
+                                event.resource_type,
+                                event.resource_id,
+                                json.dumps(event.details),
+                                event.ip_address,
+                                event.org_id,
+                                event.project_id,
+                                event.status,
+                                event.hash_chain,
+                            ),
+                        )
+                        conn.commit()
+                finally:
+                    pool.putconn(conn)
+                return
+            # Fallback to async client if available
+            if pool:
+                await pool.execute(
+                    """INSERT INTO audit_logs (id, timestamp, user_id, user_email, action,
                         resource_type, resource_id, details, ip_address, org_id, project_id, status)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-                    """,
-                    event.id,
-                    event.timestamp,
-                    event.user_id,
-                    event.user_email,
-                    event.action,
-                    event.resource_type,
-                    event.resource_id,
-                    json.dumps(event.details),
-                    event.ip_address,
-                    event.org_id,
-                    event.project_id,
-                    event.status,
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)""",
+                    event.id, event.timestamp, event.user_id, event.user_email,
+                    event.action, event.resource_type, event.resource_id,
+                    json.dumps(event.details), event.ip_address, event.org_id,
+                    event.project_id, event.status,
                 )
         except Exception as e:
-            # DB persistence is best-effort; don't fail the operation
-            logger.debug(f"[Audit] DB persist failed (non-critical): {e}")
+            if AUDIT_MODE == "strict":
+                logger.error(f"[Audit] STRICT MODE: DB persist FAILED: {e}")
+                raise RuntimeError(f"Audit persistence failed in strict mode: {e}")
+            else:
+                logger.debug(f"[Audit] DB persist failed (non-critical): {e}")
 
 
     async def log_security_event(
@@ -335,6 +378,44 @@ class AuditService:
             "total_entries": len(events),
             "message": "All audit entries verified — hash chain intact",
         }
+
+
+    async def log_enterprise_event(
+        self,
+        user_id: str,
+        event_type: str,
+        resource_type: str = "enterprise",
+        resource_id: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        org_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> AuditEvent:
+        """
+        Log an enterprise event (locking, versioning, service accounts, etc.).
+
+        Args:
+            event_type: One of ENTERPRISE_EVENTS (lock.acquire, version.create, etc.)
+        """
+        return await self.log(
+            user_id=user_id,
+            action=event_type,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            details=details or {},
+            org_id=org_id,
+            project_id=project_id,
+        )
+
+    def get_audit_mode(self) -> str:
+        """Return current audit mode (strict or best_effort)."""
+        return AUDIT_MODE
+
+    async def get_actions_list(self) -> List[str]:
+        """Get all distinct action types from audit log."""
+        actions = set()
+        for event in self._events:
+            actions.add(event.action)
+        return sorted(actions)
 
 
 # Singleton instance

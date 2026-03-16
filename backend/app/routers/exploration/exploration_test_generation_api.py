@@ -15,6 +15,7 @@ from app.services.exploration.test_case_generator import ExplorationTestCaseGene
 from app.services.exploration.capability_map_builder import CapabilityMapBuilder
 from app.services.storage.capability_map_storage import get_capability_map_storage
 from app.utils.endpoint_helpers import ensure_default_org_project
+from app.dependencies import get_current_project, get_current_user, get_current_tenant
 from app.services.storage.database import get_database_client
 
 logger = logging.getLogger(__name__)

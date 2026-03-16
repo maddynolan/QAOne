@@ -15,6 +15,9 @@ from app.utils.endpoint_helpers import (
     map_priority_to_db,
     DEFAULT_USER_ID
 )
+from app.dependencies import get_current_project, get_current_user, get_current_tenant
+from app.services.core.locking_service import locking_service
+from app.services.core.universal_version_service import universal_version_service
 
 logger = logging.getLogger(__name__)
 
@@ -903,6 +906,18 @@ async def create_test_case(request: Request):
                         )
                     except Exception as ver_err:
                         logger.warning(f"Version creation failed (non-blocking): {ver_err}")
+                    # Universal version snapshot
+                    try:
+                        await universal_version_service.create_version(
+                            artifact_type="test_case",
+                            artifact_id=str(pg_case_id),
+                            snapshot=db_data,
+                            changed_by=DEFAULT_USER_ID,
+                            change_type="created",
+                            project_id=project_id,
+                        )
+                    except Exception:
+                        pass  # Version creation is non-blocking
                     return {"id": pg_case_id}
             except Exception as pg_error:
                 logger.warning(f"PostgreSQL insert failed, using in-memory: {pg_error}")
@@ -921,6 +936,11 @@ async def create_test_case(request: Request):
 async def update_test_case(case_id: str, request: Request):
     """Update a test case"""
     try:
+        # Check artifact lock
+        user_id = getattr(request.state, "user_id", None) or "22222222-2222-2222-2222-222222222222"
+        if await locking_service.is_locked_by_other("test_case", str(case_id), str(user_id)):
+            raise HTTPException(status_code=409, detail="Artifact is checked out by another user")
+
         data = await request.json()
         # SEC-JSON-001: Validate all JSON fields before processing
         data = _validate_json_fields(data)
@@ -983,6 +1003,19 @@ async def update_test_case(case_id: str, request: Request):
                                     )
                                 except Exception as ver_err:
                                     logger.warning(f"Version creation on update failed (non-blocking): {ver_err}")
+                                # Universal version snapshot
+                                try:
+                                    _proj_id = getattr(request.state, "project_id", None)
+                                    await universal_version_service.create_version(
+                                        artifact_type="test_case",
+                                        artifact_id=str(case_id),
+                                        snapshot=snapshot,
+                                        changed_by=user_id,
+                                        change_type="modified",
+                                        project_id=_proj_id,
+                                    )
+                                except Exception:
+                                    pass  # Version creation is non-blocking
                                 return {"id": case_id}
                     finally:
                         pool.putconn(conn)
@@ -1016,9 +1049,14 @@ async def update_test_case(case_id: str, request: Request):
 
 
 @router.delete("/{case_id}")
-async def delete_test_case(case_id: str):
+async def delete_test_case(case_id: str, request: Request):
     """Delete a test case by setting status to 'archived' (soft delete)"""
     try:
+        # Check artifact lock
+        user_id = getattr(request.state, "user_id", None) or "22222222-2222-2222-2222-222222222222"
+        if await locking_service.is_locked_by_other("test_case", str(case_id), str(user_id)):
+            raise HTTPException(status_code=409, detail="Artifact is checked out by another user")
+
         # Try PostgreSQL first
         if _is_postgres_available():
             try:

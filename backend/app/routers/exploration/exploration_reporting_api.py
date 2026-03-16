@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.services.exploration.exploration_reporting import ExplorationReporting
 from app.utils.endpoint_helpers import ensure_default_org_project
+from app.dependencies import get_current_project, get_current_user, get_current_tenant
 
 logger = logging.getLogger(__name__)
 

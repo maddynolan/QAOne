@@ -2,7 +2,7 @@
 
 > **This file is the starting reference for all Claude sessions working on this codebase.**
 > It must be kept up-to-date whenever changes are made to components, APIs, or architecture.
-> Last updated: 2026-02-24
+> Last updated: 2026-03-15
 
 ---
 
@@ -1120,19 +1120,81 @@ interface ComparisonResult { passed, diff_percentage, diff_pixel_count, total_pi
 
 ## Cross-Cutting Concerns
 
-### Authentication & Authorization
+### Authentication & Authorization (v3.26.9+ Enterprise Hardening)
 
-- **JWT Tokens** via python-jose
+- **JWT Tokens** via python-jose — session JWT with tenant_id, project_id, roles, permissions
+- **Real Auth Backend**: `backend/app/services/auth/auth_service.py` — register, login, bcrypt password hashing, JWT generation
+- **Auth API**: `backend/app/routers/platform/auth_api.py` — `POST /api/auth/login`, `/signup`, `/refresh`, `/logout`, `GET /api/auth/me`, `/session`
+- **SAML 2.0 SSO**: `backend/app/services/auth/saml_service.py` — AuthnRequest, assertion validation, SP metadata
+- **OIDC SSO**: `backend/app/services/auth/oidc_service.py` — authorization URL, code exchange, ID token validation
+- **SSO API**: `backend/app/routers/platform/sso_api.py` — SAML + OIDC endpoints (`/api/auth/sso`)
+- **AD Group Mapping**: `backend/app/services/auth/group_mapping_service.py` — JIT user provisioning, group-to-role mapping from `sso_configurations.group_mapping` JSONB
+- **Service Accounts**: `backend/app/services/auth/service_account_service.py` — API tokens (`qaai_` prefix) for CI/CD, SHA-256 hash storage
+- **Service Accounts API**: `backend/app/routers/platform/service_accounts_api.py` — `POST /api/service-accounts/create`, `/list`, `/regenerate`, `/revoke`, `/validate`
+- **Service Accounts UI**: `src/modules/platform/pages/ServiceAccountsPage.tsx` — create, revoke, regenerate tokens with permissions
 - **RBAC Middleware** — decorator-based permission checks: `@require_permission("test_cases:create")`
-- **Frontend RBAC** — `ProtectedRoute` with role hierarchy enforcement (owner > admin > member > viewer), `getUserRoleInOrg()`, `hasRequiredRole()`, inline UnauthorizedPage redirect
-- **Multi-Tenancy** — tenant isolation via TenantContextMiddleware
+- **Project-Level RBAC**: 4 project roles (admin, lead, tester, viewer) with granular `{module}:{action}` permissions
+- **Frontend Auth**: `src/contexts/AuthContext.tsx` — real JWT login + SSO redirect + demo mode (`VITE_DEMO_MODE=true`)
+- **API Client**: `src/lib/api-client.ts` — Axios with JWT `Authorization: Bearer` header, 401 interceptor, `X-Project-ID` header
+- **Frontend RBAC** — `ProtectedRoute` with role hierarchy enforcement (owner > admin > member > viewer)
+- **Multi-Tenancy** — `backend/app/middleware/tenant_middleware.py` — JWT → X-API-Key → header-based override chain
+- **Tenant Query Wrapper**: `backend/app/services/storage/tenant_query_wrapper.py` — auto-injects `WHERE tenant_id/project_id = %s`
+- **Shared Dependencies**: `backend/app/dependencies.py` — `get_current_project()`, `get_current_user()`, `get_current_tenant()` FastAPI deps
 - **OAuth2** — Salesforce and external integrations
-- **Rate Limiting** — `RateLimitMiddleware` with sliding window (100/min default, 10/min auth, 20/min AI endpoints), X-RateLimit headers, X-Forwarded-For support
+- **Rate Limiting** — `RateLimitMiddleware` with sliding window (100/min default, 10/min auth, 20/min AI endpoints)
 - **Middleware Stack** (outermost to innermost): CORS → RateLimit → RBAC → Tenant → TraceLogging
+
+### Artifact Locking (Check-out/Check-in)
+
+- **Backend Service**: `backend/app/services/core/locking_service.py` — acquire, release, force-release, expired lock cleanup
+- **API Router**: `backend/app/routers/platform/locking_api.py` — 9 endpoints (`POST /api/locks/acquire`, `/release`, `/force-release`, `GET /status/{type}/{id}`, `/mine`, `/list`, `/expired/cleanup`)
+- **Frontend Hook**: `src/hooks/useArtifactLock.ts` — `{ isLocked, lockedBy, acquireLock, releaseLock, isMyLock }`
+- **Frontend Banner**: `src/components/ArtifactLockBanner.tsx` — lock status with Check Out / Check In buttons
+- **Artifact types**: test_case, api_collection, perf_scenario, mobile_flow, visual_baseline, a11y_config, test_plan, defect, requirement
+- **Wired into all module routers**: PUT/DELETE endpoints check `locking_service.is_locked_by_other()` → HTTP 409 if locked
+
+### Universal Version Control
+
+- **Backend Service**: `backend/app/services/core/universal_version_service.py` — JSONB snapshot versioning for all artifact types
+- **Features**: `create_version()`, `create_branch()`, `merge_branch()`, `list_branches()`, `get_version_history()`, `get_version()`, `revert_to_version()`
+- **Branch support**: Create branches from any version, merge back to main with conflict detection
+- **Wired into all module routers**: Non-blocking version snapshots on every create/update (test_cases, api_collections, test_plans, mobile_flows, defects, requirements)
+- **Migration**: `supabase/migrations/040_universal_versions.sql` — artifact_versions + artifact_branches tables
+
+### Git Export & Sync
+
+- **Backend Service**: `backend/app/services/core/git_export_service.py` — export project artifacts to file tree, import from file tree, CI pipeline generation
+- **API Router**: `backend/app/routers/platform/git_sync_api.py` — `POST /api/git/export`, `/import`, `/pipeline`, `/webhook/{project_id}`, `GET /config/{project_id}`, `PUT /config/{project_id}`
+- **CI Pipeline Generation**: GitHub Actions, GitLab CI, Jenkins, Azure Pipelines
+- **Webhook support**: Incoming Git webhooks for auto-sync
+
+### Schema Isolation (Multi-Tenant)
+
+- **Backend Service**: `backend/app/services/storage/schema_manager.py` — per-tenant PostgreSQL schema isolation
+- **Features**: `create_tenant_schema()`, `get_connection_for_tenant()`, `migrate_shared_to_isolated()`
+- **Schema naming**: `tenant_<first_12_chars_of_uuid>` with 18 core tables replicated
+- **Migration**: `supabase/migrations/042_schema_isolation.sql`
+
+### Compliance Reporting
+
+- **Backend Service**: `backend/app/services/core/compliance_report_service.py` — SOC 2, HIPAA, GDPR, Access Review reports
+- **API Router**: `backend/app/routers/platform/compliance_reporting_api.py` — `POST /api/compliance/reports/generate`, `GET /list`, `GET /{report_id}`, `POST /audit-export`
+- **Frontend UI**: `src/modules/platform/pages/ComplianceReportingPage.tsx` — 3 tabs: Generate, History, Audit Export
+- **Report types**: `soc2` (CC6/CC8/A1/C1 controls), `hipaa` (164.312 sections), `gdpr` (DSAR), `access_review` (inactive user detection)
+
+### On-Prem Deployment
+
+- **Docker Compose**: `deploy/on-prem/docker-compose.onprem.yml` — backend + frontend + nginx (customer provides PostgreSQL)
+- **Environment Template**: `deploy/on-prem/.env.template` — all required vars with comments
+- **Installer Script**: `deploy/on-prem/install.sh` — interactive setup (DB connection, domain, SSL, admin email)
+- **Nginx Config**: `deploy/on-prem/nginx.onprem.conf` — OWASP headers, gzip, API proxy
 
 ### Audit Trail
 
 - **Backend Service**: `backend/app/services/core/audit_service.py` — in-memory deque (10K max) with optional PostgreSQL persistence
+- **Hash Chain**: SHA-256 hash chain for tamper detection (each entry includes hash of previous entry)
+- **Strict Mode**: `AUDIT_MODE=strict` env var forces PostgreSQL persistence (required for SOC 2/HIPAA compliance)
+- **Enterprise Events**: lock.acquire/release, version.create/revert, branch.create/merge, service_account.create/revoke, schema.isolate, compliance.report_generated, sso.login
 - **API Router**: `backend/app/routers/platform/audit_api.py` — 4 endpoints (`GET/POST /api/audit/logs`, `GET /api/audit/summary`, `GET /api/audit/actions`)
 - **Frontend UI**: `src/modules/platform/pages/AuditLogPage.tsx` — filterable table, summary cards, CSV export, pagination
 - **Navigation**: Available via sidebar under Configure → "Audit Log"
@@ -1372,7 +1434,8 @@ PostgreSQL (primary) with **in-memory fallback**:
 - Demo data seeding via `SEED_DEMO_DATA=true` env var (auto-triggered in `auto_migrate.py`)
 - `backend/app/scripts/seed_demo_data.py` — Idempotent seed script (fixed UUIDs + ON CONFLICT DO UPDATE): 1 org, 3 projects, 3 users, 50 test cases, 20 runs, 10 defects, 8 requirements, 5 API collections, 3 environments, 2 a11y scans, 3 perf runs
 - Supabase for auth and file storage
-- 34 migrations (`supabase/migrations/001_initial_schema.sql` through `034_ai_settings.sql`)
+- 42 migrations (`supabase/migrations/001_initial_schema.sql` through `042_schema_isolation.sql`)
+- Enterprise migrations: `036_user_auth.sql`, `037_sso_configurations.sql`, `038_artifact_locking.sql`, `039_project_rbac.sql`, `040_universal_versions.sql`, `041_service_accounts.sql`, `042_schema_isolation.sql`
 - PgBouncer for connection pooling at scale (`deploy/pgbouncer/pgbouncer.ini`)
 
 ### Electron Desktop
@@ -1456,6 +1519,12 @@ PostgreSQL (primary) with **in-memory fallback**:
 | | code_alchemy_api | `/api/code-alchemy` | Repository import |
 | | audit_api | `/api/audit` | Audit trail logging & queries (4 endpoints) |
 | | ai_settings_api | `/api/ai/settings` | BYOK key management, AI config, usage tracking (7 endpoints) |
+| | auth_api | `/api/auth` | Login, signup, refresh, logout, session (6 endpoints) |
+| | sso_api | `/api/auth/sso` | SAML 2.0 + OIDC SSO (9 endpoints) |
+| | locking_api | `/api/locks` | Artifact check-out/check-in locking (9 endpoints) |
+| | service_accounts_api | `/api/service-accounts` | CI/CD API token management (6 endpoints) |
+| | git_sync_api | `/api/git` | Git export/import + CI pipeline generation (7 endpoints) |
+| | compliance_reporting_api | `/api/compliance/reports` | SOC 2, HIPAA, GDPR report generation (5 endpoints) |
 
 ---
 
