@@ -604,9 +604,13 @@ async def health_check_database():
 # Include all routers
 # ============================================================================
 
-# Authentication API - Login, Signup, Session, Token refresh
+# Authentication API - Login, Signup, Session, Token refresh, Email verification
 from app.routers.platform.auth_api import auth_router
 app.include_router(auth_router)
+
+# Subscription API - Trial management, plan upgrades, limits
+from app.routers.platform.subscription_api import subscription_router
+app.include_router(subscription_router)
 
 # SSO API - SAML 2.0 / OIDC Single Sign-On
 from app.routers.platform.sso_api import sso_router
