@@ -291,6 +291,73 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_run ON artifacts(run_id);
 CREATE INDEX IF NOT EXISTS idx_requirements_project ON requirements(project_id);
 CREATE INDEX IF NOT EXISTS idx_ai_settings_org ON ai_settings(org_id);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_org_date ON ai_usage_log(org_id, created_at);
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- Auth columns on users table (must exist for login/signup to work)
+-- These are added by migration 036 but Docker images may not have
+-- the supabase/migrations/ directory, so we ensure them here too.
+-- ═══════════════════════════════════════════════════════════════════════
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'local';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS idp_subject_id VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+
+-- Org memberships (required for login to resolve user's org/project)
+CREATE TABLE IF NOT EXISTS org_memberships (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    role VARCHAR(50) DEFAULT 'member',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, org_id)
+);
+
+-- Project memberships
+CREATE TABLE IF NOT EXISTS project_memberships (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    role VARCHAR(50) DEFAULT 'tester',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, project_id)
+);
+
+-- Subscriptions (trial/plan tracking)
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID NOT NULL,
+    plan VARCHAR(50) NOT NULL DEFAULT 'trial',
+    status VARCHAR(50) NOT NULL DEFAULT 'active',
+    trial_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    trial_end TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '14 days'),
+    paid_start TIMESTAMPTZ,
+    paid_end TIMESTAMPTZ,
+    stripe_customer_id VARCHAR(255),
+    stripe_subscription_id VARCHAR(255),
+    max_users INTEGER NOT NULL DEFAULT 10,
+    max_test_runs_per_month INTEGER NOT NULL DEFAULT 5000,
+    max_projects INTEGER NOT NULL DEFAULT 5,
+    warning_7d_sent BOOLEAN DEFAULT false,
+    warning_3d_sent BOOLEAN DEFAULT false,
+    warning_1d_sent BOOLEAN DEFAULT false,
+    expired_email_sent BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_org_subscription UNIQUE (org_id)
+);
+
+-- Email verification tokens
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    token VARCHAR(255) NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '24 hours'),
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 """
 
 
