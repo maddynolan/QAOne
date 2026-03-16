@@ -9,6 +9,7 @@ import random
 from fastapi import APIRouter, HTTPException
 
 from app.utils.endpoint_helpers import ensure_default_org_project
+from app.dependencies import get_current_project, get_current_user, get_current_tenant
 from app.services.storage.database import get_database_client
 from app.services.storage.postgres_direct import execute_query
 from app.services.engines.flaky_detector import get_flaky_detector

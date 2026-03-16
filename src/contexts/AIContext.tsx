@@ -260,7 +260,8 @@ const AIContext = createContext<AIContextType | undefined>(undefined);
 export function AIProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<AIConfig>(() => {
     // Load from localStorage cache for instant render
-    const saved = localStorage.getItem('aristrace_ai_config');
+    // Migration: read old key if new one doesn't exist yet
+    const saved = localStorage.getItem('flowstral_ai_config') || localStorage.getItem('aristrace_ai_config');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -301,7 +302,7 @@ export function AIProvider({ children }: { children: React.ReactNode }) {
             costTracking: data.budget_tracking ?? true,
           }));
           // Also cache to localStorage for offline mode
-          localStorage.setItem('aristrace_ai_config', JSON.stringify({
+          localStorage.setItem('flowstral_ai_config', JSON.stringify({
             ...data,
             _cachedAt: Date.now()
           }));

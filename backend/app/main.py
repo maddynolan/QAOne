@@ -604,6 +604,30 @@ async def health_check_database():
 # Include all routers
 # ============================================================================
 
+# Authentication API - Login, Signup, Session, Token refresh
+from app.routers.platform.auth_api import auth_router
+app.include_router(auth_router)
+
+# SSO API - SAML 2.0 / OIDC Single Sign-On
+from app.routers.platform.sso_api import sso_router
+app.include_router(sso_router)
+
+# Artifact Locking API — Check-out / Check-in
+from app.routers.platform.locking_api import locking_router
+app.include_router(locking_router)
+
+# Service Accounts API — CI/CD API Tokens
+from app.routers.platform.service_accounts_api import service_accounts_router
+app.include_router(service_accounts_router)
+
+# Git Sync API — Export/Import + CI/CD Pipeline Generation
+from app.routers.platform.git_sync_api import git_sync_router
+app.include_router(git_sync_router)
+
+# Compliance Reporting API — SOC 2, HIPAA, GDPR Reports
+from app.routers.platform.compliance_reporting_api import compliance_reporting_router
+app.include_router(compliance_reporting_router)
+
 # Health and metrics
 from app.routers.platform.health_api import router as health_router
 app.include_router(health_router)

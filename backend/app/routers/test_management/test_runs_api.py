@@ -18,6 +18,7 @@ from app.utils.endpoint_helpers import (
     map_priority_from_db,
     DEFAULT_USER_ID
 )
+from app.dependencies import get_current_project, get_current_user, get_current_tenant
 from app.services.storage.database import get_database_client
 from app.services.storage.postgres_direct import (
     get_postgres_pool,

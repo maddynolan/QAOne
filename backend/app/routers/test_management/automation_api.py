@@ -12,6 +12,7 @@ from app.services.automation.script_converter import get_script_converter
 from app.services.automation.test_execution_service import get_test_execution_service
 from app.services.automation.locator_engine import get_locator_engine
 from app.services.automation.auto_healing_service import get_auto_healing_service
+from app.dependencies import get_current_project, get_current_user, get_current_tenant
 
 logger = logging.getLogger(__name__)
 

@@ -62,10 +62,8 @@ export default function SignInPage() {
         <div className="w-full max-w-md mx-auto">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2.5 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center">
-              <span className="text-white font-bold text-xl">F</span>
-            </div>
-            <span className="text-2xl font-bold text-slate-800">Flowstral</span>
+            <img src="/flowstral-logo.svg" alt="Flowstral" className="w-10 h-10 rounded-xl" />
+            <span className="text-2xl font-bold text-slate-800">Flow<span className="text-indigo-600">stral</span></span>
           </Link>
 
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Welcome back</h1>

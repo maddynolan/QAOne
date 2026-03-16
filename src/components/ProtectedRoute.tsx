@@ -5,7 +5,8 @@ import { Loader2, ShieldAlert } from 'lucide-react'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
-  requiredRole?: 'owner' | 'admin' | 'member' | 'viewer'
+  requiredRole?: 'owner' | 'admin' | 'lead' | 'member' | 'tester' | 'viewer'
+  requiredPermission?: string
 }
 
 /**
@@ -14,13 +15,28 @@ interface ProtectedRouteProps {
  */
 const ROLE_HIERARCHY: Record<string, number> = {
   viewer: 1,
+  tester: 2,
   member: 2,
-  admin: 3,
-  owner: 4,
+  lead: 3,
+  admin: 4,
+  owner: 5,
 }
 
-function getUserRoleInOrg(user: any, org: any): string {
-  // Check org membership role if available
+function getUserRoleInOrg(user: any, org: any, contextRoles?: string[]): string {
+  // Use roles from AuthContext (populated from JWT)
+  if (contextRoles && contextRoles.length > 0) {
+    let maxLevel = 0
+    let maxRole = 'member'
+    for (const role of contextRoles) {
+      const level = ROLE_HIERARCHY[role] || 0
+      if (level > maxLevel) {
+        maxLevel = level
+        maxRole = role
+      }
+    }
+    return maxRole
+  }
+  // Fallback: check org membership role if available
   if (org?.user_role) return org.user_role
   // Check user metadata for role
   if (user?.user_metadata?.role) return user.user_metadata.role
@@ -37,9 +53,10 @@ function hasRequiredRole(userRole: string, requiredRole: string): boolean {
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
-  requiredRole
+  requiredRole,
+  requiredPermission
 }) => {
-  const { currentUser, loading, organizations, currentOrg } = useAuth()
+  const { currentUser, loading, organizations, currentOrg, roles, hasPermission, isDemoMode } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -57,20 +74,26 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/auth" state={{ from: location }} replace />
   }
 
-  if (organizations.length === 0) {
+  if (organizations.length === 0 && !isDemoMode) {
     return <Navigate to="/onboarding" replace />
   }
 
-  if (!currentOrg) {
+  if (!currentOrg && !isDemoMode) {
     return <Navigate to="/onboarding" replace />
   }
 
   // Role-based access control enforcement
   if (requiredRole) {
-    const userRole = getUserRoleInOrg(currentUser, currentOrg)
+    const userRole = getUserRoleInOrg(currentUser, currentOrg, roles)
     if (!hasRequiredRole(userRole, requiredRole)) {
       return <UnauthorizedPage requiredRole={requiredRole} userRole={userRole} />
     }
+  }
+
+  // Permission-based access control
+  if (requiredPermission && !hasPermission(requiredPermission)) {
+    const userRole = getUserRoleInOrg(currentUser, currentOrg, roles)
+    return <UnauthorizedPage requiredRole={requiredPermission} userRole={userRole} />
   }
 
   return <>{children}</>

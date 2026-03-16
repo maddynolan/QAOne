@@ -16,6 +16,7 @@ import { isElectron } from '@/lib/electron-bridge';
 import { useTheme } from '@/contexts/ThemeContext';
 import { AIBadge } from '@/contexts/AIContext';
 import { useLandingPlugins, LandingPluginsProvider, type PluginKey } from '@/contexts/LandingPluginsContext';
+import FlowstralLogo from '@/components/FlowstralLogo';
 import {
   Settings,
   Bell,
@@ -139,31 +140,8 @@ const mainNavItems: NavItem[] = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
-// LOGO COMPONENT - Adapts to theme
+// LOGO — uses shared FlowstralLogo component (imported above)
 // ═══════════════════════════════════════════════════════════════════════════
-
-function FlowstralLogo() {
-  const { theme } = useTheme();
-  
-  return (
-    <div className="flex items-center gap-2.5 shrink-0">
-      {/* Logo icon - Blue in light, Orange in dark */}
-      <div className={cn(
-        "relative w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-sm",
-        theme === 'light' 
-          ? "bg-gradient-to-br from-blue-500 to-blue-700" 
-          : "bg-gradient-to-br from-amber-400 to-orange-600 shadow-lg shadow-amber-500/30"
-      )}>
-        F
-      </div>
-      {/* Logo text */}
-      <span className="text-lg font-semibold tracking-tight">
-        <span className={theme === 'light' ? 'text-gray-900' : 'text-white'}>Flow</span>
-        <span className={theme === 'light' ? 'text-blue-600' : 'text-amber-500'}>stral</span>
-      </span>
-    </div>
-  );
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB BUTTON COMPONENT - Clean text-only nav (enterprise style)

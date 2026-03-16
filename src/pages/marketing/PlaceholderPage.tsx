@@ -31,10 +31,8 @@ function MarketingHeader() {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center">
-              <span className="text-white font-bold text-lg">F</span>
-            </div>
-            <span className="text-xl font-bold text-slate-800">Flowstral</span>
+            <img src="/flowstral-logo.svg" alt="Flowstral" className="w-9 h-9 rounded-xl" />
+            <span className="text-xl font-bold text-slate-800">Flow<span className="text-indigo-600">stral</span></span>
           </Link>
         </div>
         <div className="flex items-center gap-3">

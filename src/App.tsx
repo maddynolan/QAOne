@@ -1,5 +1,5 @@
 /**
- * ArisTrace/Flowstral - QA Excellence Platform
+ * Flowstral - QA Automation Platform
  * 
  * CORE MODULES:
  * 1. Smart Trace - Browser test tracing & automation (PlaywrightRecorderPage)

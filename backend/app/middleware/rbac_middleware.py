@@ -228,6 +228,86 @@ def require_any_permission(permissions: List[str]):
     return decorator
 
 
+def require_project_permission(permission: str):
+    """
+    Decorator to require a project-level permission.
+    Checks permissions from the JWT token's project context.
+
+    Uses the permissions already resolved by tenant_middleware and
+    stored in request.state.permissions (from JWT claims).
+
+    If request.state.permissions is empty (no auth configured),
+    falls back to allowing the request through.
+
+    Usage:
+        @router.post("/test-cases")
+        @require_project_permission("test_cases:create")
+        async def create_test_case(request: Request, ...):
+            ...
+    """
+    def decorator(func: Callable):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            request = None
+            for arg in args:
+                if isinstance(arg, Request):
+                    request = arg
+                    break
+            if not request:
+                request = kwargs.get("request")
+
+            if not request:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Request object not found"
+                )
+
+            user_id = get_user_id(request)
+            if not user_id:
+                return await func(*args, **kwargs)
+
+            # Get permissions from request.state (set by tenant middleware from JWT)
+            perms = getattr(request.state, "permissions", [])
+
+            # Wildcard check
+            if "*" in perms:
+                return await func(*args, **kwargs)
+
+            # Exact match
+            if permission in perms:
+                return await func(*args, **kwargs)
+
+            # Module wildcard (e.g., "test_cases:*")
+            module = permission.split(":")[0] if ":" in permission else ""
+            if module and f"{module}:*" in perms:
+                return await func(*args, **kwargs)
+
+            # Fallback: check via RBAC service
+            tenant_id = get_tenant_id(request)
+            if tenant_id:
+                try:
+                    has_perm = await rbac_service.check_permission(
+                        user_id=user_id,
+                        permission=permission,
+                        tenant_id=tenant_id
+                    )
+                    if has_perm:
+                        return await func(*args, **kwargs)
+                except Exception:
+                    pass
+
+            logger.warning(
+                f"Project permission denied: user {user_id} attempted {permission}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: {permission}"
+            )
+
+        return wrapper
+    return decorator
+
+
 def get_current_auth_user_id() -> Optional[str]:
     """
     Get user_id from current request context.

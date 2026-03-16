@@ -1,5 +1,5 @@
 /**
- * Complex Verification Components for ArisTrace
+ * Complex Verification Components for Flowstral
  * 
  * Provides UI components for:
  * - Email Verification (Microsoft 365, Gmail)

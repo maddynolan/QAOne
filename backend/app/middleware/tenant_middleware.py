@@ -48,8 +48,11 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         # Initialize tenant context
         request.state.tenant_id = None
         request.state.user_id = None
+        request.state.org_id = None
+        request.state.project_id = None
         request.state.roles = []
         request.state.permissions = []
+        request.state.accessible_project_ids = []
         
         # Skip tenant extraction for public endpoints
         if self._is_public_endpoint(request.url.path):
@@ -57,6 +60,14 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         
         # Try to extract from JWT token first (TRUSTED source)
         tenant_id, user_id, roles, permissions = self._extract_from_jwt(request)
+
+        # Try X-API-Key header for service accounts (second priority after JWT)
+        if not tenant_id:
+            api_key = request.headers.get("X-API-Key", "")
+            if api_key and api_key.startswith("qaai_"):
+                tenant_id, user_id, roles, permissions = await self._extract_from_api_key(
+                    request, api_key
+                )
 
         # Header-based override ONLY allowed for internal service-to-service calls
         # with a valid X-Internal-Service-Key. This prevents client-side spoofing.
@@ -82,8 +93,19 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         # Set request state
         request.state.tenant_id = tenant_id
         request.state.user_id = user_id
+        request.state.org_id = tenant_id  # tenant_id IS the org_id
         request.state.roles = roles or []
         request.state.permissions = permissions or []
+
+        # Extract project_id from JWT claims or headers
+        project_id = None
+        if hasattr(self, '_last_jwt_payload') and self._last_jwt_payload:
+            project_id = self._last_jwt_payload.get("project_id")
+        if not project_id:
+            project_id = request.headers.get("X-Project-ID")
+        if not project_id:
+            project_id = request.query_params.get("project_id")
+        request.state.project_id = project_id
 
         # Log for debugging (only in dev)
         if (tenant_id or user_id) and os.getenv("APP_ENV", "development") != "production":
@@ -97,27 +119,29 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
     
     def _extract_from_jwt(self, request: Request) -> tuple[Optional[str], Optional[str], list, list]:
         """Extract tenant_id and user_id from JWT token"""
+        self._last_jwt_payload = None
         auth_header = request.headers.get("Authorization")
         if not auth_header:
             return None, None, [], []
-        
+
         try:
             # Extract token from "Bearer <token>"
             if auth_header.startswith("Bearer "):
                 token = auth_header.split(" ")[1]
             else:
                 token = auth_header
-            
+
             # Decode JWT
             payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-            
+            self._last_jwt_payload = payload
+
             tenant_id = payload.get("tenant_id")
             user_id = payload.get("user_id") or payload.get("sub")
             roles = payload.get("roles", [])
             permissions = payload.get("permissions", [])
-            
+
             return tenant_id, user_id, roles, permissions
-            
+
         except jwt.ExpiredSignatureError:
             logger.warning("JWT token expired")
             return None, None, [], []
@@ -128,6 +152,31 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
             logger.error(f"Error extracting JWT: {e}")
             return None, None, [], []
     
+    async def _extract_from_api_key(self, request: Request, api_key: str):
+        """Extract tenant context from a service account API key (X-API-Key header)."""
+        try:
+            from app.services.auth.service_account_service import service_account_service
+            account = await service_account_service.validate_token(
+                raw_token=api_key,
+                ip_address=request.client.host if request.client else "",
+                user_agent=request.headers.get("User-Agent", ""),
+                endpoint=request.url.path,
+            )
+            if account:
+                # Mark this request as service account auth
+                request.state.auth_type = "service_account"
+                request.state.service_account_id = account["id"]
+                request.state.service_account_name = account["name"]
+                return (
+                    account["org_id"],             # tenant_id
+                    f"sa:{account['id']}",         # user_id (prefixed for identification)
+                    ["service_account"],            # roles
+                    account.get("permissions", []), # permissions
+                )
+        except Exception as e:
+            logger.error(f"API key validation error: {e}")
+        return None, None, [], []
+
     def _is_public_endpoint(self, path: str) -> bool:
         """Check if endpoint is public (doesn't require tenant context)"""
         public_paths = [
@@ -138,6 +187,9 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
             "/docs",
             "/openapi.json",
             "/redoc",
+            "/api/auth/login",
+            "/api/auth/signup",
+            "/api/auth/sso",
         ]
         return any(path.startswith(public) for public in public_paths)
 

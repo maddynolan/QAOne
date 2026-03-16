@@ -9,6 +9,9 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request
 from app.utils.endpoint_helpers import ensure_default_org_project
+from app.dependencies import get_current_project, get_current_user, get_current_tenant
+from app.services.core.locking_service import locking_service
+from app.services.core.universal_version_service import universal_version_service
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +101,24 @@ async def create_requirement_endpoint(request: Request):
                 )
                 
                 if requirement_id:
+                    # Create version snapshot
+                    try:
+                        await universal_version_service.create_version(
+                            artifact_type="requirement",
+                            artifact_id=str(requirement_id),
+                            snapshot={
+                                "source": data.get("source", "manual"),
+                                "title": data.get("title", ""),
+                                "description": data.get("description", ""),
+                                "source_ref": data.get("source_ref"),
+                                "acceptance_criteria": data.get("acceptance_criteria"),
+                            },
+                            changed_by=getattr(request.state, "user_id", None) or "22222222-2222-2222-2222-222222222222",
+                            change_type="created",
+                            project_id=project_id,
+                        )
+                    except Exception:
+                        pass  # Version creation is non-blocking
                     return {"id": requirement_id}
             except Exception as pg_error:
                 logger.warning(f"PostgreSQL insert failed: {pg_error}")
@@ -119,7 +140,19 @@ async def create_requirement_endpoint(request: Request):
         }
         _requirements_store[req_id] = requirement
         logger.info(f"Requirement {req_id} saved to in-memory store")
-        
+
+        # Create version snapshot (in-memory fallback path)
+        try:
+            await universal_version_service.create_version(
+                artifact_type="requirement",
+                artifact_id=str(req_id),
+                snapshot=requirement,
+                changed_by=getattr(request.state, "user_id", None) or "22222222-2222-2222-2222-222222222222",
+                change_type="created",
+            )
+        except Exception:
+            pass  # Version creation is non-blocking
+
         return {"id": req_id}
     except HTTPException:
         raise
@@ -323,6 +356,11 @@ async def get_requirement(requirement_id: str):
 async def update_requirement(requirement_id: str, request: Request):
     """Update a requirement"""
     try:
+        # Check artifact lock
+        user_id = getattr(request.state, "user_id", None) or "22222222-2222-2222-2222-222222222222"
+        if await locking_service.is_locked_by_other("requirement", str(requirement_id), str(user_id)):
+            raise HTTPException(status_code=409, detail="Artifact is checked out by another user")
+
         org_id, project_id = await ensure_default_org_project()
         data = await request.json()
         
@@ -374,7 +412,20 @@ async def update_requirement(requirement_id: str, request: Request):
                 
                 if not result:
                     raise HTTPException(status_code=404, detail="Requirement not found")
-                
+
+                # Create version snapshot
+                try:
+                    await universal_version_service.create_version(
+                        artifact_type="requirement",
+                        artifact_id=str(requirement_id),
+                        snapshot=data,
+                        changed_by=user_id,
+                        change_type="modified",
+                        project_id=project_id,
+                    )
+                except Exception:
+                    pass  # Version creation is non-blocking
+
                 return {"id": str(result[0])}
         finally:
             pool.putconn(conn)

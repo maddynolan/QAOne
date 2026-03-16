@@ -10,6 +10,9 @@ from app.utils.endpoint_helpers import (
     ensure_default_org_project,
     DEFAULT_USER_ID
 )
+from app.dependencies import get_current_project, get_current_user, get_current_tenant
+from app.services.core.locking_service import locking_service
+from app.services.core.universal_version_service import universal_version_service
 from app.services.storage.database import get_database_client
 from app.services.storage.postgres_direct import execute_query, execute_insert, get_postgres_pool
 
@@ -75,7 +78,20 @@ async def create_test_plan(request: Request):
         }
         
         plan_id = await execute_insert("test_plans", plan_data)
-        
+
+        # Create version snapshot
+        try:
+            await universal_version_service.create_version(
+                artifact_type="test_plan",
+                artifact_id=str(plan_id or f"plan_{int(time.time())}"),
+                snapshot=plan_data,
+                changed_by=DEFAULT_USER_ID,
+                change_type="created",
+                project_id=project_id,
+            )
+        except Exception:
+            pass  # Version creation is non-blocking
+
         return {"id": plan_id or f"plan_{int(time.time())}"}
     except Exception as e:
         logger.error(f"Error creating test plan: {type(e).__name__}")
@@ -86,6 +102,11 @@ async def create_test_plan(request: Request):
 async def update_test_plan(plan_id: str, request: Request):
     """Update a test plan"""
     try:
+        # Check artifact lock
+        user_id = getattr(request.state, "user_id", None) or "22222222-2222-2222-2222-222222222222"
+        if await locking_service.is_locked_by_other("test_plan", str(plan_id), str(user_id)):
+            raise HTTPException(status_code=409, detail="Artifact is checked out by another user")
+
         data = await request.json()
         
         pool = get_postgres_pool()
@@ -112,7 +133,25 @@ async def update_test_plan(plan_id: str, request: Request):
                 
                 if not result:
                     raise HTTPException(status_code=404, detail="Test plan not found")
-                
+
+                # Create version snapshot
+                try:
+                    snapshot = {
+                        "name": data.get("name", ""),
+                        "description": data.get("description", ""),
+                        "status": data.get("status", "draft"),
+                    }
+                    await universal_version_service.create_version(
+                        artifact_type="test_plan",
+                        artifact_id=str(plan_id),
+                        snapshot=snapshot,
+                        changed_by=user_id,
+                        change_type="modified",
+                        project_id=getattr(request.state, "project_id", None),
+                    )
+                except Exception:
+                    pass  # Version creation is non-blocking
+
                 return {"id": str(result[0])}
         finally:
             pool.putconn(conn)
@@ -124,9 +163,14 @@ async def update_test_plan(plan_id: str, request: Request):
 
 
 @router.delete("/{plan_id}")
-async def delete_test_plan(plan_id: str):
+async def delete_test_plan(plan_id: str, request: Request):
     """Delete a test plan"""
     try:
+        # Check artifact lock
+        user_id = getattr(request.state, "user_id", None) or "22222222-2222-2222-2222-222222222222"
+        if await locking_service.is_locked_by_other("test_plan", str(plan_id), str(user_id)):
+            raise HTTPException(status_code=409, detail="Artifact is checked out by another user")
+
         pool = get_postgres_pool()
         if not pool:
             raise HTTPException(status_code=404, detail="Test plan not found")

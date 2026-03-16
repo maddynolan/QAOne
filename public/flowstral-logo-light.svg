@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="flowGradL" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06B6D4"/>
+      <stop offset="50%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="nodeGradL" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0891B2"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+  <!-- No background — transparent for light contexts -->
+  <!-- Flow paths — three curved streams converging -->
+  <g fill="none" stroke="url(#flowGradL)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M120 110 C180 110, 200 160, 220 210 S280 340, 340 380 Q370 396, 400 390" stroke-width="28" opacity="1"/>
+    <path d="M110 256 C160 220, 220 290, 280 256 S380 220, 400 256" stroke-width="24" opacity="0.85"/>
+    <path d="M120 400 C180 400, 200 350, 220 300 S280 170, 340 130 Q370 114, 400 120" stroke-width="20" opacity="0.65"/>
+  </g>
+  <!-- Constellation nodes -->
+  <circle cx="220" cy="210" r="12" fill="url(#nodeGradL)"/>
+  <circle cx="280" cy="256" r="10" fill="url(#nodeGradL)" opacity="0.9"/>
+  <circle cx="340" cy="300" r="8" fill="url(#nodeGradL)" opacity="0.7"/>
+  <circle cx="160" cy="256" r="5" fill="#0891B2" opacity="0.5"/>
+  <circle cx="370" cy="180" r="5" fill="#7C3AED" opacity="0.5"/>
+  <circle cx="360" cy="350" r="4" fill="#7C3AED" opacity="0.4"/>
+</svg>
