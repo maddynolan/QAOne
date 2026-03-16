@@ -1,6 +1,6 @@
 {
   "name": "flowstral-desktop",
-  "version": "3.25.0",
+  "version": "3.27.0",
   "description": "Flowstral Desktop - Full On-Prem Test Automation Platform",
   "main": "src/main/index.js",
   "author": "Flowstral Inc.",
@@ -36,7 +36,7 @@
   "build": {
     "appId": "com.flowstral.desktop",
     "productName": "Flowstral",
-    "copyright": "Copyright © 2024 Flowstral Inc.",
+    "copyright": "Copyright \u00c2\u00a9 2024 Flowstral Inc.",
     "directories": {
       "output": "dist",
       "buildResources": "assets"
@@ -74,7 +74,9 @@
       ],
       "icon": "assets/icon.ico",
       "publisherName": "Flowstral Inc.",
-      "signingHashAlgorithms": ["sha256"]
+      "signingHashAlgorithms": [
+        "sha256"
+      ]
     },
     "mac": {
       "target": [
