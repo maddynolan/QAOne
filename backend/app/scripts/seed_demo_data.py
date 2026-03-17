@@ -1453,6 +1453,16 @@ def seed_subscriptions(cur):
 # Main
 # ---------------------------------------------------------------------------
 
+def _safe_seed(conn, cur, label, fn, *args):
+    """Run a seed function inside a SAVEPOINT so failures don't rollback critical data."""
+    try:
+        cur.execute(f"SAVEPOINT sp_{label}")
+        fn(cur, *args) if args else fn(cur)
+    except Exception as e:
+        cur.execute(f"ROLLBACK TO SAVEPOINT sp_{label}")
+        print(f"  [{label}] SKIPPED: {str(e)[:100]}")
+
+
 def main():
     print("=" * 60)
     print("  Flowstral Demo Data Seeder")
@@ -1461,69 +1471,85 @@ def main():
     conn = get_connection()
     cur = conn.cursor()
 
-    # Check if already seeded (look for our sentinel test case)
-    sentinel_id = _uuid("0100")
-    cur.execute("SELECT EXISTS(SELECT 1 FROM test_cases WHERE id = %s)", (sentinel_id,))
+    # Check if already seeded (look for our sentinel org)
+    cur.execute("SELECT EXISTS(SELECT 1 FROM organizations WHERE id = %s)", (ORG_ACME,))
     already_seeded = cur.fetchone()[0]
     if already_seeded:
-        print(f"\n[SeedDemo] Demo data already exists (found sentinel {sentinel_id}).")
+        print(f"\n[SeedDemo] Demo data already exists (found Acme Corp).")
         print("[SeedDemo] Re-running in upsert mode (ON CONFLICT DO UPDATE)...\n")
     else:
         print(f"\n[SeedDemo] Fresh seed — inserting demo data...\n")
 
     try:
+        # ── CRITICAL: Auth data (must succeed for login to work) ──────────
         seed_organization(cur)
         seed_projects(cur)
         seed_users(cur)
         seed_memberships(cur)
-        seed_test_plans(cur)
-        case_ids = seed_test_cases(cur)
-        run_ids = seed_test_runs(cur, case_ids)
-        seed_defects(cur, run_ids)
-        seed_requirements(cur)
-        seed_api_collections(cur)
-        seed_api_environments(cur)
-        seed_accessibility(cur)
-        seed_performance(cur)
 
-        # Seed subscription (requires subscriptions table from migration 043)
+        # Commit auth data immediately so login works even if later seeds fail
+        conn.commit()
+        print("  [AUTH] Core auth data committed (org, projects, users, memberships)")
+
+        # ── NON-CRITICAL: Test data (each wrapped in SAVEPOINT) ──────────
+        _safe_seed(conn, cur, "5-plans", seed_test_plans)
+
+        case_ids = []
         try:
-            seed_subscriptions(cur)
+            cur.execute("SAVEPOINT sp_cases")
+            case_ids = seed_test_cases(cur)
         except Exception as e:
-            print(f"  [13/13] Subscriptions: skipped ({str(e)[:80]})")
-            conn.rollback()
-            # Re-run previous seeds since rollback undid them — skip subscriptions
-            # This ensures backward compat if migration 043 hasn't run yet
+            cur.execute("ROLLBACK TO SAVEPOINT sp_cases")
+            print(f"  [6-cases] SKIPPED: {str(e)[:100]}")
+
+        run_ids = []
+        if case_ids:
+            try:
+                cur.execute("SAVEPOINT sp_runs")
+                run_ids = seed_test_runs(cur, case_ids)
+            except Exception as e:
+                cur.execute("ROLLBACK TO SAVEPOINT sp_runs")
+                print(f"  [7-runs] SKIPPED: {str(e)[:100]}")
+
+        if run_ids:
+            _safe_seed(conn, cur, "8-defects", seed_defects, run_ids)
+
+        _safe_seed(conn, cur, "9-reqs", seed_requirements)
+        _safe_seed(conn, cur, "10-api", seed_api_collections)
+        _safe_seed(conn, cur, "11-env", seed_api_environments)
+        _safe_seed(conn, cur, "12-a11y", seed_accessibility)
+        _safe_seed(conn, cur, "12-perf", seed_performance)
+        _safe_seed(conn, cur, "13-subs", seed_subscriptions)
 
         conn.commit()
         print("\n" + "=" * 60)
         print("  Seed complete! All data committed.")
         print("=" * 60)
 
-        # Print summary
+        # Print summary (each count in its own savepoint to handle missing tables)
         tables = [
             "organizations", "projects", "users", "org_memberships", "project_memberships",
             "test_plans", "test_cases", "test_runs", "test_run_steps", "defects",
-            "requirements", "api_collections", "api_collection_folders",
-            "api_collection_requests", "api_environments",
-            "accessibility_scans", "accessibility_issues", "perf_runs", "perf_metrics",
+            "requirements", "subscriptions",
         ]
         print("\n  Table Row Counts:")
         for table in tables:
             try:
+                cur.execute(f"SAVEPOINT sp_count")
                 cur.execute(f"SELECT COUNT(*) FROM {table}")  # noqa: S608
                 count = cur.fetchone()[0]
                 print(f"    {table:.<40s} {count}")
             except Exception:
-                conn.rollback()
+                cur.execute("ROLLBACK TO SAVEPOINT sp_count")
                 print(f"    {table:.<40s} (table not found)")
 
     except Exception as e:
         conn.rollback()
-        print(f"\n[SeedDemo] ERROR: {e}")
+        print(f"\n[SeedDemo] ERROR in critical auth seed: {e}")
         import traceback
         traceback.print_exc()
-        sys.exit(1)
+        # Don't sys.exit(1) — let the app start even if seeding fails
+        # The auto_migrate caller will log the warning
     finally:
         cur.close()
         conn.close()
