@@ -7,15 +7,17 @@ Takes plain English instructions and returns real-time test execution events.
 @version 2.0.0
 """
 
+import asyncio
 import json
 import logging
 import os
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.services.ai_testing import create_orchestrator
+from app.services.ai_testing.live_browser_stream import live_stream_manager
 
 logger = logging.getLogger(__name__)
 
@@ -495,3 +497,86 @@ IMPORTANT: For element "{failed_step.get('target', '')[:200]}", try these select
             "Connection": "keep-alive"
         }
     )
+
+
+# ── Live Browser Stream WebSocket ────────────────────────────────────────────
+
+@router.websocket("/live-stream/{session_id}")
+async def live_stream_ws(websocket: WebSocket, session_id: str):
+    """
+    WebSocket endpoint for live browser frame streaming.
+
+    Receives binary JPEG frames from the capture loop and
+    accepts JSON control messages from the viewer:
+      - {"type": "set_fps", "fps": 5}
+      - {"type": "set_quality", "quality": 50}
+      - {"type": "ping"}
+
+    Frames are sent as raw binary (no base64) for minimum overhead.
+    """
+    connected = await live_stream_manager.connect_viewer(session_id, websocket)
+    if not connected:
+        return
+
+    # Start streaming if page is available and not already streaming
+    session_info = live_stream_manager.get_session_info(session_id)
+    if session_info and session_info.get("has_page") and not session_info.get("is_streaming"):
+        await live_stream_manager.start_streaming(session_id)
+
+    try:
+        # Send initial status
+        await websocket.send_json({
+            "type": "connected",
+            "session_id": session_id,
+            "message": "Connected to live stream"
+        })
+
+        # Heartbeat + control message loop
+        while True:
+            try:
+                # Wait for control messages with 30s timeout (heartbeat interval)
+                data = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=30.0
+                )
+
+                # Parse control message
+                try:
+                    msg = json.loads(data)
+                    msg_type = msg.get("type", "")
+
+                    if msg_type == "set_fps":
+                        fps = int(msg.get("fps", 8))
+                        live_stream_manager.set_fps(session_id, fps)
+                        await websocket.send_json({
+                            "type": "fps_updated",
+                            "fps": fps
+                        })
+
+                    elif msg_type == "set_quality":
+                        quality = int(msg.get("quality", 65))
+                        live_stream_manager.set_quality(session_id, quality)
+                        await websocket.send_json({
+                            "type": "quality_updated",
+                            "quality": quality
+                        })
+
+                    elif msg_type == "ping":
+                        await websocket.send_json({"type": "pong"})
+
+                except (json.JSONDecodeError, ValueError):
+                    pass  # Ignore malformed messages
+
+            except asyncio.TimeoutError:
+                # Send heartbeat ping
+                try:
+                    await websocket.send_json({"type": "heartbeat"})
+                except Exception:
+                    break
+
+    except WebSocketDisconnect:
+        logger.info(f"[LiveStream] Viewer disconnected from {session_id}")
+    except Exception as e:
+        logger.debug(f"[LiveStream] WebSocket error for {session_id}: {e}")
+    finally:
+        live_stream_manager.disconnect_viewer(session_id, websocket)

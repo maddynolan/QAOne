@@ -107,6 +107,7 @@ class AgenticOrchestrator:
         self._scanned_elements: List[Dict] = []
         self._page_info: Dict = {}
         self._vision_service = None
+        self._stream_session_id: str = str(uuid4())
         if VISION_AVAILABLE:
             try:
                 self._vision_service = get_vision_healing_service()
@@ -124,6 +125,9 @@ class AgenticOrchestrator:
 
     async def run_testing(self, instruction: str) -> AsyncGenerator[Dict, None]:
         """Main entry: plain English → streaming test results"""
+        # Emit stream session ID so frontend can connect WebSocket
+        yield {"type": "stream_session", "session_id": self._stream_session_id}
+
         try:
             # === PHASE 1: UNDERSTAND ===
             yield {"type": "phase", "phase": "understanding", "message": "Analyzing instruction..."}
@@ -142,6 +146,15 @@ class AgenticOrchestrator:
                 yield {"type": "error", "error": "Could not launch browser"}
                 return
             yield {"type": "step", "message": "Browser ready"}
+
+            # Start live browser streaming (non-fatal if it fails)
+            try:
+                from app.services.ai_testing.live_browser_stream import live_stream_manager
+                await live_stream_manager.register_session(self._stream_session_id, self._page)
+                await live_stream_manager.start_streaming(self._stream_session_id)
+                logger.info(f"[LiveStream] Streaming started for session {self._stream_session_id}")
+            except Exception as stream_err:
+                logger.debug(f"[LiveStream] Could not start streaming: {stream_err}")
 
             # === PHASE 3: NAVIGATE & SCAN ===
             yield {"type": "phase", "phase": "exploring", "message": f"Opening {plan['url']}..."}
@@ -1222,6 +1235,14 @@ Return ONLY the JSON array."""
     # =========================================================================
 
     async def _cleanup(self):
+        # Stop live streaming before closing browser
+        try:
+            from app.services.ai_testing.live_browser_stream import live_stream_manager
+            await live_stream_manager.stop_streaming(self._stream_session_id)
+            await live_stream_manager.unregister_session(self._stream_session_id)
+        except Exception:
+            pass
+
         try:
             for obj in [self._page, self._context, self._browser]:
                 try:
