@@ -311,9 +311,14 @@ CREATE TABLE IF NOT EXISTS org_memberships (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     role VARCHAR(50) DEFAULT 'member',
+    invited_by UUID REFERENCES users(id),
+    joined_at TIMESTAMPTZ DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id, org_id)
 );
+-- Ensure invited_by + joined_at exist on pre-existing tables
+ALTER TABLE org_memberships ADD COLUMN IF NOT EXISTS invited_by UUID;
+ALTER TABLE org_memberships ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ DEFAULT NOW();
 
 -- Project memberships
 CREATE TABLE IF NOT EXISTS project_memberships (
@@ -504,12 +509,25 @@ def run_auto_migrations(database_url: str):
         # Seed demo data if SEED_DEMO_DATA=true
         if os.getenv("SEED_DEMO_DATA", "").lower() == "true":
             try:
-                from backend.app.scripts.seed_demo_data import main as seed_demo
+                # Try Docker/Railway path first (PYTHONPATH=/app → app.scripts.*)
+                # Fall back to local dev path (backend.app.scripts.*)
+                seed_demo = None
+                for mod_path in ["app.scripts.seed_demo_data", "backend.app.scripts.seed_demo_data"]:
+                    try:
+                        import importlib
+                        mod = importlib.import_module(mod_path)
+                        seed_demo = mod.main
+                        logger.info(f"[AutoMigrate] Loaded seed module from {mod_path}")
+                        break
+                    except ImportError:
+                        continue
+                if seed_demo is None:
+                    raise ImportError("Could not import seed_demo_data from any known path")
                 logger.info("[AutoMigrate] SEED_DEMO_DATA=true, seeding demo data...")
                 seed_demo()
                 logger.info("[AutoMigrate] Demo data seeded successfully")
             except Exception as e:
-                logger.warning(f"[AutoMigrate] Demo data seeding skipped: {e}")
+                logger.warning(f"[AutoMigrate] Demo data seeding failed: {e}", exc_info=True)
 
     finally:
         conn.close()
