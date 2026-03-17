@@ -31,6 +31,7 @@ import {
   Settings,
   Save,
 } from 'lucide-react';
+import { LiveBrowserView } from './LiveBrowserView';
 
 // Types
 interface TestStep {
@@ -56,7 +57,7 @@ interface TestResult {
 }
 
 interface AIEvent {
-  type: 'phase' | 'step' | 'screenshot' | 'test_complete' | 'complete' | 'error' | 'intent' | 'plan';
+  type: 'phase' | 'step' | 'screenshot' | 'test_complete' | 'complete' | 'error' | 'intent' | 'plan' | 'stream_session';
   phase?: string;
   message?: string;
   screenshot?: string;
@@ -64,6 +65,7 @@ interface AIEvent {
   data?: any;
   tests?: number;
   error?: string;
+  session_id?: string;
 }
 
 // API Base URL - centralized config
@@ -82,6 +84,7 @@ export function AIChatTesting() {
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<TestResult[]>([]);
   const [liveScreenshot, setLiveScreenshot] = useState<string | null>(null);
+  const [streamSessionId, setStreamSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedTest, setExpandedTest] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
@@ -107,7 +110,8 @@ export function AIChatTesting() {
     setProgress(0);
     setCurrentPhase('Starting...');
     setLiveScreenshot(null);
-    
+    setStreamSessionId(null);
+
     abortControllerRef.current = new AbortController();
     
     try {
@@ -197,11 +201,16 @@ export function AIChatTesting() {
         }
         break;
         
+      case 'stream_session':
+        if (event.session_id) setStreamSessionId(event.session_id);
+        break;
+
       case 'complete':
         setProgress(100);
         setCurrentPhase('Complete!');
+        setStreamSessionId(null);
         break;
-        
+
       case 'error':
         setError(event.error || 'Unknown error');
         break;
@@ -597,19 +606,13 @@ Would you like me to re-run this test with AI-generated fixes?`
               </div>
             )}
             
-            {/* Live Screenshot */}
-            {liveScreenshot && (
-              <div className="rounded-lg overflow-hidden border shadow-inner">
-                <div className="bg-muted px-3 py-1 text-xs flex items-center gap-2">
-                  <Eye className="w-3 h-3" />
-                  Live View
-                </div>
-                <img 
-                  src={`data:image/png;base64,${liveScreenshot}`}
-                  alt="Live test view"
-                  className="w-full"
-                />
-              </div>
+            {/* Live Browser View */}
+            {(streamSessionId || liveScreenshot) && (
+              <LiveBrowserView
+                sessionId={streamSessionId}
+                fallbackScreenshot={liveScreenshot}
+                currentStep={currentStep}
+              />
             )}
           </CardContent>
         </Card>

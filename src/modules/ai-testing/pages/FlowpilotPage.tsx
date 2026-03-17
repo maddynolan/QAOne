@@ -74,6 +74,7 @@ import {
   FileText,
   Download,
 } from 'lucide-react';
+import { LiveBrowserView } from '../components/LiveBrowserView';
 
 // ---- Types ----
 
@@ -254,6 +255,7 @@ interface SSEEvent {
   tests?: number;
   error?: string;
   intent?: any;
+  session_id?: string;
 }
 
 // ---- Agent Definitions ----
@@ -370,6 +372,7 @@ export default function FlowpilotPage() {
   // Test results (Generator / Self-Healer)
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [liveScreenshot, setLiveScreenshot] = useState<string | null>(null);
+  const [streamSessionId, setStreamSessionId] = useState<string | null>(null);
   const [expandedTest, setExpandedTest] = useState<string | null>(null);
 
   // Exploration results (Explorer)
@@ -485,9 +488,13 @@ export default function FlowpilotPage() {
       case 'plan':
         if (event.tests) setCurrentStep(`Planning ${event.tests} test(s)...`);
         break;
+      case 'stream_session':
+        if (event.session_id) setStreamSessionId(event.session_id);
+        break;
       case 'complete':
         setProgress(100);
         setCurrentPhase('Complete');
+        setStreamSessionId(null);
         break;
       case 'error':
         setError(event.error || 'Unknown error');
@@ -504,6 +511,7 @@ export default function FlowpilotPage() {
     }
     setTestResults([]);
     setLiveScreenshot(null);
+    setStreamSessionId(null);
 
     await streamSSE(`${API_BASE_URL}/api/ai-testing/start`, {
       instruction,
@@ -521,6 +529,7 @@ export default function FlowpilotPage() {
     }
     setTestResults([]);
     setLiveScreenshot(null);
+    setStreamSessionId(null);
 
     const failedTests = testResults.filter(t => t.status === 'failed');
     if (failedTests.length > 0) {
@@ -1416,19 +1425,14 @@ export default function FlowpilotPage() {
 
               <Progress value={progress} className="h-2" />
 
-              {/* Live Screenshot */}
-              {liveScreenshot && (
+              {/* Live Browser View */}
+              {(streamSessionId || liveScreenshot) && (
                 <div className="mt-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Camera className={cn("w-4 h-4", colors.text)} />
-                    <span className={cn("text-xs font-medium", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>
-                      Live View
-                    </span>
-                  </div>
-                  <img
-                    src={`data:image/png;base64,${liveScreenshot}`}
-                    alt="Live browser screenshot"
-                    className="rounded-lg border border-gray-200 dark:border-gray-700 w-full max-h-64 object-contain"
+                  <LiveBrowserView
+                    sessionId={streamSessionId}
+                    fallbackScreenshot={liveScreenshot}
+                    currentStep={currentStep}
+                    currentUrl={targetUrl || undefined}
                   />
                 </div>
               )}
