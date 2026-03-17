@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, Key, AlertTriangle, CheckCircle, Loader2, Clock } from 'lucide-react';
+import { Shield, Key, AlertTriangle, CheckCircle, Loader2, Clock, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -225,25 +225,52 @@ export function LicenseGate({ children }: LicenseGateProps) {
     );
   }
 
+  // Dismissible banner state — remembers per session so user isn't nagged after closing
+  const [bannerDismissed, setBannerDismissed] = useState(() => {
+    try { return sessionStorage.getItem('license-banner-dismissed') === 'true'; } catch { return false; }
+  });
+
+  const showBanner = daysLeft !== null && daysLeft <= 7 && !bannerDismissed;
+
+  const dismissBanner = useCallback(() => {
+    setBannerDismissed(true);
+    try { sessionStorage.setItem('license-banner-dismissed', 'true'); } catch {}
+  }, []);
+
   // Valid license - show app
   if (licenseStatus?.valid) {
     return (
       <>
-        {/* License expiry warning banner */}
-        {daysLeft !== null && daysLeft <= 7 && (
-          <div className={`fixed top-0 left-0 right-0 z-50 px-4 py-2 text-center text-sm font-medium ${
+        {/* License expiry warning banner — dismissible */}
+        {showBanner && (
+          <div className={`fixed top-0 left-0 right-0 z-50 px-4 py-2 text-center text-sm font-medium flex items-center justify-center ${
             daysLeft <= 3 ? 'bg-red-500 text-white' : 'bg-amber-500 text-black'
           }`}>
-            <Clock className="w-4 h-4 inline mr-2" />
-            {daysLeft === 0 
-              ? 'Your license expires today!' 
-              : `Your license expires in ${daysLeft} day${daysLeft > 1 ? 's' : ''}`
-            }
-            <span className="ml-2 opacity-75">Please renew to continue using the app.</span>
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 flex-shrink-0" />
+              <span>
+                {daysLeft === 0
+                  ? 'Your license expires today!'
+                  : `Your license expires in ${daysLeft} day${daysLeft! > 1 ? 's' : ''}`
+                }
+              </span>
+              <span className="opacity-75">Please renew to continue using the app.</span>
+            </div>
+            <button
+              onClick={dismissBanner}
+              className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md transition-colors ${
+                daysLeft <= 3
+                  ? 'hover:bg-red-600 text-white/80 hover:text-white'
+                  : 'hover:bg-amber-600 text-black/60 hover:text-black'
+              }`}
+              aria-label="Dismiss banner"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         )}
         {/* Add top padding when banner is shown */}
-        <div className={daysLeft !== null && daysLeft <= 7 ? 'pt-10' : ''}>
+        <div className={showBanner ? 'pt-10' : ''}>
           {children}
         </div>
       </>
