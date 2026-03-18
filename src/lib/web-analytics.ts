@@ -198,6 +198,11 @@ export function trackEnterpriseInquiry(): void {
   trackEvent('enterprise_inquiry');
 }
 
+/** User watched a demo video/GIF (autoplay or manual) */
+export function trackDemoVideoPlay(videoLabel: string): void {
+  trackEvent('demo_video_play', { video: videoLabel });
+}
+
 // ── Crisp Live Chat ───────────────────────────────────────────────────────
 
 const CRISP_ID = import.meta.env.VITE_CRISP_WEBSITE_ID as string | undefined;

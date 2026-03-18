@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { MarketingHeader } from '@/components/MarketingHeader';
+import { DemoMedia } from '@/components/DemoMedia';
 
 const demoSteps = [
   {
@@ -23,6 +24,7 @@ const demoSteps = [
     subtitle: 'Trace tests with intelligent recognition',
     description: 'Watch how Flowstral captures your interactions and automatically generates robust test steps with smart element recognition.',
     duration: 45,
+    gifSrc: '/demos/recording-flow.gif',
     highlights: [
       'Click to record your browser interactions',
       'Intelligent element locators generated automatically',
@@ -38,6 +40,7 @@ const demoSteps = [
     subtitle: 'Build tests without code',
     description: 'See how easy it is to create and edit test cases using our drag-and-drop visual builder with 50+ smart data generators.',
     duration: 60,
+    gifSrc: '/demos/test-builder.gif',
     highlights: [
       'Drag and drop test steps',
       '50+ smart data generators (names, emails, dates)',
@@ -68,6 +71,7 @@ const demoSteps = [
     subtitle: 'Multi-protocol API testing',
     description: 'Learn how to test REST, GraphQL, and SOAP APIs with request chaining and security scanning.',
     duration: 55,
+    gifSrc: '/demos/api-testing.gif',
     highlights: [
       'REST, GraphQL, SOAP support',
       'Request chaining and variables',
@@ -128,6 +132,7 @@ const demoSteps = [
     subtitle: 'WCAG 2.1 compliance scanning',
     description: 'Scan any page for accessibility issues with axe-core. Get severity-ranked results with element-level fix guidance for WCAG 2.1 A/AA/AAA compliance.',
     duration: 50,
+    gifSrc: '/demos/accessibility-scan.gif',
     highlights: [
       'WCAG 2.1 Level A / AA / AAA scanning',
       'Severity-ranked issues (critical to minor)',
@@ -140,6 +145,21 @@ const demoSteps = [
 ];
 
 function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[0]; isPlaying: boolean; progress: number }) {
+  // If step has a GIF/video recording, render it instead of the procedural mockup
+  if ((step as any).gifSrc) {
+    return (
+      <div className="relative w-full h-[420px] bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-xl">
+        <DemoMedia
+          gifSrc={(step as any).gifSrc}
+          videoSrc={(step as any).videoSrc}
+          alt={`${step.title} demo`}
+          trackingLabel={`demo_${step.id}`}
+          className="w-full h-full"
+        />
+      </div>
+    );
+  }
+
   const [animationStep, setAnimationStep] = useState(0);
 
   useEffect(() => {

@@ -12,6 +12,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { trackCTAClick } from '@/lib/web-analytics';
+import { DemoMedia } from '@/components/DemoMedia';
 import {
   Play, Zap, Shield, BarChart3, Code2,
   CheckCircle2, ArrowRight, Globe, Lock, Eye,
@@ -98,45 +99,14 @@ function HeroSection() {
           </div>
         </div>
 
-        {/* Right side: recording step list UI mockup */}
+        {/* Right side: recording demo */}
         <div className="hidden lg:block absolute right-6 top-1/2 -translate-y-1/2 w-[400px]">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-slate-50">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-sm font-semibold text-slate-700">Recording: login-flow</span>
-              </div>
-              <span className="text-xs text-slate-400">5 steps</span>
-            </div>
-            {/* Steps */}
-            <div className="p-3 space-y-1">
-              {[
-                { num: '01', label: 'Navigate to /login', icon: Globe },
-                { num: '02', label: 'Fill "Email" \u2192 user@co.com', icon: Layers },
-                { num: '03', label: 'Fill "Password" \u2192 \u2022\u2022\u2022\u2022\u2022\u2022', icon: Lock },
-                { num: '04', label: 'Click "Sign In"', icon: MousePointer },
-                { num: '05', label: 'Verify text "Dashboard"', icon: CheckCircle2 },
-              ].map((step) => (
-                <div key={step.num} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                  <span className="text-xs font-mono text-slate-400 w-5">{step.num}</span>
-                  <step.icon className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                  <span className="text-sm text-slate-700">{step.label}</span>
-                </div>
-              ))}
-            </div>
-            {/* Footer */}
-            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-xs text-emerald-600 font-medium">Recording...</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400">5 steps captured</span>
-              </div>
-            </div>
-          </div>
+          <DemoMedia
+            gifSrc="/demos/recording-flow.gif"
+            alt="Flowstral recording a login test in real-time"
+            trackingLabel="hero_recording"
+            className="rounded-xl shadow-2xl border border-slate-200"
+          />
         </div>
       </div>
     </section>

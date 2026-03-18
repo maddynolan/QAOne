@@ -6,14 +6,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   MousePointer, Play, CheckCircle2, ArrowRight, Lightbulb,
-  Zap, Target, Clock, Shield, Eye, Type, Lock, Globe,
-  Layers, RefreshCw,
+  Zap, Target, Clock, Shield,
+  Layers,
   Database
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { MarketingHeader } from '@/components/MarketingHeader';
 import { cn } from '@/lib/utils';
+import { DemoMedia } from '@/components/DemoMedia';
 
 // How It Works Step Component
 function HowItWorksStep({ step, title, description, isActive, icon: Icon }: { 
@@ -48,21 +48,12 @@ function HowItWorksStep({ step, title, description, isActive, icon: Icon }: {
 export default function SmartRecorderPage() {
   const navigate = useNavigate();
   const [activeStep, setActiveStep] = useState(0);
-  const [recordingStep, setRecordingStep] = useState(0);
 
-  // Auto-cycle through steps
+  // Auto-cycle through "How It Works" steps
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveStep((prev) => (prev + 1) % 4);
     }, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Auto-cycle recording animation
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setRecordingStep((prev) => (prev + 1) % 5);
-    }, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -71,23 +62,6 @@ export default function SmartRecorderPage() {
     { icon: MousePointer, title: 'Interact Naturally', description: 'Click, type, scroll - everything is captured with smart element detection.' },
     { icon: Lightbulb, title: 'Get Suggestions', description: 'Contextual suggestions appear for assertions, waits, and validations.' },
     { icon: CheckCircle2, title: 'Build Your Test', description: 'Stop recording and your test is ready. Edit in Visual Builder if needed.' },
-  ];
-
-  const recordingSteps = [
-    { action: 'Navigate to', target: 'login.example.com', icon: Globe },
-    { action: 'Fill', target: 'username', icon: Type },
-    { action: 'Fill', target: 'password', icon: Lock },
-    { action: 'Click', target: 'Sign In button', icon: MousePointer },
-    { action: 'Assert', target: 'Dashboard visible', icon: Eye },
-  ];
-
-  const suggestions = [
-    'Assert element visible',
-    'Verify text content',
-    'Wait for network idle',
-    'Take screenshot',
-    'Check page title',
-    'Validate form state',
   ];
 
   return (
@@ -123,80 +97,14 @@ export default function SmartRecorderPage() {
               </div>
             </div>
 
-            {/* Right - Animated Preview */}
+            {/* Right - Recording Demo */}
             <div className="relative">
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden">
-                {/* Browser Chrome */}
-                <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-200">
-                  <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-red-400" />
-                    <div className="w-3 h-3 rounded-full bg-amber-400" />
-                    <div className="w-3 h-3 rounded-full bg-green-400" />
-                  </div>
-                  <div className="flex-1 flex items-center justify-center">
-                    <Badge className="bg-red-100 text-red-600 border-0 animate-pulse">● Recording</Badge>
-                  </div>
-                </div>
-
-                {/* Recording Content */}
-                <div className="p-5">
-                  <div className="flex gap-4">
-                    {/* Steps List */}
-                    <div className="flex-1 space-y-2">
-                      <div className="text-sm font-semibold text-slate-700 mb-3">Recorded Steps</div>
-                      {recordingSteps.map((step, idx) => (
-                        <div 
-                          key={idx}
-                          className={cn(
-                            "flex items-center gap-3 p-3 rounded-xl transition-all duration-500",
-                            idx < recordingStep 
-                              ? "bg-emerald-50 border border-emerald-200" 
-                              : idx === recordingStep 
-                                ? "bg-amber-50 border-2 border-amber-400 animate-pulse" 
-                                : "bg-slate-50 border border-slate-100 opacity-40"
-                          )}
-                        >
-                          <div className={cn(
-                            "w-7 h-7 rounded-lg flex items-center justify-center",
-                            idx < recordingStep ? "bg-emerald-500 text-white" :
-                            idx === recordingStep ? "bg-amber-500 text-white" :
-                            "bg-slate-200 text-slate-400"
-                          )}>
-                            {idx < recordingStep ? <CheckCircle2 className="w-4 h-4" /> : <step.icon className="w-4 h-4" />}
-                          </div>
-                          <div className="flex-1">
-                            <span className="text-xs text-slate-500">{step.action}</span>
-                            <div className="text-sm text-slate-700 font-medium">{step.target}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Suggestions Panel */}
-                    <div className="w-48 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Lightbulb className="w-4 h-4 text-amber-500" />
-                        <span className="text-xs font-bold text-slate-700">Smart Suggestions</span>
-                      </div>
-                      <div className="space-y-1.5">
-                        {suggestions.slice(0, 5).map((s, i) => (
-                          <div 
-                            key={i} 
-                            className={cn(
-                              "px-2.5 py-2 bg-white rounded-lg text-xs text-slate-600 border transition-all cursor-pointer",
-                              i === recordingStep % 5 
-                                ? "border-blue-300 bg-blue-50 shadow-sm" 
-                                : "border-slate-100 hover:border-blue-200"
-                            )}
-                          >
-                            + {s}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <DemoMedia
+                gifSrc="/demos/recording-flow.gif"
+                alt="Smart Trace recording a login flow with element detection and suggestions"
+                trackingLabel="smart_recorder_hero"
+                className="rounded-2xl shadow-2xl border border-slate-200"
+              />
             </div>
           </div>
         </div>
