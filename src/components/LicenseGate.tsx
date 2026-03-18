@@ -169,6 +169,16 @@ export function LicenseGate({ children }: LicenseGateProps) {
     };
   }, [isElectronApp]);
 
+  // Dismissible banner state — must be before any early returns (React hooks rules)
+  const [bannerDismissed, setBannerDismissed] = useState(() => {
+    try { return sessionStorage.getItem('license-banner-dismissed') === 'true'; } catch { return false; }
+  });
+
+  const dismissBanner = useCallback(() => {
+    setBannerDismissed(true);
+    try { sessionStorage.setItem('license-banner-dismissed', 'true'); } catch {}
+  }, []);
+
   // Handle license activation
   const handleActivate = async () => {
     if (!licenseKey.trim()) {
@@ -225,17 +235,7 @@ export function LicenseGate({ children }: LicenseGateProps) {
     );
   }
 
-  // Dismissible banner state — remembers per session so user isn't nagged after closing
-  const [bannerDismissed, setBannerDismissed] = useState(() => {
-    try { return sessionStorage.getItem('license-banner-dismissed') === 'true'; } catch { return false; }
-  });
-
   const showBanner = daysLeft !== null && daysLeft <= 7 && !bannerDismissed;
-
-  const dismissBanner = useCallback(() => {
-    setBannerDismissed(true);
-    try { sessionStorage.setItem('license-banner-dismissed', 'true'); } catch {}
-  }, []);
 
   // Valid license - show app
   if (licenseStatus?.valid) {
