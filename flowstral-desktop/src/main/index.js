@@ -144,8 +144,21 @@ function sendToWebapp(channel, ...args) {
 
 // NOTE: licenseHelpers.init() is called after licenseManager is created in app.whenReady()
 
-// Device ID for licensing
+// Device ID for licensing — uses hardware fingerprint (survives reinstalls)
 function getDeviceId() {
+  // Try hardware-based fingerprint first (node-machine-id)
+  try {
+    const { machineIdSync } = require('node-machine-id');
+    const hwId = machineIdSync({ original: false }); // SHA-256 of hardware GUID
+    const deviceId = `FD-${hwId}`;
+    // Migrate: store the hardware ID so it's visible in logs
+    store.set('deviceId', deviceId);
+    return deviceId;
+  } catch (err) {
+    console.warn('[DeviceID] node-machine-id not available, falling back to stored UUID:', err.message);
+  }
+
+  // Fallback to stored UUID (backward compat)
   let deviceId = store.get('deviceId');
   if (!deviceId) {
     deviceId = `FD-${uuidv4()}`;

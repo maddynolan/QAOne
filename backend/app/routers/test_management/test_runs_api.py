@@ -10,7 +10,7 @@ import time
 import base64
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 import asyncio
 from app.utils.endpoint_helpers import (
@@ -18,7 +18,7 @@ from app.utils.endpoint_helpers import (
     map_priority_from_db,
     DEFAULT_USER_ID
 )
-from app.dependencies import get_current_project, get_current_user, get_current_tenant
+from app.dependencies import get_current_project, get_current_user, get_current_tenant, enforce_test_run_limit
 from app.services.storage.database import get_database_client
 from app.services.storage.postgres_direct import (
     get_postgres_pool,
@@ -416,7 +416,7 @@ async def get_test_run(run_id: str):
 
 
 @router.post("")
-async def create_test_run(request: Request):
+async def create_test_run(request: Request, _: None = Depends(enforce_test_run_limit)):
     """Create a new test run with test cases"""
     try:
         data = await request.json()
@@ -643,7 +643,7 @@ async def update_test_run(run_id: str, request: Request):
 
 
 @router.post("/{run_id}/start")
-async def start_test_run(run_id: str):
+async def start_test_run(run_id: str, _: None = Depends(enforce_test_run_limit)):
     """Start a test run execution - change status from pending to running"""
     try:
         pool = get_postgres_pool()

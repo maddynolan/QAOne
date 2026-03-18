@@ -23,7 +23,8 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from app.dependencies import require_plan
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
@@ -228,7 +229,7 @@ async def step_visual_assert(request: StepVisualAssertRequest) -> Dict[str, Any]
 
 
 @router.post("/compare")
-async def compare_images(request: CompareRequest) -> Dict[str, Any]:
+async def compare_images(request: CompareRequest, _: None = Depends(require_plan("visual_testing"))) -> Dict[str, Any]:
     """
     Compare two images and return detailed comparison result.
 

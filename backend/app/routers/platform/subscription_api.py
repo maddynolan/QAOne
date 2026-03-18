@@ -150,19 +150,32 @@ async def get_limits(authorization: Optional[str] = Header(None)):
                 "usage": {"users": 0, "test_runs_this_month": 0, "projects": 0},
             }
 
+        # Get real usage from DB
+        usage = await subscription_service.get_usage(org_id)
+
+        from app.services.core.subscription_service import PLAN_LIMITS, FEATURE_TIER_MAP, TIER_HIERARCHY
+        plan = sub.get("plan", "free")
+        plan_limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
+
+        # Build feature availability map
+        plan_level = TIER_HIERARCHY.get(plan, 0)
+        features = {}
+        for feat, req_tier in FEATURE_TIER_MAP.items():
+            req_level = TIER_HIERARCHY.get(req_tier, 0)
+            features[feat] = plan_level >= req_level
+
         return {
-            "plan": sub.get("plan", "free"),
+            "plan": plan,
+            "status": sub.get("status", "active"),
             "limits": {
-                "max_users": sub.get("max_users", 3),
-                "max_test_runs_per_month": sub.get("max_test_runs_per_month", 1000),
-                "max_projects": sub.get("max_projects", 1),
+                "max_users": sub.get("max_users", plan_limits.get("max_users", 1)),
+                "max_test_runs_per_month": sub.get("max_test_runs_per_month", plan_limits.get("max_test_runs_per_month", 100)),
+                "max_projects": sub.get("max_projects", plan_limits.get("max_projects", 1)),
+                "max_playbacks_per_day": plan_limits.get("max_playbacks_per_day", 3),
             },
-            "usage": {
-                "users": 0,  # TODO: Count actual org members
-                "test_runs_this_month": 0,  # TODO: Count actual runs
-                "projects": 0,  # TODO: Count actual projects
-            },
+            "usage": usage,
             "days_remaining": sub.get("days_remaining", -1),
+            "features": features,
         }
     except HTTPException:
         raise

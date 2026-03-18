@@ -12,7 +12,8 @@ import json
 import logging
 import os
 from typing import Optional
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from app.dependencies import require_plan
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -64,7 +65,7 @@ class TestingStatusResponse(BaseModel):
 
 
 @router.post("/start")
-async def start_testing(request: StartTestingRequest):
+async def start_testing(request: StartTestingRequest, _: None = Depends(require_plan("flowpilot"))):
     """
     Start AI-driven testing with plain English instruction.
 

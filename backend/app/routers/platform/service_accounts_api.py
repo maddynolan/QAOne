@@ -10,7 +10,8 @@ Prefix: /api/service-accounts
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from app.dependencies import require_plan
 from pydantic import BaseModel, Field
 
 from app.services.auth.service_account_service import service_account_service
@@ -50,7 +51,7 @@ def _get_auth(request: Request):
 # ==================== CRUD ====================
 
 @service_accounts_router.post("/create")
-async def create_service_account(body: CreateServiceAccountRequest, request: Request):
+async def create_service_account(body: CreateServiceAccountRequest, request: Request, _: None = Depends(require_plan("service_accounts"))):
     """
     Create a new service account and API token.
     The raw token is returned ONCE — save it immediately.

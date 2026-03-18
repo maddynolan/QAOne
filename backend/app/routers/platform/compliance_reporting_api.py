@@ -9,7 +9,8 @@ Prefix: /api/compliance/reports
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from app.dependencies import require_plan
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
@@ -48,7 +49,7 @@ def _get_auth(request: Request):
 # ==================== Generate Reports ====================
 
 @compliance_reporting_router.post("/generate")
-async def generate_report(body: GenerateReportRequest, request: Request):
+async def generate_report(body: GenerateReportRequest, request: Request, _: None = Depends(require_plan("compliance_reporting"))):
     """
     Generate a compliance report.
     Supported types: soc2, hipaa, gdpr, access_review

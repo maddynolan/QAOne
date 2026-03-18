@@ -2,7 +2,8 @@
 Performance Testing API - REST endpoints for performance testing tool
 """
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from app.dependencies import require_plan
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 import json
@@ -657,7 +658,7 @@ async def runner_heartbeat(request: Request):
 # ============================================================================
 
 @router.post("/tests/run")
-async def run_test(request: Request, body: dict):
+async def run_test(request: Request, body: dict, _: None = Depends(require_plan("performance_testing"))):
     """Run a load test"""
     try:
         scenario_id = body.get("scenario_id")

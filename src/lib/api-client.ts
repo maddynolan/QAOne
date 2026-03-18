@@ -156,6 +156,16 @@ apiClient.interceptors.response.use(
       return Promise.reject(error)
     }
 
+    // On 403, check for subscription limit exceeded
+    if (error.response?.status === 403) {
+      const detail = error.response?.data?.detail
+      if (detail && typeof detail === 'object' && (detail.error === 'subscription_limit_exceeded' || detail.error === 'feature_not_available')) {
+        // Fire custom event for PlanContext to handle (shows upgrade dialog)
+        window.dispatchEvent(new CustomEvent('subscription:limit-exceeded', { detail }))
+      }
+      return Promise.reject(error)
+    }
+
     // On 401, try to refresh the token
     if (error.response?.status === 401) {
       if (_isRefreshing) {

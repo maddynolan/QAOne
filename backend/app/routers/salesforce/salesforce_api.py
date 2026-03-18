@@ -9,7 +9,8 @@ Endpoints for:
 - Auto-reconnect on startup using saved credentials
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from app.dependencies import require_plan
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
@@ -324,7 +325,7 @@ async def trigger_auto_connect():
 
 
 @router.post("/connect", response_model=SalesforceConnectionResponse)
-async def connect_to_salesforce(request: SalesforceConnectionRequest):
+async def connect_to_salesforce(request: SalesforceConnectionRequest, _: None = Depends(require_plan("salesforce"))):
     """
     Connect to a Salesforce org using simple-salesforce library.
     

@@ -39,6 +39,7 @@ class SignupRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255, description="Display name")
     org_name: Optional[str] = Field(None, description="Organization name (creates new org)")
     org_id: Optional[str] = Field(None, description="Organization ID (joins existing org)")
+    device_fingerprint: Optional[str] = Field(None, description="Hardware fingerprint from Electron desktop app")
 
 
 class RefreshRequest(BaseModel):
@@ -103,7 +104,8 @@ async def signup(request: SignupRequest):
             password=request.password,
             name=request.name,
             org_name=request.org_name,
-            org_id=request.org_id
+            org_id=request.org_id,
+            device_fingerprint=request.device_fingerprint,
         )
 
         # New signup flow: requires email verification
