@@ -1,13 +1,21 @@
-import { 
-  LayoutDashboard, FileText, Play, AlertCircle, Settings, CheckSquare, Bug, 
+import {
+  LayoutDashboard, FileText, Play, AlertCircle, Settings, CheckSquare, Bug,
   BookOpen, Sparkles, Plug, Code, FileCode, Zap, Scan, BarChart3, Activity,
-  TrendingUp, MousePointerClick, GitBranch, Workflow, ChevronDown, ChevronRight, 
+  TrendingUp, MousePointerClick, GitBranch, Workflow, ChevronDown, ChevronRight,
   Layers, Users, Calendar, Compass, TestTube, FlaskConical, Database, Shield, Map,
-  Video, Target, Gauge, Rocket, Wrench, Circle, Cloud, ClipboardList
+  Video, Target, Gauge, Rocket, Wrench, Circle, Cloud, ClipboardList, Lock
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useState, useEffect, useMemo } from "react";
 import { isElectron, showRecorder } from "@/lib/electron-bridge";
+
+// Plan context for feature gating badges
+let _usePlan: (() => { isFeatureAvailable: (f: string) => boolean }) | null = null;
+try {
+  // Dynamic import to avoid circular dependency — PlanContext may not exist yet
+  const planModule = require("@/contexts/PlanContext");
+  _usePlan = planModule.usePlan;
+} catch { /* PlanProvider not available yet */ }
 import {
   Sidebar,
   SidebarContent,
@@ -105,10 +113,10 @@ const navigationGroups = [
     collapsible: true,
     defaultOpen: false,
     items: [
-      { title: "Salesforce Tools", url: "/salesforce-tools", icon: Cloud, highlight: true, description: "SF API, Data, Schema" },
-      { title: "API Testing", url: "/enhanced-api-testing", icon: Code },
-      { title: "Performance & Load", url: "/load-testing", icon: Gauge, description: "Load testing & performance" },
-      { title: "Accessibility", url: "/accessibility", icon: Scan },
+      { title: "Salesforce Tools", url: "/salesforce-tools", icon: Cloud, highlight: true, description: "SF API, Data, Schema", gatedFeature: "salesforce" },
+      { title: "API Testing", url: "/enhanced-api-testing", icon: Code, gatedFeature: "api_testing" },
+      { title: "Performance & Load", url: "/load-testing", icon: Gauge, description: "Load testing & performance", gatedFeature: "performance_testing" },
+      { title: "Accessibility", url: "/accessibility", icon: Scan, gatedFeature: "accessibility_testing" },
       { title: "Self-Healing", url: "/self-healing", icon: Wrench, description: "Auto-fix broken selectors" },
       { title: "Gherkin", url: "/gherkin", icon: FileCode },
       { title: "Framework Analyzer", url: "/framework-analyzer", icon: FlaskConical },
@@ -140,6 +148,15 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const location = useLocation();
   const collapsed = state === "collapsed";
+
+  // Feature gating — safe fallback if PlanProvider not available
+  let isFeatureAvailable = (_f: string) => true;
+  try {
+    if (_usePlan) {
+      const planCtx = _usePlan();
+      isFeatureAvailable = planCtx.isFeatureAvailable;
+    }
+  } catch { /* PlanContext not mounted yet */ }
   
   // Helper to check if an item is active
   const isItemActive = (url: string) => {
@@ -232,7 +249,9 @@ export function AppSidebar() {
                       {group.items.map((item) => {
                         const isActive = isItemActive(item.url);
                         const isElectronOnly = (item as any).isElectronOnly;
-                        
+                        const gatedFeature = (item as any).gatedFeature;
+                        const isLocked = gatedFeature && !isFeatureAvailable(gatedFeature);
+
                         if (isElectronOnly) {
                           return (
                             <SidebarMenuItem key={item.title}>
@@ -249,21 +268,26 @@ export function AppSidebar() {
                             </SidebarMenuItem>
                           );
                         }
-                        
+
                         return (
                           <SidebarMenuItem key={item.title}>
                             <SidebarMenuButton asChild>
-                              <NavLink 
-                                to={item.url} 
-                                end={item.url === '/'} 
+                              <NavLink
+                                to={item.url}
+                                end={item.url === '/'}
                                 className={
                                   isActive
                                     ? "bg-blue-600 dark:bg-amber-500 text-white dark:text-gray-900 hover:bg-blue-700 dark:hover:bg-amber-400 font-medium"
-                                    : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+                                    : isLocked
+                                      ? "text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                                      : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
                                 }
                               >
-                                <item.icon className="h-4 w-4" />
+                                <item.icon className={`h-4 w-4 ${isLocked ? 'text-gray-400 dark:text-gray-500' : ''}`} />
                                 <span>{item.title}</span>
+                                {isLocked && (
+                                  <Lock className="ml-auto h-3 w-3 text-gray-400 dark:text-gray-500" />
+                                )}
                               </NavLink>
                             </SidebarMenuButton>
                           </SidebarMenuItem>
@@ -286,7 +310,9 @@ export function AppSidebar() {
                       const isActive = isItemActive(item.url);
                       const itemHighlight = (item as any).highlight;
                       const isElectronOnly = (item as any).isElectronOnly;
-                      
+                      const gatedFeature = (item as any).gatedFeature;
+                      const isLocked = gatedFeature && !isFeatureAvailable(gatedFeature);
+
                       // Handle Electron-only items (like Recorder)
                       if (isElectronOnly) {
                         return (
@@ -304,26 +330,30 @@ export function AppSidebar() {
                           </SidebarMenuItem>
                         );
                       }
-                      
+
                       return (
                         <SidebarMenuItem key={item.title}>
                           <SidebarMenuButton asChild>
-                            <NavLink 
-                              to={item.url} 
-                              end={item.url === '/'} 
+                            <NavLink
+                              to={item.url}
+                              end={item.url === '/'}
                               className={`${
                                 isActive
                                   ? "bg-blue-600 dark:bg-amber-500 text-white dark:text-gray-900 hover:bg-blue-700 dark:hover:bg-amber-400 font-medium"
-                                  : itemHighlight
-                                    ? "text-gray-800 dark:text-gray-100 hover:bg-blue-50 dark:hover:bg-gray-800 hover:text-blue-700 dark:hover:text-amber-400 border border-blue-200 dark:border-gray-700 bg-blue-50/50 dark:bg-gray-800/50"
-                                    : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+                                  : isLocked
+                                    ? "text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                                    : itemHighlight
+                                      ? "text-gray-800 dark:text-gray-100 hover:bg-blue-50 dark:hover:bg-gray-800 hover:text-blue-700 dark:hover:text-amber-400 border border-blue-200 dark:border-gray-700 bg-blue-50/50 dark:bg-gray-800/50"
+                                      : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
                               }`}
                             >
-                              <item.icon className={`h-4 w-4 ${itemHighlight && !isActive ? 'text-blue-600 dark:text-amber-500' : ''}`} />
+                              <item.icon className={`h-4 w-4 ${isLocked ? 'text-gray-400 dark:text-gray-500' : itemHighlight && !isActive ? 'text-blue-600 dark:text-amber-500' : ''}`} />
                               <span>{item.title}</span>
-                              {itemHighlight && !isActive && (
+                              {isLocked && !collapsed ? (
+                                <Lock className="ml-auto h-3 w-3 text-gray-400 dark:text-gray-500" />
+                              ) : itemHighlight && !isActive && !isLocked ? (
                                 <span className="ml-auto text-[10px] bg-blue-600 dark:bg-amber-500 text-white dark:text-gray-900 px-1.5 py-0.5 rounded font-medium">NEW</span>
-                              )}
+                              ) : null}
                             </NavLink>
                           </SidebarMenuButton>
                         </SidebarMenuItem>

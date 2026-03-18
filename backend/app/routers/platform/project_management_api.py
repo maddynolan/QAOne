@@ -7,7 +7,8 @@ Better than Jira - simpler yet more powerful.
 
 import logging
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from app.dependencies import enforce_project_limit
 from pydantic import BaseModel
 from datetime import datetime, date
 import uuid
@@ -162,7 +163,7 @@ async def get_issue(issue_id: str):
     return issue
 
 @router.post("/issues")
-async def create_issue(data: IssueCreate):
+async def create_issue(data: IssueCreate, _: None = Depends(enforce_project_limit)):
     """Create a new issue."""
     issue_id = str(uuid.uuid4())[:8]
     issue_key = _get_next_issue_key()

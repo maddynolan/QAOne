@@ -49,6 +49,9 @@ import { GlobalErrorBoundary } from "./components/GlobalErrorBoundary";
 // AI Provider - Global AI settings
 import { AIProvider } from "./contexts/AIContext";
 
+// Plan Provider - Subscription tier & feature gating
+import { PlanProvider, PlanGate } from "./contexts/PlanContext";
+
 // ── Critical path: keep eager (auth, landing, sign-in/up) ──
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute, PublicRoute } from "./components/ProtectedRoute";
@@ -241,6 +244,7 @@ const App = () => {
             <Toaster />
             <Sonner />
             <AuthProvider>
+              <PlanProvider>
               <Router>
               <RouteTracker />
               <Routes>
@@ -319,65 +323,65 @@ const App = () => {
                   <Route path="/execution" element={<Navigate to="/test-cases/execute" replace />} />
                   
                   {/* ─────────────────────────────────────────────────────────
-                      3. API TESTING MODULE
+                      3. API TESTING MODULE (Pro+)
                       REST, GraphQL, and API endpoint testing
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/api" element={<Suspense fallback={<PageLoadingFallback />}><EnhancedAPITesting /></Suspense>} />
-                  <Route path="/api/collections" element={<Suspense fallback={<PageLoadingFallback />}><EnhancedAPITesting /></Suspense>} />
-                  <Route path="/api/history" element={<Suspense fallback={<PageLoadingFallback />}><EnhancedAPITesting /></Suspense>} />
-                  <Route path="/api/environments" element={<Suspense fallback={<PageLoadingFallback />}><EnhancedAPITesting /></Suspense>} />
+                  <Route path="/api" element={<PlanGate feature="api_testing"><Suspense fallback={<PageLoadingFallback />}><EnhancedAPITesting /></Suspense></PlanGate>} />
+                  <Route path="/api/collections" element={<PlanGate feature="api_testing"><Suspense fallback={<PageLoadingFallback />}><EnhancedAPITesting /></Suspense></PlanGate>} />
+                  <Route path="/api/history" element={<PlanGate feature="api_testing"><Suspense fallback={<PageLoadingFallback />}><EnhancedAPITesting /></Suspense></PlanGate>} />
+                  <Route path="/api/environments" element={<PlanGate feature="api_testing"><Suspense fallback={<PageLoadingFallback />}><EnhancedAPITesting /></Suspense></PlanGate>} />
                   
                   {/* Legacy routes */}
                   <Route path="/enhanced-api-testing" element={<Navigate to="/api" replace />} />
                   <Route path="/api-import" element={<Navigate to="/api" replace />} />
                   
                   {/* ─────────────────────────────────────────────────────────
-                      4. PERFORMANCE MODULE
+                      4. PERFORMANCE MODULE (Pro+)
                       Load testing, stress testing, virtual users
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/performance" element={<Suspense fallback={<PageLoadingFallback />}><VirtualUserGenerator /></Suspense>} />
-                  <Route path="/performance/load-test" element={<Suspense fallback={<PageLoadingFallback />}><VirtualUserGenerator /></Suspense>} />
-                  <Route path="/performance/stress-test" element={<Suspense fallback={<PageLoadingFallback />}><VirtualUserGenerator /></Suspense>} />
-                  <Route path="/performance/reports" element={<Suspense fallback={<PageLoadingFallback />}><VirtualUserGenerator /></Suspense>} />
+                  <Route path="/performance" element={<PlanGate feature="performance_testing"><Suspense fallback={<PageLoadingFallback />}><VirtualUserGenerator /></Suspense></PlanGate>} />
+                  <Route path="/performance/load-test" element={<PlanGate feature="performance_testing"><Suspense fallback={<PageLoadingFallback />}><VirtualUserGenerator /></Suspense></PlanGate>} />
+                  <Route path="/performance/stress-test" element={<PlanGate feature="performance_testing"><Suspense fallback={<PageLoadingFallback />}><VirtualUserGenerator /></Suspense></PlanGate>} />
+                  <Route path="/performance/reports" element={<PlanGate feature="performance_testing"><Suspense fallback={<PageLoadingFallback />}><VirtualUserGenerator /></Suspense></PlanGate>} />
                   
                   {/* Legacy routes */}
                   <Route path="/virtual-users" element={<Navigate to="/performance" replace />} />
                   <Route path="/load-testing" element={<Navigate to="/performance" replace />} />
                   
                   {/* ─────────────────────────────────────────────────────────
-                      5. SALESFORCE MODULE
+                      5. SALESFORCE MODULE (Pro+)
                       Salesforce-specific testing tools
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/salesforce" element={<Suspense fallback={<PageLoadingFallback />}><SalesforceToolsPage /></Suspense>} />
-                  <Route path="/salesforce/metadata" element={<Suspense fallback={<PageLoadingFallback />}><SalesforceToolsPage /></Suspense>} />
-                  <Route path="/salesforce/apex" element={<Suspense fallback={<PageLoadingFallback />}><SalesforceToolsPage /></Suspense>} />
-                  <Route path="/salesforce/validation" element={<Suspense fallback={<PageLoadingFallback />}><SalesforceToolsPage /></Suspense>} />
+                  <Route path="/salesforce" element={<PlanGate feature="salesforce"><Suspense fallback={<PageLoadingFallback />}><SalesforceToolsPage /></Suspense></PlanGate>} />
+                  <Route path="/salesforce/metadata" element={<PlanGate feature="salesforce"><Suspense fallback={<PageLoadingFallback />}><SalesforceToolsPage /></Suspense></PlanGate>} />
+                  <Route path="/salesforce/apex" element={<PlanGate feature="salesforce"><Suspense fallback={<PageLoadingFallback />}><SalesforceToolsPage /></Suspense></PlanGate>} />
+                  <Route path="/salesforce/validation" element={<PlanGate feature="salesforce"><Suspense fallback={<PageLoadingFallback />}><SalesforceToolsPage /></Suspense></PlanGate>} />
                   
                   {/* Legacy routes */}
                   <Route path="/salesforce-tools" element={<Navigate to="/salesforce" replace />} />
 
                   {/* ─────────────────────────────────────────────────────────
-                      6. MOBILE TESTING MODULE
+                      6. MOBILE TESTING MODULE (Pro+)
                       Mobile device emulation and native app testing
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/mobile" element={<Suspense fallback={<PageLoadingFallback />}><MobileTestingPage /></Suspense>} />
-                  <Route path="/mobile/devices" element={<Suspense fallback={<PageLoadingFallback />}><MobileTestingPage /></Suspense>} />
-                  <Route path="/mobile/native" element={<Suspense fallback={<PageLoadingFallback />}><MobileTestingPage /></Suspense>} />
+                  <Route path="/mobile" element={<PlanGate feature="mobile_testing"><Suspense fallback={<PageLoadingFallback />}><MobileTestingPage /></Suspense></PlanGate>} />
+                  <Route path="/mobile/devices" element={<PlanGate feature="mobile_testing"><Suspense fallback={<PageLoadingFallback />}><MobileTestingPage /></Suspense></PlanGate>} />
+                  <Route path="/mobile/native" element={<PlanGate feature="mobile_testing"><Suspense fallback={<PageLoadingFallback />}><MobileTestingPage /></Suspense></PlanGate>} />
                   
                   {/* ─────────────────────────────────────────────────────────
-                      7. FLOWPILOT MODULE
+                      7. FLOWPILOT MODULE (Pro+)
                       Goal-based agentic testing with AI
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/flowpilot" element={<Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense>} />
-                  <Route path="/flowpilot/explorer" element={<Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense>} />
-                  <Route path="/flowpilot/generator" element={<Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense>} />
-                  <Route path="/flowpilot/self-healer" element={<Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense>} />
+                  <Route path="/flowpilot" element={<PlanGate feature="flowpilot"><Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense></PlanGate>} />
+                  <Route path="/flowpilot/explorer" element={<PlanGate feature="flowpilot"><Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense></PlanGate>} />
+                  <Route path="/flowpilot/generator" element={<PlanGate feature="flowpilot"><Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense></PlanGate>} />
+                  <Route path="/flowpilot/self-healer" element={<PlanGate feature="flowpilot"><Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense></PlanGate>} />
 
                   {/* ─────────────────────────────────────────────────────────
-                      8. AI TESTING MODULE - REVOLUTIONARY
+                      8. AI TESTING MODULE (Pro+) - REVOLUTIONARY
                       Plain English → Comprehensive Tests (World's Simplest)
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/ai-testing" element={<Suspense fallback={<PageLoadingFallback />}><AITestingPage /></Suspense>} />
+                  <Route path="/ai-testing" element={<PlanGate feature="flowpilot"><Suspense fallback={<PageLoadingFallback />}><AITestingPage /></Suspense></PlanGate>} />
 
                   {/* ═══════════════════════════════════════════════════════════
                       WEB-ONLY ADDITIONAL FEATURES
@@ -408,8 +412,8 @@ const App = () => {
                   <Route path="/defects/create" element={<Suspense fallback={<PageLoadingFallback />}><CreateDefect /></Suspense>} />
 
                   {/* Tools & Utilities */}
-                  <Route path="/accessibility" element={<Suspense fallback={<PageLoadingFallback />}><Accessibility /></Suspense>} />
-                  <Route path="/visual-testing" element={<Suspense fallback={<PageLoadingFallback />}><VisualTestingPage /></Suspense>} />
+                  <Route path="/accessibility" element={<PlanGate feature="accessibility_testing"><Suspense fallback={<PageLoadingFallback />}><Accessibility /></Suspense></PlanGate>} />
+                  <Route path="/visual-testing" element={<PlanGate feature="visual_testing"><Suspense fallback={<PageLoadingFallback />}><VisualTestingPage /></Suspense></PlanGate>} />
                   <Route path="/framework-analyzer" element={<Suspense fallback={<PageLoadingFallback />}><FrameworkAnalyzer /></Suspense>} />
                   <Route path="/code-alchemy" element={<Suspense fallback={<PageLoadingFallback />}><CodeAlchemy /></Suspense>} />
                   <Route path="/elements" element={<Suspense fallback={<PageLoadingFallback />}><ElementRepository /></Suspense>} />
@@ -472,6 +476,7 @@ const App = () => {
                 <Route path="*" element={<Suspense fallback={<PageLoadingFallback />}><NotFound /></Suspense>} />
               </Routes>
               </Router>
+            </PlanProvider>
             </AuthProvider>
           </TooltipProvider>
         </AIProvider>

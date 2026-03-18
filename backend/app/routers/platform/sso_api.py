@@ -14,7 +14,8 @@ Endpoints:
 
 import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Request, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Form, Query
+from app.dependencies import require_plan
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel
 
@@ -272,7 +273,7 @@ async def get_sso_config(request: Request):
 
 
 @sso_router.put("/config")
-async def update_sso_config(request: Request, config: SSOConfigRequest):
+async def update_sso_config(request: Request, config: SSOConfigRequest, _: None = Depends(require_plan("sso_saml"))):
     """
     Update SSO configuration for the current user's organization.
     Requires admin role.

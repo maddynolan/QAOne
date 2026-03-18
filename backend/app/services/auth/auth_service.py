@@ -75,7 +75,8 @@ class AuthService:
         password: str,
         name: str,
         org_name: Optional[str] = None,
-        org_id: Optional[str] = None
+        org_id: Optional[str] = None,
+        device_fingerprint: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Register a new user. Optionally creates a new organization or joins existing one.
@@ -136,7 +137,7 @@ class AuthService:
         if org_id_for_sub:
             try:
                 from app.services.core.subscription_service import subscription_service
-                await subscription_service.create_trial(org_id_for_sub)
+                await subscription_service.create_trial(org_id_for_sub, device_fingerprint=device_fingerprint)
             except Exception as e:
                 logger.warning(f"[Auth] Failed to create trial subscription: {e}")
 
