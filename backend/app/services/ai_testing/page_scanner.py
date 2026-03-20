@@ -200,9 +200,34 @@ PAGE_SCANNER_JS = """
     const seen = new Set();
     const allElements = [];
 
+    // Deep query that also searches inside shadow DOMs (critical for Salesforce, LWC, etc.)
+    function querySelectorAllDeep(root, selector) {
+        const results = [];
+        try {
+            const els = root.querySelectorAll(selector);
+            for (const el of els) results.push(el);
+        } catch (e) {}
+        // Traverse shadow roots
+        try {
+            const allNodes = root.querySelectorAll('*');
+            for (const node of allNodes) {
+                if (node.shadowRoot) {
+                    try {
+                        const shadowEls = node.shadowRoot.querySelectorAll(selector);
+                        for (const el of shadowEls) results.push(el);
+                        // Recurse into nested shadow roots
+                        const deepResults = querySelectorAllDeep(node.shadowRoot, selector);
+                        for (const el of deepResults) results.push(el);
+                    } catch (e) {}
+                }
+            }
+        } catch (e) {}
+        return results;
+    }
+
     for (const selector of interactiveSelectors) {
         try {
-            const elements = document.querySelectorAll(selector);
+            const elements = querySelectorAllDeep(document, selector);
             for (const el of elements) {
                 // Skip hidden, duplicate, or tiny elements
                 if (seen.has(el)) continue;

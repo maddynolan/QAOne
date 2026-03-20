@@ -215,7 +215,7 @@ export function PlanProvider({ children }: PlanProviderProps) {
   }, [fetchLimits])
 
   const isFeatureAvailable = useCallback((featureId: string): boolean => {
-    // Demo mode or Electron desktop = everything available
+    // Demo mode = everything available
     if (shouldUnlock) return true
 
     // Check precomputed map first
