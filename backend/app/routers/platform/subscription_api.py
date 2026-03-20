@@ -144,10 +144,27 @@ async def get_limits(authorization: Optional[str] = Header(None)):
         sub = await subscription_service.get_subscription(org_id)
 
         if not sub:
+            # No subscription record = default to trial so users can evaluate all features
+            # They'll be prompted to subscribe when the trial period logic kicks in
+            from app.services.core.subscription_service import PLAN_LIMITS, FEATURE_TIER_MAP, TIER_HIERARCHY
+            trial_limits = PLAN_LIMITS.get("trial", PLAN_LIMITS.get("pro", {}))
+            trial_level = TIER_HIERARCHY.get("trial", 3)
+            features = {}
+            for feat, req_tier in FEATURE_TIER_MAP.items():
+                req_level = TIER_HIERARCHY.get(req_tier, 0)
+                features[feat] = trial_level >= req_level
             return {
-                "plan": "free",
-                "limits": {"max_users": 3, "max_test_runs_per_month": 1000, "max_projects": 1},
+                "plan": "trial",
+                "status": "active",
+                "days_remaining": 14,
+                "limits": {
+                    "max_users": trial_limits.get("max_users", 10),
+                    "max_test_runs_per_month": trial_limits.get("max_test_runs_per_month", 10000),
+                    "max_projects": trial_limits.get("max_projects", 5),
+                    "max_playbacks_per_day": trial_limits.get("max_playbacks_per_day", 999),
+                },
                 "usage": {"users": 0, "test_runs_this_month": 0, "projects": 0},
+                "features": features,
             }
 
         # Get real usage from DB

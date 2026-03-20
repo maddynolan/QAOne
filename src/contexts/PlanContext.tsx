@@ -167,14 +167,12 @@ export function PlanProvider({ children }: PlanProviderProps) {
       }
     } catch (error) {
       console.warn('[PlanContext] Failed to fetch limits, using defaults:', error)
-      // Use subscription from AuthContext as fallback
-      if (subscription) {
-        const fallbackPlan = subscription.plan || 'free'
-        setPlan(fallbackPlan)
-        setStatus(subscription.status || 'active')
-        setDaysRemaining(subscription.daysRemaining ?? -1)
-        setFeatures(computeFeatures(fallbackPlan))
-      }
+      // Use subscription from AuthContext as fallback, default to trial for authenticated users
+      const fallbackPlan = subscription?.plan || 'trial'
+      setPlan(fallbackPlan)
+      setStatus(subscription?.status || 'active')
+      setDaysRemaining(subscription?.daysRemaining ?? 14)
+      setFeatures(computeFeatures(fallbackPlan))
     } finally {
       setLoading(false)
     }
