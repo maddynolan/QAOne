@@ -112,9 +112,15 @@ interface PlanProviderProps {
   children: React.ReactNode
 }
 
+// Electron desktop app has its own license gating (LicenseGate) — PlanGate should not double-gate
+const isElectronApp = typeof window !== 'undefined' &&
+  (!!((window as any).electronAPI) || !!((window as any).flowstral) || navigator.userAgent.toLowerCase().includes('electron'))
+
 export function PlanProvider({ children }: PlanProviderProps) {
   const { subscription, isAuthenticated, isDemoMode } = useAuth()
-  const [plan, setPlan] = useState<string>('free')
+  // In demo mode or Electron, initialize as enterprise to avoid flash of "free" gating
+  const shouldUnlock = isDemoMode || isElectronApp
+  const [plan, setPlan] = useState<string>(shouldUnlock ? 'enterprise' : 'free')
   const [status, setStatus] = useState<string>('active')
   const [daysRemaining, setDaysRemaining] = useState<number>(-1)
   const [usage, setUsage] = useState<PlanUsage>(defaultUsage)
@@ -133,8 +139,15 @@ export function PlanProvider({ children }: PlanProviderProps) {
     return result
   }, [])
 
-  // Fetch limits from backend
+  // Fetch limits from backend (skipped in demo mode and Electron desktop)
   const fetchLimits = useCallback(async () => {
+    // Demo mode or Electron = everything unlocked, no API call needed
+    if (shouldUnlock) {
+      setPlan('enterprise')
+      setFeatures(computeFeatures('enterprise'))
+      setLoading(false)
+      return
+    }
     try {
       const response = await apiClient.get('/api/subscriptions/limits')
       const data = response.data
@@ -165,11 +178,11 @@ export function PlanProvider({ children }: PlanProviderProps) {
     } finally {
       setLoading(false)
     }
-  }, [subscription, computeFeatures])
+  }, [subscription, computeFeatures, shouldUnlock])
 
-  // In demo mode, unlock everything
+  // In demo mode or Electron desktop, unlock everything
   useEffect(() => {
-    if (isDemoMode) {
+    if (shouldUnlock) {
       setPlan('enterprise')
       setStatus('active')
       setDaysRemaining(-1)
@@ -188,7 +201,7 @@ export function PlanProvider({ children }: PlanProviderProps) {
       setFeatures(computeFeatures('free'))
       setLoading(false)
     }
-  }, [isAuthenticated, isDemoMode, fetchLimits, computeFeatures])
+  }, [isAuthenticated, shouldUnlock, fetchLimits, computeFeatures])
 
   // Listen for subscription limit exceeded events from api-client interceptor
   useEffect(() => {
@@ -203,7 +216,7 @@ export function PlanProvider({ children }: PlanProviderProps) {
 
   const isFeatureAvailable = useCallback((featureId: string): boolean => {
     // Demo mode = everything available
-    if (isDemoMode) return true
+    if (shouldUnlock) return true
 
     // Check precomputed map first
     if (featureId in features) {
@@ -217,7 +230,7 @@ export function PlanProvider({ children }: PlanProviderProps) {
     const planLevel = TIER_HIERARCHY[plan] ?? 0
     const requiredLevel = TIER_HIERARCHY[feat.tier] ?? 0
     return planLevel >= requiredLevel
-  }, [features, plan, isDemoMode])
+  }, [features, plan, shouldUnlock])
 
   const value = useMemo(() => ({
     plan,
@@ -236,7 +249,7 @@ export function PlanProvider({ children }: PlanProviderProps) {
     try { return sessionStorage.getItem('flowstral_trial_banner_dismissed') === 'true' } catch { return false }
   })
 
-  const showTrialBanner = plan === 'trial' && daysRemaining >= 0 && daysRemaining <= 7 && !bannerDismissed && !isDemoMode
+  const showTrialBanner = plan === 'trial' && daysRemaining >= 0 && daysRemaining <= 7 && !bannerDismissed && !shouldUnlock
 
   const dismissBanner = useCallback(() => {
     setBannerDismissed(true)

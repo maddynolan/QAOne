@@ -373,9 +373,9 @@ const App = () => {
                       Goal-based agentic testing with AI
                       ───────────────────────────────────────────────────────── */}
                   <Route path="/flowpilot" element={<PlanGate feature="flowpilot"><Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense></PlanGate>} />
-                  <Route path="/flowpilot/explorer" element={<PlanGate feature="flowpilot"><Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense></PlanGate>} />
                   <Route path="/flowpilot/generator" element={<PlanGate feature="flowpilot"><Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense></PlanGate>} />
-                  <Route path="/flowpilot/self-healer" element={<PlanGate feature="flowpilot"><Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense></PlanGate>} />
+                  <Route path="/flowpilot/explorer" element={<PlanGate feature="flowpilot"><Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense></PlanGate>} />
+                  <Route path="/flowpilot/flowmap" element={<PlanGate feature="flowpilot"><Suspense fallback={<PageLoadingFallback />}><FlowpilotPage /></Suspense></PlanGate>} />
 
                   {/* ─────────────────────────────────────────────────────────
                       8. AI TESTING MODULE (Pro+) - REVOLUTIONARY
