@@ -94,7 +94,7 @@ MAX_AGENT_STEPS = 25
 
 
 class AgenticOrchestrator:
-    """v5.0 - Goal-driven, page-aware orchestrator that decides actions one at a time"""
+    """v5.1 - Goal-driven orchestrator: LLM decides WHAT, deterministic code finds HOW"""
 
     def __init__(self, headless: bool = True):
         self.ai_client = self._init_ai()
@@ -108,6 +108,8 @@ class AgenticOrchestrator:
         self._vision_service = None
         self._stream_session_id: str = str(uuid4())
         self._action_history: List[Dict] = []  # Track what we've done
+        self._last_page_state: str = ""  # Track URL+title for stale detection
+        self._selector_cache: Dict[str, str] = {}  # Cache successful selectors
         if VISION_AVAILABLE:
             try:
                 self._vision_service = get_vision_healing_service()
@@ -230,16 +232,22 @@ class AgenticOrchestrator:
                 action_value = next_action.get("value", "")
                 action_desc = next_action.get("description", f"{action_type} {action_target}")
 
-                # ── LOOP DETECTION: catch repeated identical actions ──
+                # ── LOOP DETECTION: catch repeated identical actions on same page ──
+                current_page_state = f"{page_url}|{page_title}"
                 if self._action_history:
                     repeat_key = f"{action_type}:{action_target}"
-                    recent_keys = [f"{h['action']}:{h.get('target','')}" for h in self._action_history[-5:]]
-                    repeat_count = sum(1 for k in recent_keys if k == repeat_key)
-                    if repeat_count >= 2:
-                        yield {"type": "step", "message": f"  ⚠ Loop detected: '{action_desc}' repeated {repeat_count + 1} times. Stopping."}
+                    # Count how many times this exact action was done on the SAME page state
+                    recent_repeats = 0
+                    for h in self._action_history[-5:]:
+                        h_key = f"{h['action']}:{h.get('target','')}"
+                        h_page = h.get('page_state', '')
+                        if h_key == repeat_key and h_page == current_page_state:
+                            recent_repeats += 1
+                    if recent_repeats >= 2:
+                        yield {"type": "step", "message": f"  ⚠ Loop detected: '{action_desc}' repeated {recent_repeats + 1} times on same page. Stopping."}
                         tc.steps.append(StepResult(
                             success=False, action="loop_detected",
-                            target=action_target, description=f"Loop: repeated '{action_desc}' {repeat_count + 1} times",
+                            target=action_target, description=f"Loop: repeated '{action_desc}' {recent_repeats + 1} times on same page",
                             error=f"Agent stuck in loop repeating: {action_type} '{action_target}'",
                             method="loop_detection"
                         ))
@@ -296,13 +304,14 @@ class AgenticOrchestrator:
 
                 tc.steps.append(step)
 
-                # Track history for AI context
+                # Track history for AI context + loop detection
                 self._action_history.append({
                     "action": action_type,
                     "target": action_target,
                     "value": action_value if "password" not in action_target.lower() else "****",
                     "result": "success" if success else f"failed: {step.error or 'unknown'}",
                     "page_url": page_url,
+                    "page_state": current_page_state,
                 })
 
                 # Screenshot after action
@@ -875,175 +884,289 @@ Return ONLY the JSON object, nothing else."""
             return False
 
     async def _execute_element_action(self, step: StepResult, page) -> bool:
-        """Execute an element-based action (fill, click, select, etc.)"""
-        action_hint = step.action
-        if step.action in ("select", "check", "hover", "scroll_to", "tab"):
-            action_hint = "click"
-        if step.action == "upload":
-            action_hint = "fill"
+        """
+        Execute an element-based action using a 5-layer resolution pipeline:
 
-        matched = match_element(self._scanned_elements, step.target, action_hint)
+        Layer 1: Selector cache (instant — reuse previous success)
+        Layer 2: Direct Playwright locators (getByRole, getByText, getByLabel — fast, reliable)
+        Layer 3: PageScanner match_element + ranked selectors (13 strategies)
+        Layer 4: App-specific CSS selectors (Salesforce/Workday/ServiceNow)
+        Layer 5: Vision AI (screenshot → GPT-4V → coordinates)
 
-        if not matched:
-            # Try getByText as last resort for click actions
-            if step.action == "click":
-                try:
-                    loc = page.get_by_text(step.target, exact=False)
-                    if await loc.count() > 0 and await loc.first.is_visible(timeout=3000):
-                        await loc.first.scroll_into_view_if_needed()
-                        await loc.first.click()
-                        await asyncio.sleep(0.5)
-                        try:
-                            await page.wait_for_load_state("domcontentloaded", timeout=5000)
-                        except:
-                            pass
-                        step.success = True
-                        step.method = "getByText_fallback"
-                        step.selector_used = f"text={step.target}"
+        The LLM decides WHAT to do. This function finds HOW.
+        """
+        target = step.target
+        action = step.action
+
+        # ── LAYER 1: Selector cache (0ms) ──
+        cache_key = f"{action}:{target.lower()}"
+        if cache_key in self._selector_cache:
+            cached_sel = self._selector_cache[cache_key]
+            try:
+                loc = page.locator(cached_sel)
+                if await loc.count() > 0 and await loc.first.is_visible(timeout=1500):
+                    ok = await self._perform_action(loc.first, step, page)
+                    if ok:
+                        step.method = "cache"
+                        step.selector_used = cached_sel
+                        step.confidence = 99
                         return True
-                except Exception:
-                    pass
+            except:
+                del self._selector_cache[cache_key]
 
-            # Try getByRole link/button for click
-            if step.action == "click":
-                for role in ["link", "button"]:
-                    try:
-                        loc = page.get_by_role(role, name=re.compile(re.escape(step.target), re.IGNORECASE))
-                        if await loc.count() > 0 and await loc.first.is_visible(timeout=2000):
-                            await loc.first.scroll_into_view_if_needed()
-                            await loc.first.click()
-                            await asyncio.sleep(0.5)
-                            try:
-                                await page.wait_for_load_state("domcontentloaded", timeout=5000)
-                            except:
-                                pass
-                            step.success = True
-                            step.method = f"getByRole_{role}_fallback"
-                            step.selector_used = f"role={role}[name={step.target}]"
-                            return True
-                    except Exception:
-                        continue
-
-            step.error = f"No matching element found for '{step.target}' among {len(self._scanned_elements)} scanned elements"
-            step.method = "no_match"
-            return False
-
-        selectors = matched.get('selectors', [])
-        human_locators = self._build_human_locators(matched)
-        all_strategies = human_locators + selectors
-
-        for strategy in all_strategies:
-            sel = strategy.get('selector', '')
-            sel_type = strategy.get('type', 'unknown')
-
-            if not sel:
+        # ── LAYER 2: Direct Playwright human locators (100ms, free, most reliable) ──
+        pw_strategies = self._build_playwright_strategies(target, action)
+        for strat in pw_strategies:
+            try:
+                locator = strat["locator_fn"]()
+                if await locator.count() > 0 and await locator.first.is_visible(timeout=2000):
+                    ok = await self._perform_action(locator.first, step, page)
+                    if ok:
+                        step.method = strat["method"]
+                        step.selector_used = strat["desc"]
+                        step.confidence = strat["confidence"]
+                        self._selector_cache[cache_key] = strat.get("cache_sel", strat["desc"])
+                        logger.info(f"Step '{step.description}' → {strat['method']}: {strat['desc']}")
+                        return True
+            except Exception as e:
+                logger.debug(f"Playwright strategy {strat['method']} failed: {e}")
                 continue
 
-            try:
-                if sel_type == 'pw_label':
-                    locator = page.get_by_label(strategy['label'], exact=False)
-                elif sel_type == 'pw_role':
-                    if strategy.get('name'):
-                        locator = page.get_by_role(strategy['role'], name=strategy['name'])
+        # ── LAYER 3: PageScanner match_element + ranked selectors ──
+        action_hint = action if action not in ("select", "check", "hover", "scroll_to", "tab") else "click"
+        if action == "upload":
+            action_hint = "fill"
+
+        matched = match_element(self._scanned_elements, target, action_hint)
+        if matched:
+            # Use PageScanner's confidence-sorted selectors + human locators
+            human_locators = self._build_human_locators(matched)
+            scanner_selectors = matched.get('selectors', [])
+            # Sort by confidence (highest first)
+            all_strategies = sorted(
+                human_locators + scanner_selectors,
+                key=lambda s: s.get('confidence', 0),
+                reverse=True
+            )
+
+            for strategy in all_strategies:
+                sel = strategy.get('selector', '')
+                sel_type = strategy.get('type', 'unknown')
+                if not sel:
+                    continue
+
+                try:
+                    if sel_type == 'pw_label':
+                        locator = page.get_by_label(strategy['label'], exact=False)
+                    elif sel_type == 'pw_role':
+                        locator = page.get_by_role(strategy['role'], name=strategy['name']) if strategy.get('name') else page.get_by_role(strategy['role'])
+                    elif sel_type == 'pw_placeholder':
+                        locator = page.get_by_placeholder(strategy['placeholder'])
+                    elif sel_type == 'pw_text':
+                        locator = page.get_by_text(strategy['text'])
                     else:
-                        locator = page.get_by_role(strategy['role'])
-                elif sel_type == 'pw_placeholder':
-                    locator = page.get_by_placeholder(strategy['placeholder'])
-                elif sel_type == 'pw_text':
-                    locator = page.get_by_text(strategy['text'])
-                else:
-                    locator = page.locator(sel)
+                        locator = page.locator(sel)
 
-                if await locator.count() > 0 and await locator.first.is_visible(timeout=2000):
-                    if step.action == "fill":
-                        await locator.first.scroll_into_view_if_needed()
-                        await locator.first.clear()
-                        await locator.first.fill(step.value)
+                    if await locator.count() > 0 and await locator.first.is_visible(timeout=2000):
+                        ok = await self._perform_action(locator.first, step, page, matched=matched)
+                        if ok:
+                            step.method = sel_type
+                            step.selector_used = sel
+                            step.confidence = strategy.get('confidence', 0)
+                            self._selector_cache[cache_key] = sel
+                            logger.info(f"Step '{step.description}' → PageScanner {sel_type}: {sel}")
+                            return True
+                except Exception as e:
+                    logger.debug(f"Scanner strategy {sel_type} failed: {sel} - {e}")
+                    continue
 
-                    elif step.action == "click" or step.action == "tab":
-                        await locator.first.scroll_into_view_if_needed()
-                        await locator.first.click()
-                        await asyncio.sleep(0.3)
+        # ── LAYER 4: App-specific CSS selectors ──
+        app_type = self._page_info.get('app_type', 'generic')
+        if not app_type or app_type == 'generic':
+            # Auto-detect from URL
+            url = page.url.lower()
+            if 'salesforce' in url or 'force.com' in url or '.my.site.com' in url:
+                app_type = 'salesforce'
+            elif 'workday' in url:
+                app_type = 'workday'
+            elif 'service-now' in url:
+                app_type = 'servicenow'
+
+        try:
+            from app.services.ai_testing.human_element_finder import APP_ATTRIBUTES, NL_TO_ELEMENT
+            # Classify what type of element we're looking for
+            target_lower = target.lower()
+            element_type = None
+            for pattern, etype in NL_TO_ELEMENT.items():
+                if re.search(pattern, target_lower):
+                    element_type = etype
+                    break
+
+            if element_type:
+                app_selectors = APP_ATTRIBUTES.get(app_type, {}).get(element_type, [])
+                generic_selectors = APP_ATTRIBUTES.get("generic", {}).get(element_type, [])
+                for sel in app_selectors + generic_selectors:
+                    try:
+                        loc = page.locator(sel)
+                        if await loc.count() > 0 and await loc.first.is_visible(timeout=1500):
+                            ok = await self._perform_action(loc.first, step, page)
+                            if ok:
+                                step.method = f"app_specific_{app_type}"
+                                step.selector_used = sel
+                                step.confidence = 85
+                                self._selector_cache[cache_key] = sel
+                                return True
+                    except:
+                        continue
+        except ImportError:
+            pass
+
+        # ── LAYER 5: Vision AI (last resort, 2-5s, costs API calls) ──
+        if self._vision_service and hasattr(self._vision_service, 'available') and self._vision_service.available:
+            ok = await self._vision_heal_step(step)
+            if ok:
+                return True
+
+        step.error = f"No matching element found for '{target}' across 5 resolution layers ({len(self._scanned_elements)} scanned elements)"
+        step.method = "all_layers_failed"
+        return False
+
+    def _build_playwright_strategies(self, target: str, action: str) -> List[Dict]:
+        """
+        Build direct Playwright locator strategies from the raw target text.
+        These are tried BEFORE PageScanner — they work even if the scanner
+        didn't categorize the element correctly.
+        """
+        page = self._page
+        strategies = []
+        target_clean = target.strip()
+
+        if not target_clean:
+            return strategies
+
+        # For click actions: try getByRole(button/link) first — most reliable
+        if action in ("click", "check", "tab", "hover", "scroll_to"):
+            for role in ["button", "link", "menuitem", "tab"]:
+                strategies.append({
+                    "locator_fn": lambda r=role: page.get_by_role(r, name=re.compile(re.escape(target_clean), re.IGNORECASE)),
+                    "method": f"pw_role_{r}",
+                    "desc": f"getByRole('{r}', name='{target_clean}')",
+                    "confidence": 90,
+                    "cache_sel": f"role={r}[name=/{re.escape(target_clean)}/i]",
+                })
+
+        # getByLabel — works for form fields
+        if action in ("fill", "select", "check"):
+            strategies.append({
+                "locator_fn": lambda: page.get_by_label(target_clean, exact=False),
+                "method": "pw_label",
+                "desc": f"getByLabel('{target_clean}')",
+                "confidence": 95,
+                "cache_sel": f"label={target_clean}",
+            })
+
+        # getByPlaceholder — works for inputs
+        if action in ("fill",):
+            strategies.append({
+                "locator_fn": lambda: page.get_by_placeholder(re.compile(re.escape(target_clean), re.IGNORECASE)),
+                "method": "pw_placeholder",
+                "desc": f"getByPlaceholder('{target_clean}')",
+                "confidence": 88,
+                "cache_sel": f"placeholder=/{re.escape(target_clean)}/i",
+            })
+
+        # getByText — universal fallback (works for any visible text)
+        strategies.append({
+            "locator_fn": lambda: page.get_by_text(target_clean, exact=False),
+            "method": "pw_text",
+            "desc": f"getByText('{target_clean}')",
+            "confidence": 80,
+            "cache_sel": f"text={target_clean}",
+        })
+
+        return strategies
+
+    async def _perform_action(self, element, step: StepResult, page, matched: Dict = None) -> bool:
+        """Execute the actual action on a resolved element. Shared by all layers."""
+        try:
+            await element.scroll_into_view_if_needed()
+
+            if step.action == "fill":
+                await element.clear()
+                await element.fill(step.value)
+
+            elif step.action in ("click", "tab"):
+                await element.click()
+                await asyncio.sleep(0.3)
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=5000)
+                except:
+                    pass
+
+            elif step.action == "select":
+                tag = matched.get('tag', '') if matched else ''
+                if tag == 'select':
+                    try:
+                        await element.select_option(label=step.value)
+                    except:
                         try:
-                            await page.wait_for_load_state("domcontentloaded", timeout=5000)
+                            await element.select_option(value=step.value)
                         except:
-                            pass
-
-                    elif step.action == "select":
-                        tag = matched.get('tag', '')
-                        if tag == 'select':
-                            try:
-                                await locator.first.select_option(label=step.value)
-                            except:
-                                try:
-                                    await locator.first.select_option(value=step.value)
-                                except:
-                                    await locator.first.click()
-                                    await asyncio.sleep(0.3)
-                                    option = page.get_by_text(step.value, exact=False)
-                                    if await option.count() > 0:
-                                        await option.first.click()
-                        else:
-                            await locator.first.scroll_into_view_if_needed()
-                            await locator.first.click()
-                            await asyncio.sleep(0.5)
+                            await element.click()
+                            await asyncio.sleep(0.3)
                             option = page.get_by_text(step.value, exact=False)
                             if await option.count() > 0:
                                 await option.first.click()
-                            else:
-                                option = page.get_by_role("option", name=step.value)
-                                if await option.count() > 0:
-                                    await option.first.click()
-                        await asyncio.sleep(0.3)
+                else:
+                    await element.click()
+                    await asyncio.sleep(0.5)
+                    option = page.get_by_text(step.value, exact=False)
+                    if await option.count() > 0:
+                        await option.first.click()
+                    else:
+                        option = page.get_by_role("option", name=step.value)
+                        if await option.count() > 0:
+                            await option.first.click()
+                await asyncio.sleep(0.3)
 
-                    elif step.action == "check":
-                        try:
-                            if not await locator.first.is_checked():
-                                await locator.first.check()
-                        except:
-                            await locator.first.click()
-                        await asyncio.sleep(0.2)
+            elif step.action == "check":
+                try:
+                    if not await element.is_checked():
+                        await element.check()
+                except:
+                    await element.click()
+                await asyncio.sleep(0.2)
 
-                    elif step.action == "hover":
-                        await locator.first.scroll_into_view_if_needed()
-                        await locator.first.hover()
-                        await asyncio.sleep(0.3)
+            elif step.action == "hover":
+                await element.hover()
+                await asyncio.sleep(0.3)
 
-                    elif step.action == "scroll_to":
-                        await locator.first.scroll_into_view_if_needed()
-                        await asyncio.sleep(0.3)
+            elif step.action == "scroll_to":
+                await asyncio.sleep(0.3)
 
-                    elif step.action == "upload":
-                        try:
-                            await locator.first.set_input_files(step.value)
-                        except:
-                            file_input = page.locator('input[type="file"]')
-                            if await file_input.count() > 0:
-                                await file_input.first.set_input_files(step.value)
+            elif step.action == "upload":
+                try:
+                    await element.set_input_files(step.value)
+                except:
+                    file_input = page.locator('input[type="file"]')
+                    if await file_input.count() > 0:
+                        await file_input.first.set_input_files(step.value)
+                await asyncio.sleep(0.5)
+
+            elif step.action == "drag_drop":
+                dest = match_element(self._scanned_elements, step.value, "click")
+                if dest and dest.get('bestSelector'):
+                    dest_loc = page.locator(dest['bestSelector'])
+                    if await dest_loc.count() > 0:
+                        await element.drag_to(dest_loc.first)
                         await asyncio.sleep(0.5)
 
-                    elif step.action == "drag_drop":
-                        dest = match_element(self._scanned_elements, step.value, "click")
-                        if dest and dest.get('bestSelector'):
-                            dest_loc = page.locator(dest['bestSelector'])
-                            if await dest_loc.count() > 0:
-                                await locator.first.drag_to(dest_loc.first)
-                                await asyncio.sleep(0.5)
+            step.success = True
+            return True
 
-                    step.success = True
-                    step.method = sel_type
-                    step.selector_used = sel
-                    step.confidence = strategy.get('confidence', 0)
-                    logger.info(f"Step '{step.description}' succeeded via {sel_type}: {sel}")
-                    return True
-
-            except Exception as e:
-                logger.debug(f"Strategy {sel_type} failed: {sel} - {e}")
-                continue
-
-        step.error = f"Element matched '{matched.get('humanDescription')}' but no selector worked ({len(all_strategies)} tried)"
-        step.method = "all_strategies_failed"
-        return False
+        except Exception as e:
+            logger.debug(f"Action failed: {step.action} on element - {e}")
+            return False
 
     def _build_human_locators(self, element: Dict) -> List[Dict]:
         """Build Playwright human locator strategies from element data"""
