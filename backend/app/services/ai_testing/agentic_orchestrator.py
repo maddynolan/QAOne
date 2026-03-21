@@ -1049,10 +1049,10 @@ Return ONLY the JSON object, nothing else."""
             for role in ["button", "link", "menuitem", "tab"]:
                 strategies.append({
                     "locator_fn": lambda r=role: page.get_by_role(r, name=re.compile(re.escape(target_clean), re.IGNORECASE)),
-                    "method": f"pw_role_{r}",
-                    "desc": f"getByRole('{r}', name='{target_clean}')",
+                    "method": f"pw_role_{role}",
+                    "desc": f"getByRole('{role}', name='{target_clean}')",
                     "confidence": 90,
-                    "cache_sel": f"role={r}[name=/{re.escape(target_clean)}/i]",
+                    "cache_sel": f"role={role}[name=/{re.escape(target_clean)}/i]",
                 })
 
         # getByLabel — works for form fields
@@ -1083,6 +1083,27 @@ Return ONLY the JSON object, nothing else."""
             "confidence": 80,
             "cache_sel": f"text={target_clean}",
         })
+
+        # CSS attribute selectors — catches elements with title, aria-label, or data attributes
+        if action in ("click", "fill"):
+            for attr in ["title", "aria-label", "data-label", "value"]:
+                strategies.append({
+                    "locator_fn": lambda a=attr: page.locator(f'[{a}="{target_clean}" i]'),
+                    "method": f"css_{attr}",
+                    "desc": f'[{attr}="{target_clean}"]',
+                    "confidence": 75,
+                    "cache_sel": f'[{attr}="{target_clean}" i]',
+                })
+
+        # Partial text match for links/buttons — handles whitespace/icon text issues
+        if action == "click" and len(target_clean) > 3:
+            strategies.append({
+                "locator_fn": lambda: page.locator(f'a:has-text("{target_clean}"), button:has-text("{target_clean}")'),
+                "method": "css_has_text",
+                "desc": f'a/button:has-text("{target_clean}")',
+                "confidence": 70,
+                "cache_sel": f'a:has-text("{target_clean}"), button:has-text("{target_clean}")',
+            })
 
         return strategies
 
