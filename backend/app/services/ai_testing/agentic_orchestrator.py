@@ -197,6 +197,7 @@ class AgenticOrchestrator:
             step_num = 0
             consecutive_failures = 0
             max_consecutive_failures = 3
+            goal_completed_by_ai = False  # Track if AI explicitly said "goal_complete"
 
             while step_num < MAX_AGENT_STEPS:
                 step_num += 1
@@ -229,10 +230,25 @@ class AgenticOrchestrator:
                 action_value = next_action.get("value", "")
                 action_desc = next_action.get("description", f"{action_type} {action_target}")
 
+                # ── LOOP DETECTION: catch repeated identical actions ──
+                if self._action_history:
+                    repeat_key = f"{action_type}:{action_target}"
+                    recent_keys = [f"{h['action']}:{h.get('target','')}" for h in self._action_history[-5:]]
+                    repeat_count = sum(1 for k in recent_keys if k == repeat_key)
+                    if repeat_count >= 2:
+                        yield {"type": "step", "message": f"  ⚠ Loop detected: '{action_desc}' repeated {repeat_count + 1} times. Stopping."}
+                        tc.steps.append(StepResult(
+                            success=False, action="loop_detected",
+                            target=action_target, description=f"Loop: repeated '{action_desc}' {repeat_count + 1} times",
+                            error=f"Agent stuck in loop repeating: {action_type} '{action_target}'",
+                            method="loop_detection"
+                        ))
+                        break
+
                 # Check for goal completion
                 if action_type == "goal_complete":
                     yield {"type": "step", "message": f"  Goal achieved: {action_desc}"}
-                    # Add a final assertion step
+                    goal_completed_by_ai = True
                     tc.steps.append(StepResult(
                         success=True, action="assert_visible",
                         target="goal_complete", description=action_desc,
@@ -286,6 +302,7 @@ class AgenticOrchestrator:
                     "target": action_target,
                     "value": action_value if "password" not in action_target.lower() else "****",
                     "result": "success" if success else f"failed: {step.error or 'unknown'}",
+                    "page_url": page_url,
                 })
 
                 # Screenshot after action
@@ -306,7 +323,12 @@ class AgenticOrchestrator:
                 await asyncio.sleep(0.3)
 
             # === PHASE 5: COMPLETE ===
-            tc.status = "passed" if all(s.success for s in tc.steps) else "failed"
+            # A test only passes if:
+            # 1. AI explicitly declared "goal_complete", AND
+            # 2. All executed steps succeeded
+            # If the loop ended because we hit MAX_AGENT_STEPS or loop detection, that's a failure.
+            all_steps_ok = all(s.success for s in tc.steps)
+            tc.status = "passed" if (goal_completed_by_ai and all_steps_ok) else "failed"
             tc.duration = time.time() - start_time
 
             # Final screenshot
@@ -450,17 +472,25 @@ class AgenticOrchestrator:
             entry = {k: v for k, v in entry.items() if v}
             element_summary.append(entry)
 
-        # Build history summary (last 10 actions)
+        # Build history summary (ALL actions, not just last 10)
         history_text = ""
         if history:
             history_lines = []
-            for h in history[-10:]:
-                line = f"- {h['action']} '{h.get('target', '')}'"
+            for i, h in enumerate(history):
+                line = f"{i+1}. {h['action']} '{h.get('target', '')}'"
                 if h.get('value'):
                     line += f" = '{h['value']}'"
                 line += f" → {h['result']}"
                 history_lines.append(line)
             history_text = "\n".join(history_lines)
+
+        # Detect if the same action has been repeated recently
+        repeat_warning = ""
+        if len(history) >= 2:
+            last_action = f"{history[-1].get('action')}:{history[-1].get('target','')}"
+            second_last = f"{history[-2].get('action')}:{history[-2].get('target','')}" if len(history) >= 2 else ""
+            if last_action == second_last:
+                repeat_warning = f"\n⚠ WARNING: You just repeated '{history[-1].get('action')} {history[-1].get('target','')}' twice. DO NOT repeat it again. Either try a DIFFERENT action or return goal_blocked.\n"
 
         # Credential hint (don't send actual password to LLM)
         cred_hint = ""
@@ -483,29 +513,26 @@ CURRENT PAGE:
 
 ACTIONS TAKEN SO FAR:
 {history_text or "None yet (just navigated to the page)"}
-
+{repeat_warning}
 {cred_hint}
 
-RULES:
+CRITICAL RULES:
 1. Return EXACTLY ONE action to take RIGHT NOW based on what's VISIBLE on the page
-2. NEVER invent elements that aren't in the list above
-3. If the goal appears to be achieved (e.g., you can see the expected result), return goal_complete
-4. If you're stuck (tried multiple times, element not found), return goal_blocked
-5. For "target", use the EXACT text/label/placeholder from the elements list above
-6. After clicking a button that submits a form or navigates, the page will change — you'll get fresh elements next iteration
-7. If there are cookie banners or popups blocking the page, dismiss them first
+2. NEVER invent elements that aren't in the list above — only reference elements you can see
+3. NEVER repeat the same action+target combination you already did. If you already clicked 'Next', DO NOT click 'Next' again unless the page has clearly changed (different URL or title)
+4. Work through the goal STEP BY STEP. The goal may have multiple parts (e.g., "1. Click X, 2. Click Y, 3. Click Z"). Check which parts you've completed in the history, and do the NEXT uncompleted part
+5. If the goal mentions clicking a specific element (e.g., "Click on 18-35 button"), you MUST find and click THAT element before proceeding to subsequent steps
+6. If the goal appears to be fully achieved (ALL parts completed), return goal_complete
+7. If you're stuck (can't find the right element after looking at the list), return goal_blocked — do NOT keep clicking random buttons
+8. For "target", use the EXACT text/label/placeholder from the elements list above
+9. After clicking a button that submits a form or navigates, the page will change — you'll get fresh elements next iteration
+10. If there are cookie banners or popups blocking the page, dismiss them first
 
 Return a JSON object with these fields:
 - "action": one of "click", "fill", "select", "check", "hover", "keyboard", "scroll_to", "dismiss", "wait", "assert_text", "assert_visible", "goal_complete", "goal_blocked"
 - "target": element description matching an element from the list (use text, label, or placeholder)
 - "value": value for fill/select, or explanation for goal_complete/goal_blocked
 - "description": plain English description of what this step does
-
-EXAMPLE RESPONSES:
-{{"action": "click", "target": "Join the donor registry", "value": "", "description": "Click the 'Join the donor registry' button"}}
-{{"action": "fill", "target": "Username", "value": "john@example.com", "description": "Enter username"}}
-{{"action": "goal_complete", "target": "", "value": "Registration form submitted successfully", "description": "Goal achieved - form was submitted"}}
-{{"action": "goal_blocked", "target": "", "value": "Cannot find the registration button after 3 attempts", "description": "Unable to proceed"}}
 
 Return ONLY the JSON object, nothing else."""
 
@@ -515,7 +542,7 @@ Return ONLY the JSON object, nothing else."""
             self.ai_client.chat.completions.create,
             model=model,
             messages=[
-                {"role": "system", "content": "You are a browser testing agent. You see real page elements and decide the next action. NEVER hallucinate elements. ONLY reference elements that exist in the provided list. Return a single JSON action object."},
+                {"role": "system", "content": "You are a browser testing agent. You see real page elements and decide the next action. CRITICAL RULES: 1) NEVER hallucinate elements — ONLY reference elements in the provided list. 2) NEVER repeat the same action you already performed — check the history carefully. 3) Work through multi-step goals IN ORDER — don't skip steps. 4) If an element from the goal isn't visible in the elements list, return goal_blocked instead of clicking something else. Return a single JSON action object."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=500,
@@ -595,9 +622,9 @@ Return ONLY the JSON object, nothing else."""
                             "description": f"Click '{el.get('humanDescription', 'Submit')}'"
                         }
 
-        # If we've taken enough actions, assume done
+        # If we've taken enough actions without finding a match, we're stuck — don't false-pass
         if step_count >= 5:
-            return {"action": "goal_complete", "target": "", "value": "Pattern matching completed", "description": "Reached step limit"}
+            return {"action": "goal_blocked", "target": "", "value": "Pattern matching exhausted without completing all goal steps", "description": "Cannot determine next action"}
 
         return {"action": "goal_blocked", "target": "", "value": "No matching pattern", "description": "Cannot determine next action"}
 
