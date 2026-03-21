@@ -252,9 +252,24 @@ export function ExplorerTab({ aiAvailable, theme }: ExplorerTabProps) {
     setCurrentStep(`Saved ${savedCount}/${tests.length} test cases to repository`);
   }, []);
 
-  // ---- Severity counts ----
+  // ---- Filtering ----
 
-  const severityCounts = (result?.defects || []).reduce<Record<string, number>>((acc, d) => {
+  const [hideJsErrors, setHideJsErrors] = useState(true); // Hide JS/console noise by default
+  const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
+
+  const filteredDefects = (result?.defects || []).filter(d => {
+    if (hideJsErrors && (d.type === 'js_error' || d.type === 'console_error')) return false;
+    if (selectedSeverity && d.severity !== selectedSeverity) return false;
+    return true;
+  });
+
+  // ---- Severity counts (from filtered) ----
+
+  const allDefects = result?.defects || [];
+  const jsErrorCount = allDefects.filter(d => d.type === 'js_error' || d.type === 'console_error').length;
+  const realDefectCount = allDefects.length - jsErrorCount;
+
+  const severityCounts = filteredDefects.reduce<Record<string, number>>((acc, d) => {
     acc[d.severity] = (acc[d.severity] || 0) + 1;
     return acc;
   }, {});
@@ -337,30 +352,81 @@ export function ExplorerTab({ aiAvailable, theme }: ExplorerTabProps) {
         </div>
       )}
 
-      {/* Severity Badges */}
-      {result && result.defects.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {severityBadges.map(({ key, label, color }) =>
-            severityCounts[key] ? (
-              <Badge key={key} className={cn("text-xs border-0", color)}>
-                {label}: {severityCounts[key]}
-              </Badge>
-            ) : null
+      {/* Severity Filter + JS toggle */}
+      {result && allDefects.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Severity filter badges — click to filter */}
+          {severityBadges.map(({ key, label, color }) => {
+            const count = filteredDefects.filter(d => d.severity === key).length;
+            if (!count && !selectedSeverity) return null;
+            return (
+              <button
+                key={key}
+                onClick={() => setSelectedSeverity(selectedSeverity === key ? null : key)}
+                className={cn(
+                  "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-all",
+                  selectedSeverity === key ? cn(color, "ring-2 ring-offset-1") : color,
+                  selectedSeverity && selectedSeverity !== key ? "opacity-40" : ""
+                )}
+              >
+                {label}: {count}
+              </button>
+            );
+          })}
+
+          {/* JS errors toggle */}
+          {jsErrorCount > 0 && (
+            <button
+              onClick={() => setHideJsErrors(!hideJsErrors)}
+              className={cn(
+                "text-[11px] px-2 py-0.5 rounded-full border transition-all",
+                hideJsErrors
+                  ? theme === 'light' ? "border-gray-200 text-gray-400 bg-gray-50" : "border-gray-700 text-gray-500 bg-gray-800"
+                  : theme === 'light' ? "border-amber-300 text-amber-600 bg-amber-50" : "border-amber-700 text-amber-400 bg-amber-500/10"
+              )}
+            >
+              {hideJsErrors ? `Show ${jsErrorCount} JS errors` : `Hide ${jsErrorCount} JS errors`}
+            </button>
+          )}
+
+          {selectedSeverity && (
+            <button
+              onClick={() => setSelectedSeverity(null)}
+              className={cn("text-[11px] underline", theme === 'light' ? 'text-gray-400' : 'text-gray-500')}
+            >
+              Clear filter
+            </button>
           )}
         </div>
       )}
 
       {/* Defect Cards */}
-      {result && result.defects.length > 0 && (
+      {result && filteredDefects.length > 0 && (
         <div className="space-y-3">
           <h3 className={cn("text-sm font-semibold", theme === 'light' ? 'text-gray-900' : 'text-white')}>
-            Defects Found ({result.defects.length})
+            Defects Found ({filteredDefects.length}{hideJsErrors && jsErrorCount > 0 ? ` of ${allDefects.length}` : ''})
           </h3>
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
-            {result.defects.slice(0, 50).map((defect, i) => (
+          <div className="space-y-1.5 max-h-[60vh] overflow-y-auto pr-1">
+            {filteredDefects.slice(0, 50).map((defect, i) => (
               <DefectCard key={defect.id || i} defect={defect} theme={theme} />
             ))}
+            {filteredDefects.length > 50 && (
+              <p className={cn("text-xs text-center py-2", theme === 'light' ? 'text-gray-400' : 'text-gray-500')}>
+                Showing first 50 of {filteredDefects.length} defects
+              </p>
+            )}
           </div>
+        </div>
+      )}
+
+      {/* No real defects message */}
+      {result && filteredDefects.length === 0 && allDefects.length > 0 && (
+        <div className={cn(
+          "rounded-lg border px-4 py-3 text-sm text-center",
+          theme === 'light' ? "bg-green-50 border-green-200 text-green-700" : "bg-green-500/10 border-green-500/30 text-green-400"
+        )}>
+          No functional defects found.
+          {jsErrorCount > 0 && hideJsErrors && ` (${jsErrorCount} JavaScript console errors hidden)`}
         </div>
       )}
 

@@ -38,6 +38,7 @@ export interface ExplorationDefect {
   element?: string;
   screenshot?: string;
   wcag_criterion?: string;
+  suggestion?: string;
   evidence?: Record<string, any>;
 }
 

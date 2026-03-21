@@ -723,9 +723,9 @@ app.include_router(automation_router)
 from app.routers.test_management.requirement_to_testcase_api import router as requirement_to_testcase_router
 app.include_router(requirement_to_testcase_router)
 
-# DEPRECATED (v3.20.0) — Autonomous App Exploration API (unused)
-# from app.routers.exploration.exploration_api import router as exploration_router
-# app.include_router(exploration_router)
+# Autonomous App Exploration API (re-enabled for Flowpilot Flowmap tab)
+from app.routers.exploration.exploration_api import router as exploration_router
+app.include_router(exploration_router)
 
 # DEPRECATED (v3.20.0) — Exploration Test Generation API (unused)
 # from app.routers.exploration.exploration_test_generation_api import router as exploration_test_generation_router
