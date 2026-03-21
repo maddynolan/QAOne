@@ -1075,12 +1075,21 @@ Return ONLY the JSON object, nothing else."""
                 "cache_sel": f"placeholder=/{re.escape(target_clean)}/i",
             })
 
-        # getByText — universal fallback (works for any visible text)
+        # getByText exact — most reliable for short labels like "18-35", "Next", "Submit"
+        strategies.append({
+            "locator_fn": lambda: page.get_by_text(target_clean, exact=True),
+            "method": "pw_text_exact",
+            "desc": f"getByText('{target_clean}', exact=True)",
+            "confidence": 85,
+            "cache_sel": f"text={target_clean}",
+        })
+
+        # getByText fuzzy — broader fallback (works for any visible text)
         strategies.append({
             "locator_fn": lambda: page.get_by_text(target_clean, exact=False),
             "method": "pw_text",
             "desc": f"getByText('{target_clean}')",
-            "confidence": 80,
+            "confidence": 78,
             "cache_sel": f"text={target_clean}",
         })
 
@@ -1103,6 +1112,38 @@ Return ONLY the JSON object, nothing else."""
                 "desc": f'a/button:has-text("{target_clean}")',
                 "confidence": 70,
                 "cache_sel": f'a:has-text("{target_clean}"), button:has-text("{target_clean}")',
+            })
+
+        # ── CUSTOM ELEMENT / NON-STANDARD BUTTON STRATEGIES ──
+        # Salesforce LWC, custom components, divs styled as buttons, etc.
+        if action == "click":
+            # Any element with matching text content (div, span, li, etc.)
+            # Use :text() pseudo-selector which matches direct text content
+            strategies.append({
+                "locator_fn": lambda: page.locator(f':text("{target_clean}")'),
+                "method": "css_text_pseudo",
+                "desc": f':text("{target_clean}")',
+                "confidence": 65,
+                "cache_sel": f':text("{target_clean}")',
+            })
+
+            # Any visible element containing this text — broadest catch-all
+            # CSS *:has-text matches any element type
+            strategies.append({
+                "locator_fn": lambda: page.locator(f'*:has-text("{target_clean}")').last,
+                "method": "css_any_has_text_last",
+                "desc": f'*:has-text("{target_clean}").last',
+                "confidence": 55,
+                "cache_sel": f'*:has-text("{target_clean}")',
+            })
+
+            # XPath text match — finds exact text nodes in any element
+            strategies.append({
+                "locator_fn": lambda: page.locator(f'xpath=//*[normalize-space(text())="{target_clean}"]'),
+                "method": "xpath_exact_text",
+                "desc": f'xpath: text()="{target_clean}"',
+                "confidence": 60,
+                "cache_sel": f'xpath=//*[normalize-space(text())="{target_clean}"]',
             })
 
         return strategies
