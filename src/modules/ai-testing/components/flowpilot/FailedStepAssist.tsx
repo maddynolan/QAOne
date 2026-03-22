@@ -1,115 +1,201 @@
 /**
- * FailedStepAssist — Inline intervention card shown on failed steps.
+ * FailedStepAssist — AI-native failure display.
  *
- * When all 5 element resolution layers fail, the user sees:
- * 1. What the AI was looking for (target text)
- * 2. A screenshot of the page at failure point
- * 3. Three actions they can take:
- *    a) "Point at it" — paste a CSS/XPath selector or element text
- *    b) "Rephrase" — rewrite the step description for the AI
- *    c) "Skip & continue" — mark step as skipped and proceed
+ * Unlike Record & Playback's ManualAssistCard which asks users to paste selectors,
+ * this shows what the AI TRIED and what it SAW — no manual element picking.
  *
- * This turns a dead-end failure into a collaborative recovery.
+ * The healing pipeline is fully autonomous (6 layers + 3 retry rounds).
+ * This card only appears AFTER all autonomous healing has been exhausted.
+ *
+ * User actions:
+ * - View what the AI tried (expandable heal attempt log)
+ * - View the screenshot at failure point
+ * - Skip this step and continue to the next goal step
+ * - Re-run the entire test with the Self-Healer agent
+ *
+ * Inspired by: Momentic (tri-modal), TestRigor (no selectors), BLINQ (RCA).
  */
 import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
-  MousePointer,
-  PenLine,
   SkipForward,
-  Send,
   X,
-  Search,
   AlertTriangle,
   Eye,
   Lightbulb,
-  Crosshair,
   ChevronDown,
   ChevronRight,
+  Layers,
+  Zap,
+  Search,
+  ScanEye,
+  Brain,
+  MousePointer,
 } from 'lucide-react';
 import type { TestStep } from './types';
 
 interface FailedStepAssistProps {
   step: TestStep;
   screenshot?: string | null;
-  onProvideSelector: (selector: string) => void;
-  onRephrase: (newDescription: string) => void;
   onSkip: () => void;
   onDismiss: () => void;
   theme: string;
-  isSubmitting?: boolean;
 }
 
-type AssistMode = null | 'selector' | 'rephrase';
+/** Map heal methods to human-readable descriptions */
+function describeHealAttempts(step: TestStep): Array<{ icon: React.ReactNode; label: string; tried: boolean }> {
+  const method = step.method || '';
+  const error = step.error || '';
+
+  return [
+    {
+      icon: <MousePointer className="w-3 h-3" />,
+      label: 'Playwright roles (button, link, tab, menuitem)',
+      tried: true,
+    },
+    {
+      icon: <Search className="w-3 h-3" />,
+      label: 'Text match (exact + fuzzy), CSS selectors, XPath',
+      tried: true,
+    },
+    {
+      icon: <Layers className="w-3 h-3" />,
+      label: 'Page scanner: 13 selector strategies ranked by confidence',
+      tried: true,
+    },
+    {
+      icon: <Zap className="w-3 h-3" />,
+      label: 'App-specific selectors (Salesforce, Workday, ServiceNow)',
+      tried: true,
+    },
+    {
+      icon: <ScanEye className="w-3 h-3" />,
+      label: 'Vision AI: screenshot → GPT-4o → click coordinates',
+      tried: method !== 'all_layers_failed' || error.includes('Vision'),
+    },
+    {
+      icon: <Brain className="w-3 h-3" />,
+      label: 'LLM re-interpretation: semantic element matching',
+      tried: method !== 'all_layers_failed' || error.includes('LLM'),
+    },
+  ];
+}
+
+/** Classify the failure root cause (like BLINQ's RCA) */
+function classifyFailure(step: TestStep): { type: string; label: string; color: string; suggestion: string } {
+  const err = (step.error || '').toLowerCase();
+  const target = step.target || '';
+
+  if (err.includes('not visible') || err.includes('not found') || err.includes('all_layers'))
+    return {
+      type: 'locator',
+      label: 'Element Not Found',
+      color: 'bg-amber-500/10 text-amber-500',
+      suggestion: `The element "${target}" isn't in the DOM or is rendered by a framework the scanner can't reach (iframe, shadow DOM, dynamic JS). The AI tried 6 resolution strategies including Vision AI and semantic matching.`,
+    };
+  if (err.includes('timeout'))
+    return {
+      type: 'timing',
+      label: 'Timeout',
+      color: 'bg-blue-500/10 text-blue-500',
+      suggestion: 'The element exists but took too long to appear. This is common with slow API calls or heavy JavaScript frameworks.',
+    };
+  if (err.includes('intercepted') || err.includes('overlay'))
+    return {
+      type: 'overlay',
+      label: 'Blocked by Overlay',
+      color: 'bg-purple-500/10 text-purple-500',
+      suggestion: 'A cookie banner, modal, or tooltip is covering the element. Try adding a "dismiss" step before this one.',
+    };
+  if (err.includes('detached') || err.includes('navigation'))
+    return {
+      type: 'navigation',
+      label: 'Page Changed',
+      color: 'bg-cyan-500/10 text-cyan-500',
+      suggestion: 'The page navigated away before the action completed. The previous step may have triggered a redirect.',
+    };
+  return {
+    type: 'unknown',
+    label: 'Resolution Failed',
+    color: 'bg-gray-500/10 text-gray-500',
+    suggestion: `All 6 resolution layers were exhausted. Try re-running with the Self-Healer or rephrasing the goal step.`,
+  };
+}
 
 export function FailedStepAssist({
   step,
   screenshot,
-  onProvideSelector,
-  onRephrase,
   onSkip,
   onDismiss,
   theme,
-  isSubmitting,
 }: FailedStepAssistProps) {
-  const [mode, setMode] = useState<AssistMode>(null);
-  const [selectorInput, setSelectorInput] = useState('');
-  const [rephraseInput, setRephraseInput] = useState(step.description || `${step.action} ${step.target}`);
+  const [showDetails, setShowDetails] = useState(false);
   const [showScreenshot, setShowScreenshot] = useState(false);
 
-  const target = step.target || '';
-
-  // Suggest what might help
-  const getSuggestion = (): string => {
-    const err = (step.error || '').toLowerCase();
-    if (err.includes('not visible') || err.includes('not found') || err.includes('goal_blocked'))
-      return 'The element may be inside an iframe, behind a modal, or rendered by JavaScript after page load. Try providing a CSS selector or rephrasing the step.';
-    if (err.includes('timeout'))
-      return 'The element took too long to appear. It might be loaded dynamically or require scrolling to.';
-    if (err.includes('intercepted') || err.includes('overlay'))
-      return 'Something is covering the element (cookie banner, modal, tooltip). Try dismissing it first.';
-    return 'The AI could not find this element using any of its 5 resolution strategies. You can help by pointing at it or rephrasing.';
-  };
+  const healAttempts = describeHealAttempts(step);
+  const failure = classifyFailure(step);
 
   return (
     <div className={cn(
-      "rounded-lg border-2 border-dashed mt-1 mb-2 overflow-hidden transition-all",
+      "rounded-lg border mt-1 mb-2 overflow-hidden transition-all",
       theme === 'light'
-        ? "border-amber-300 bg-amber-50/50"
-        : "border-amber-500/40 bg-amber-500/5"
+        ? "border-amber-200 bg-gradient-to-b from-amber-50/80 to-white"
+        : "border-amber-500/30 bg-gradient-to-b from-amber-500/5 to-gray-900"
     )}>
-      {/* Header */}
+      {/* Header: RCA badge + target */}
       <div className="flex items-center justify-between px-3 py-2">
         <div className="flex items-center gap-2">
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-          <span className={cn("text-xs font-semibold", theme === 'light' ? 'text-amber-800' : 'text-amber-300')}>
-            Can't find: "{target}"
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+          <Badge className={cn("text-[10px] border-0", failure.color)}>{failure.label}</Badge>
+          <span className={cn("text-xs font-medium truncate", theme === 'light' ? 'text-gray-700' : 'text-gray-300')}>
+            "{step.target}"
           </span>
         </div>
-        <button
-          onClick={onDismiss}
-          className={cn(
-            "p-0.5 rounded transition-colors",
-            theme === 'light' ? 'hover:bg-amber-200/50 text-amber-400' : 'hover:bg-amber-500/20 text-amber-500'
-          )}
-        >
-          <X className="w-3.5 h-3.5" />
+        <button onClick={onDismiss} className="p-0.5 rounded hover:bg-gray-200/50 dark:hover:bg-gray-700/50">
+          <X className="w-3.5 h-3.5 text-gray-400" />
         </button>
       </div>
 
-      {/* Suggestion */}
-      <div className={cn(
-        "px-3 pb-2 text-[11px] flex items-start gap-1.5",
-        theme === 'light' ? 'text-amber-700' : 'text-amber-400/80'
-      )}>
-        <Lightbulb className="w-3 h-3 mt-0.5 flex-shrink-0" />
-        <span>{getSuggestion()}</span>
+      {/* AI explanation */}
+      <div className={cn("px-3 pb-2 text-[11px] flex items-start gap-1.5", theme === 'light' ? 'text-gray-600' : 'text-gray-400')}>
+        <Lightbulb className="w-3 h-3 mt-0.5 flex-shrink-0 text-amber-500" />
+        <span>{failure.suggestion}</span>
       </div>
 
-      {/* Screenshot toggle */}
+      {/* What the AI tried (expandable) */}
+      <div className="px-3 pb-2">
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className={cn(
+            "flex items-center gap-1 text-[11px] font-medium",
+            theme === 'light' ? 'text-gray-500 hover:text-gray-700' : 'text-gray-500 hover:text-gray-300'
+          )}
+        >
+          {showDetails ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          6 resolution strategies attempted
+        </button>
+        {showDetails && (
+          <div className="mt-1.5 space-y-1">
+            {healAttempts.map((attempt, i) => (
+              <div key={i} className="flex items-center gap-2 text-[10px]">
+                <span className={attempt.tried ? 'text-red-400' : 'text-gray-400'}>
+                  {attempt.tried ? '✗' : '—'}
+                </span>
+                <span className={cn("flex-shrink-0", theme === 'light' ? 'text-gray-400' : 'text-gray-600')}>
+                  {attempt.icon}
+                </span>
+                <span className={theme === 'light' ? 'text-gray-600' : 'text-gray-400'}>
+                  {attempt.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Screenshot (expandable) */}
       {screenshot && (
         <div className="px-3 pb-2">
           <button
@@ -120,7 +206,7 @@ export function FailedStepAssist({
             )}
           >
             <Eye className="w-3 h-3" />
-            {showScreenshot ? 'Hide' : 'Show'} page screenshot
+            {showScreenshot ? 'Hide' : 'View'} page at failure
             {showScreenshot ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
           </button>
           {showScreenshot && (
@@ -129,140 +215,29 @@ export function FailedStepAssist({
               alt="Page at failure point"
               className={cn(
                 "mt-1.5 w-full max-h-48 object-contain rounded border",
-                theme === 'light' ? 'border-amber-200' : 'border-amber-500/30'
+                theme === 'light' ? 'border-gray-200' : 'border-gray-700'
               )}
             />
           )}
         </div>
       )}
 
-      {/* Action buttons */}
-      {!mode && (
-        <div className="flex gap-1.5 px-3 pb-3">
-          <Button
-            size="sm"
-            variant="outline"
-            className={cn(
-              "flex-1 h-8 text-xs",
-              theme === 'light'
-                ? "border-amber-300 text-amber-700 hover:bg-amber-100"
-                : "border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
-            )}
-            onClick={() => setMode('selector')}
-          >
-            <Crosshair className="w-3 h-3 mr-1" /> Point at it
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className={cn(
-              "flex-1 h-8 text-xs",
-              theme === 'light'
-                ? "border-amber-300 text-amber-700 hover:bg-amber-100"
-                : "border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
-            )}
-            onClick={() => setMode('rephrase')}
-          >
-            <PenLine className="w-3 h-3 mr-1" /> Rephrase step
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className={cn(
-              "flex-1 h-8 text-xs",
-              theme === 'light'
-                ? "border-gray-300 text-gray-500 hover:bg-gray-100"
-                : "border-gray-700 text-gray-400 hover:bg-gray-800"
-            )}
-            onClick={onSkip}
-          >
-            <SkipForward className="w-3 h-3 mr-1" /> Skip
-          </Button>
-        </div>
-      )}
-
-      {/* Selector mode */}
-      {mode === 'selector' && (
-        <div className="px-3 pb-3 space-y-2">
-          <p className={cn("text-[11px]", theme === 'light' ? 'text-amber-700' : 'text-amber-400')}>
-            Paste a CSS selector, XPath, or the exact text of the element:
-          </p>
-          <div className="flex gap-1.5">
-            <Input
-              value={selectorInput}
-              onChange={(e) => setSelectorInput(e.target.value)}
-              placeholder='e.g. button:has-text("18-35") or #age-selector'
-              className={cn(
-                "h-8 text-xs flex-1 font-mono",
-                theme === 'light' ? "bg-white border-amber-200" : "bg-gray-900 border-amber-500/30"
-              )}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && selectorInput.trim()) onProvideSelector(selectorInput.trim());
-              }}
-              autoFocus
-            />
-            <Button
-              size="sm"
-              className="h-8 text-xs bg-amber-500 hover:bg-amber-600 text-white"
-              disabled={!selectorInput.trim() || isSubmitting}
-              onClick={() => onProvideSelector(selectorInput.trim())}
-            >
-              {isSubmitting ? <Search className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 text-xs"
-              onClick={() => setMode(null)}
-            >
-              Cancel
-            </Button>
-          </div>
-          <div className={cn("text-[10px] space-y-0.5", theme === 'light' ? 'text-gray-500' : 'text-gray-500')}>
-            <p>Examples: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">#my-button</code> <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">[data-testid="age-18-35"]</code> <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">18-35</code></p>
-          </div>
-        </div>
-      )}
-
-      {/* Rephrase mode */}
-      {mode === 'rephrase' && (
-        <div className="px-3 pb-3 space-y-2">
-          <p className={cn("text-[11px]", theme === 'light' ? 'text-amber-700' : 'text-amber-400')}>
-            Rewrite the step so the AI tries a different approach:
-          </p>
-          <div className="flex gap-1.5">
-            <Input
-              value={rephraseInput}
-              onChange={(e) => setRephraseInput(e.target.value)}
-              placeholder="Click the age range button showing 18-35"
-              className={cn(
-                "h-8 text-xs flex-1",
-                theme === 'light' ? "bg-white border-amber-200" : "bg-gray-900 border-amber-500/30"
-              )}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && rephraseInput.trim()) onRephrase(rephraseInput.trim());
-              }}
-              autoFocus
-            />
-            <Button
-              size="sm"
-              className="h-8 text-xs bg-amber-500 hover:bg-amber-600 text-white"
-              disabled={!rephraseInput.trim() || isSubmitting}
-              onClick={() => onRephrase(rephraseInput.trim())}
-            >
-              {isSubmitting ? <Search className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 text-xs"
-              onClick={() => setMode(null)}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Actions — only Skip (Re-run with Fix is on the TestResultCard level) */}
+      <div className="flex gap-1.5 px-3 pb-3">
+        <Button
+          size="sm"
+          variant="outline"
+          className={cn(
+            "h-7 text-xs",
+            theme === 'light'
+              ? "border-gray-300 text-gray-600 hover:bg-gray-100"
+              : "border-gray-700 text-gray-400 hover:bg-gray-800"
+          )}
+          onClick={onSkip}
+        >
+          <SkipForward className="w-3 h-3 mr-1" /> Skip & continue
+        </Button>
+      </div>
     </div>
   );
 }

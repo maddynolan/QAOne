@@ -12,14 +12,9 @@ interface TestResultCardProps {
   onToggle: () => void;
   onSave: (test: TestResult) => void;
   onRerunWithFix?: (test: TestResult) => void;
-  /** User provides a CSS/XPath selector for a failed step */
-  onProvideSelector?: (stepIndex: number, selector: string) => void;
-  /** User rephrases a failed step */
-  onRephrase?: (stepIndex: number, newDescription: string) => void;
   /** User skips a failed step */
   onSkip?: (stepIndex: number) => void;
   theme: string;
-  isRetrying?: boolean;
 }
 
 const statusConfig = {
@@ -30,9 +25,7 @@ const statusConfig = {
 };
 
 export function TestResultCard({
-  test, expanded, onToggle, onSave, onRerunWithFix,
-  onProvideSelector, onRephrase, onSkip,
-  theme, isRetrying,
+  test, expanded, onToggle, onSave, onRerunWithFix, onSkip, theme,
 }: TestResultCardProps) {
   const config = statusConfig[test.status] || statusConfig.running;
   const StatusIcon = config.icon;
@@ -84,11 +77,8 @@ export function TestResultCard({
           <TestStepList
             steps={test.steps}
             theme={theme}
-            onProvideSelector={onProvideSelector}
-            onRephrase={onRephrase}
             onSkip={onSkip}
             lastScreenshot={lastScreenshot}
-            isRetrying={isRetrying}
           />
 
           <div className="flex gap-2 pt-2">

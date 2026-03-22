@@ -1183,13 +1183,27 @@ Return ONLY the JSON object, nothing else."""
         except ImportError:
             pass
 
-        # ── LAYER 5: Vision AI (last resort, 2-5s, costs API calls) ──
+        # ── LAYER 5: Vision AI (screenshot → LLM → coordinates) ──
+        # Uses the SAME OpenAI client as _decide_next_action — no separate service needed
+        if self.ai_client:
+            ok = await self._vision_find_element(step, page, target, action)
+            if ok:
+                return True
+
+        # Legacy vision service fallback
         if self._vision_service and hasattr(self._vision_service, 'available') and self._vision_service.available:
             ok = await self._vision_heal_step(step)
             if ok:
                 return True
 
-        step.error = f"No matching element found for '{target}' across 5 resolution layers ({len(self._scanned_elements)} scanned elements)"
+        # ── LAYER 6: LLM Re-interpretation (BLINQ-style) ──
+        # Ask the LLM to suggest an alternative way to identify this element
+        if self.ai_client:
+            ok = await self._llm_reinterpret_and_retry(step, page, target, action)
+            if ok:
+                return True
+
+        step.error = f"Could not find '{target}' — tried roles, text, selectors, CSS, app-specific, Vision AI, and LLM re-interpretation"
         step.method = "all_layers_failed"
         return False
 
@@ -1309,6 +1323,205 @@ Return ONLY the JSON object, nothing else."""
             })
 
         return strategies
+
+    async def _vision_find_element(self, step: StepResult, page, target: str, action: str) -> bool:
+        """
+        LAYER 5: Vision AI — Screenshot → GPT-4o-mini → Click coordinates.
+
+        Like Momentic/TestRigor: take a screenshot, ask the vision model
+        "where is the element labeled '18-35'?", get (x, y) coordinates,
+        and click there directly. No CSS selectors needed.
+        """
+        try:
+            logger.info(f"Vision AI: Looking for '{target}' in screenshot")
+            ss = await page.screenshot(type='jpeg', quality=60)
+            ss_b64 = base64.b64encode(ss).decode()
+
+            response = self.ai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": f"""Find the UI element "{target}" in this screenshot.
+I need to {action} it. Return ONLY a JSON object with:
+- "found": true/false
+- "x": pixel x-coordinate of center (from left edge)
+- "y": pixel y-coordinate of center (from top edge)
+- "description": what you see at that location
+If the element is NOT visible in the screenshot, return {{"found": false}}.
+Return ONLY the JSON, no markdown."""},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{ss_b64}", "detail": "low"}},
+                    ]
+                }],
+                max_tokens=150,
+                temperature=0,
+            )
+
+            text = response.choices[0].message.content.strip()
+            # Parse JSON from response
+            text = text.replace("```json", "").replace("```", "").strip()
+            import json
+            result = json.loads(text)
+
+            if result.get("found") and result.get("x") and result.get("y"):
+                x, y = int(result["x"]), int(result["y"])
+                logger.info(f"Vision AI found '{target}' at ({x}, {y}): {result.get('description', '')}")
+
+                if action == "fill":
+                    await page.mouse.click(x, y)
+                    await asyncio.sleep(0.3)
+                    await page.keyboard.type(step.value or "", delay=30)
+                elif action in ("click", "check", "tab"):
+                    await page.mouse.click(x, y)
+                    await asyncio.sleep(0.5)
+                elif action == "hover":
+                    await page.mouse.move(x, y)
+                    await asyncio.sleep(0.3)
+                else:
+                    await page.mouse.click(x, y)
+                    await asyncio.sleep(0.5)
+
+                # Wait for potential page changes
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=3000)
+                except:
+                    pass
+
+                step.success = True
+                step.method = "vision_ai"
+                step.selector_used = f"coordinates({x},{y})"
+                step.confidence = 85
+                step.healed = True
+                step.heal_method = "vision_ai_gpt4o"
+                return True
+
+        except Exception as e:
+            logger.debug(f"Vision AI failed: {e}")
+        return False
+
+    async def _llm_reinterpret_and_retry(self, step: StepResult, page, target: str, action: str) -> bool:
+        """
+        LAYER 6: LLM Re-interpretation (BLINQ-style regeneration).
+
+        Ask the LLM: "I'm looking for '18-35 button' but can't find it.
+        Here are the elements on the page. Which one is it?"
+
+        This is fundamentally different from Layer 2-4 because the LLM
+        can understand SEMANTIC meaning — "18-35" might be rendered as
+        "Ages 18 to 35" or be inside a radio group labeled "Age Range".
+        """
+        try:
+            # Build a compact element list for the LLM
+            el_summary = []
+            for i, el in enumerate(self._scanned_elements[:40]):
+                text = (el.get("text", "") or "")[:60]
+                label = el.get("label", "")
+                tag = el.get("tag", "")
+                el_type = el.get("elementType", "")
+                aria = el.get("ariaLabel", "")
+                best_sel = ""
+                sels = el.get("selectors", [])
+                if sels:
+                    best_sel = sels[0].get("selector", "")
+
+                entry = f"{i}. [{el_type}] text='{text}'"
+                if label: entry += f" label='{label}'"
+                if aria: entry += f" aria='{aria}'"
+                if best_sel: entry += f" sel='{best_sel[:60]}'"
+                el_summary.append(entry)
+
+            prompt = f"""I'm trying to {action} an element described as "{target}" but I can't find it.
+Here are the interactive elements currently on the page:
+
+{chr(10).join(el_summary)}
+
+Which element (by index number) is the best match for "{target}"?
+Consider:
+- Semantic similarity (e.g., "18-35" might be "Ages 18 to 35")
+- Partial text matches
+- Elements that serve the same purpose
+
+Return ONLY a JSON object:
+{{"match_index": <number or null>, "selector": "<CSS selector to try>", "reason": "<why this matches>"}}
+If no element matches, return {{"match_index": null}}."""
+
+            response = self.ai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=150,
+                temperature=0,
+            )
+
+            text = response.choices[0].message.content.strip()
+            text = text.replace("```json", "").replace("```", "").strip()
+            import json
+            result = json.loads(text)
+
+            match_idx = result.get("match_index")
+            suggested_sel = result.get("selector", "")
+            reason = result.get("reason", "")
+
+            if match_idx is not None and 0 <= match_idx < len(self._scanned_elements):
+                matched_el = self._scanned_elements[match_idx]
+                logger.info(f"LLM re-interpretation: '{target}' → element {match_idx} ({reason})")
+
+                # Try the matched element's selectors
+                for sel_info in matched_el.get("selectors", []):
+                    sel = sel_info.get("selector", "")
+                    if not sel:
+                        continue
+                    try:
+                        loc = page.locator(sel)
+                        if await loc.count() > 0 and await loc.first.is_visible(timeout=2000):
+                            ok = await self._perform_action(loc.first, step, page, matched=matched_el)
+                            if ok:
+                                step.method = "llm_reinterpret"
+                                step.selector_used = sel
+                                step.confidence = 80
+                                step.healed = True
+                                step.heal_method = f"llm_semantic: {reason[:50]}"
+                                cache_key = f"{action}:{target.lower()}"
+                                self._selector_cache[cache_key] = sel
+                                return True
+                    except:
+                        continue
+
+                # Try getByText with the matched element's text
+                matched_text = (matched_el.get("text", "") or "").strip()
+                if matched_text:
+                    try:
+                        loc = page.get_by_text(matched_text, exact=True)
+                        if await loc.count() > 0 and await loc.first.is_visible(timeout=2000):
+                            ok = await self._perform_action(loc.first, step, page)
+                            if ok:
+                                step.method = "llm_reinterpret_text"
+                                step.selector_used = f"text={matched_text}"
+                                step.confidence = 75
+                                step.healed = True
+                                step.heal_method = f"llm_semantic: {reason[:50]}"
+                                return True
+                    except:
+                        pass
+
+            # Also try the LLM-suggested selector directly
+            if suggested_sel:
+                try:
+                    loc = page.locator(suggested_sel)
+                    if await loc.count() > 0 and await loc.first.is_visible(timeout=2000):
+                        ok = await self._perform_action(loc.first, step, page)
+                        if ok:
+                            step.method = "llm_suggested_selector"
+                            step.selector_used = suggested_sel
+                            step.confidence = 70
+                            step.healed = True
+                            step.heal_method = f"llm_selector: {reason[:50]}"
+                            return True
+                except:
+                    pass
+
+        except Exception as e:
+            logger.debug(f"LLM re-interpretation failed: {e}")
+        return False
 
     async def _perform_action(self, element, step: StepResult, page, matched: Dict = None) -> bool:
         """Execute the actual action on a resolved element. Shared by all layers."""

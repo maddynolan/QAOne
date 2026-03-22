@@ -9,27 +9,18 @@ interface TestStepListProps {
   steps: TestStep[];
   theme: string;
   compact?: boolean;
-  /** Called when user provides a selector for a failed step */
-  onProvideSelector?: (stepIndex: number, selector: string) => void;
-  /** Called when user rephrases a failed step */
-  onRephrase?: (stepIndex: number, newDescription: string) => void;
   /** Called when user skips a failed step */
   onSkip?: (stepIndex: number) => void;
   /** Screenshot at failure point */
   lastScreenshot?: string | null;
-  /** Whether a retry is in progress */
-  isRetrying?: boolean;
 }
 
 export function TestStepList({
   steps,
   theme,
   compact,
-  onProvideSelector,
-  onRephrase,
   onSkip,
   lastScreenshot,
-  isRetrying,
 }: TestStepListProps) {
   const [assistStep, setAssistStep] = useState<number | null>(null);
 
@@ -37,10 +28,8 @@ export function TestStepList({
     <div className="space-y-1">
       {steps.map((step, i) => {
         const isFailed = !step.success && !!step.error;
-        const isLastFailed = isFailed && i === steps.length - 1; // Only auto-show on last failed step
         const showAssist = assistStep === i;
-        // Can we offer help? Only if callbacks are provided and step has a target
-        const canAssist = isFailed && !!step.target && (onProvideSelector || onRephrase || onSkip);
+        const canAssist = isFailed && !!step.target && !!onSkip;
 
         return (
           <div key={i}>
@@ -82,15 +71,15 @@ export function TestStepList({
                         {step.heal_method || 'Healed'}
                       </Badge>
                     )}
-                    {step.error && (
-                      <span className="text-[10px] text-red-400 truncate max-w-[200px]">{step.error}</span>
+                    {step.error && !step.healed && (
+                      <span className="text-[10px] text-red-400 truncate max-w-[250px]">{step.error}</span>
                     )}
                   </div>
                 )}
               </div>
 
               <div className="flex items-center gap-0.5 flex-shrink-0">
-                {/* Help button on failed steps */}
+                {/* Detail button on failed steps — shows what AI tried */}
                 {canAssist && !compact && (
                   <button
                     onClick={() => setAssistStep(showAssist ? null : i)}
@@ -100,7 +89,7 @@ export function TestStepList({
                         ? "bg-amber-100 dark:bg-amber-500/20"
                         : "hover:bg-gray-200/50 dark:hover:bg-gray-700/50",
                     )}
-                    title="Help fix this step"
+                    title="View AI resolution details"
                   >
                     <HelpCircle className={cn(
                       "w-3.5 h-3.5",
@@ -120,26 +109,17 @@ export function TestStepList({
               </div>
             </div>
 
-            {/* Inline FailedStepAssist card */}
+            {/* AI-native failure details (not manual selector input) */}
             {showAssist && (
               <FailedStepAssist
                 step={step}
                 screenshot={lastScreenshot}
-                onProvideSelector={(sel) => {
-                  onProvideSelector?.(i, sel);
-                  setAssistStep(null);
-                }}
-                onRephrase={(desc) => {
-                  onRephrase?.(i, desc);
-                  setAssistStep(null);
-                }}
                 onSkip={() => {
                   onSkip?.(i);
                   setAssistStep(null);
                 }}
                 onDismiss={() => setAssistStep(null)}
                 theme={theme}
-                isSubmitting={isRetrying}
               />
             )}
           </div>
