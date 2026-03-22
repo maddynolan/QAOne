@@ -268,15 +268,29 @@ class AgenticOrchestrator:
 
                 if action_type == "goal_blocked":
                     # ── AUTO-HEAL: Try once with direct resolution, then give up ──
-                    # The AI said it can't find the element. We try the 7-layer
-                    # pipeline directly, but cap at 1 attempt to prevent loops.
                     self._goal_blocked_retries += 1
 
                     if self._goal_blocked_retries <= 2:
-                        blocked_target = action_value or action_desc
-                        # Extract element name from messages like "clicking the '18-35 button'"
-                        name_match = re.search(r"'([^']+)'", blocked_target)
-                        search_text = name_match.group(1) if name_match else blocked_target
+                        # Extract the ACTUAL target from the original goal steps,
+                        # NOT from the AI's error message (which says generic things
+                        # like "Unable to proceed to the next step")
+                        search_text = self._extract_next_goal_target(
+                            goal_context["goal"], self._action_history
+                        )
+                        if not search_text:
+                            # Fallback: try to extract from AI's message
+                            blocked_target = action_value or action_desc
+                            name_match = re.search(r"'([^']+)'", blocked_target)
+                            search_text = name_match.group(1) if name_match else ""
+                        if not search_text:
+                            # Can't determine what to look for
+                            yield {"type": "step", "message": f"  Goal blocked — can't determine target element"}
+                            tc.steps.append(StepResult(
+                                success=False, action="assert_visible",
+                                target="goal_blocked", description=action_desc,
+                                error=action_desc, method="goal_driven"
+                            ))
+                            break
 
                         yield {"type": "step", "message": f"  AI says blocked — heal attempt {self._goal_blocked_retries}/2: '{search_text}'..."}
                         page = self._page
@@ -554,6 +568,57 @@ class AgenticOrchestrator:
             "credentials": creds,
             "goal": goal,
         }
+
+    def _extract_next_goal_target(self, goal: str, history: List[Dict]) -> str:
+        """
+        Extract the NEXT uncompleted step target from the original goal text.
+
+        Goal: "1. Navigate to URL\n2. Click Join the donor registry\n3. Click on 18-35 button\n4. Click Next"
+        History: [navigate(success), click 'Join the donor registry'(success)]
+        → Returns: "18-35"
+
+        This is critical because when the AI says "goal_blocked", its error
+        message is generic ("Unable to proceed..."). We need the ACTUAL
+        element name from the original goal to search for it.
+        """
+        # Parse numbered steps from goal
+        steps = re.findall(r'\d+\.\s*(.+)', goal)
+        if not steps:
+            # Try line-by-line
+            steps = [line.strip() for line in goal.split('\n') if line.strip()]
+
+        # Find completed steps by matching against history
+        completed_count = 0
+        for step_text in steps:
+            step_lower = step_text.lower()
+            # Check if any history entry matches this step
+            for h in history:
+                h_target = (h.get('target', '') or '').lower()
+                h_result = h.get('result', '')
+                if 'success' in h_result:
+                    # Fuzzy match: check if step text contains the history target or vice versa
+                    if (h_target and h_target in step_lower) or \
+                       (h_target and step_lower in h_target) or \
+                       ('navigate' in step_lower and h.get('action') == 'navigate'):
+                        completed_count += 1
+                        break
+
+        # Get the next uncompleted step
+        if completed_count < len(steps):
+            next_step = steps[completed_count]
+            # Extract the element name — remove action verbs
+            target = re.sub(
+                r'^(click\s+on\s+|click\s+|tap\s+|press\s+|select\s+|choose\s+|pick\s+)',
+                '', next_step, flags=re.IGNORECASE
+            ).strip()
+            # Remove trailing "button", "link", etc. to get core text
+            core = re.sub(
+                r'\s+(button|btn|link|tab|option|checkbox|radio|menu\s*item)\s*$',
+                '', target, flags=re.IGNORECASE
+            ).strip()
+            return core or target
+
+        return ""
 
     # =========================================================================
     # GOAL-DRIVEN AI: Decide the NEXT action based on REAL page state
@@ -1180,11 +1245,18 @@ Return ONLY the JSON object, nothing else."""
         if not target_clean:
             return strategies
 
-        # For click actions: try getByRole(button/link) first — most reliable
+        # Build a dash-insensitive regex pattern: "18-35" matches "18–35" (en-dash),
+        # "18—35" (em-dash), "18‑35" (non-breaking hyphen), and "18-35" (regular)
+        dash_pattern = target_clean
+        if '-' in target_clean or '–' in target_clean or '—' in target_clean:
+            # Replace any dash with a regex class matching all dash types
+            dash_pattern = re.sub(r'[-–—‑]', '[-–—‑]', target_clean)
+
+        # For click actions: try getByRole(button/link/radio) first — most reliable
         if action in ("click", "check", "tab", "hover", "scroll_to"):
-            for role in ["button", "link", "menuitem", "tab"]:
+            for role in ["button", "link", "radio", "option", "menuitem", "tab"]:
                 strategies.append({
-                    "locator_fn": lambda r=role: page.get_by_role(r, name=re.compile(re.escape(target_clean), re.IGNORECASE)),
+                    "locator_fn": lambda r=role, dp=dash_pattern: page.get_by_role(r, name=re.compile(dp, re.IGNORECASE)),
                     "method": f"pw_role_{role}",
                     "desc": f"getByRole('{role}', name='{target_clean}')",
                     "confidence": 90,
@@ -1220,6 +1292,17 @@ Return ONLY the JSON object, nothing else."""
             "cache_sel": f"text={target_clean}",
         })
 
+        # getByText with regex — handles en-dash/em-dash/non-breaking-hyphen variants
+        # "18-35" also matches "18–35", "18—35", "18‑35"
+        if dash_pattern != re.escape(target_clean):
+            strategies.append({
+                "locator_fn": lambda dp=dash_pattern: page.get_by_text(re.compile(f"^{dp}$", re.IGNORECASE)),
+                "method": "pw_text_dash_regex",
+                "desc": f"getByText(regex: '{dash_pattern}')",
+                "confidence": 83,
+                "cache_sel": f"text=/{dash_pattern}/i",
+            })
+
         # getByText fuzzy — broader fallback (works for any visible text)
         strategies.append({
             "locator_fn": lambda: page.get_by_text(target_clean, exact=False),
@@ -1248,6 +1331,18 @@ Return ONLY the JSON object, nothing else."""
                 "desc": f'a/button:has-text("{target_clean}")',
                 "confidence": 70,
                 "cache_sel": f'a:has-text("{target_clean}"), button:has-text("{target_clean}")',
+            })
+
+        # ── LABEL + RADIO/CHECKBOX (form controls) ──
+        # Common pattern: <label for="radio-id">18-35</label> <input type="radio" id="radio-id">
+        # Clicking the label activates the radio. Also handles Salesforce SLDS radio groups.
+        if action in ("click", "check"):
+            strategies.append({
+                "locator_fn": lambda dp=dash_pattern: page.locator(f'label').filter(has_text=re.compile(dp, re.IGNORECASE)),
+                "method": "css_label_text",
+                "desc": f'label with text "{target_clean}"',
+                "confidence": 82,
+                "cache_sel": f'label:has-text("{target_clean}")',
             })
 
         # ── CUSTOM ELEMENT / NON-STANDARD BUTTON STRATEGIES ──
