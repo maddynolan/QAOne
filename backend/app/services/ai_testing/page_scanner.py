@@ -225,25 +225,76 @@ PAGE_SCANNER_JS = """
         return results;
     }
 
-    for (const selector of interactiveSelectors) {
-        try {
-            const elements = querySelectorAllDeep(document, selector);
-            for (const el of elements) {
-                // Skip hidden, duplicate, or tiny elements
-                if (seen.has(el)) continue;
-                seen.add(el);
+    function collectFromRoot(root) {
+        for (const selector of interactiveSelectors) {
+            try {
+                const elements = querySelectorAllDeep(root, selector);
+                for (const el of elements) {
+                    if (seen.has(el)) continue;
+                    seen.add(el);
 
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width < 5 || rect.height < 5) continue;
+                    if (rect.top < -100 || rect.left < -100) continue;
+
+                    const style = window.getComputedStyle(el);
+                    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
+
+                    allElements.push(el);
+                }
+            } catch (e) {}
+        }
+
+        // ── HEURISTIC: Find clickable-looking elements that aren't standard tags ──
+        // Catches styled divs, spans, custom elements used as buttons
+        // (common in Salesforce LWC, Angular Material, shadcn, etc.)
+        try {
+            const candidates = root.querySelectorAll('div, span, li, label');
+            for (const el of candidates) {
+                if (seen.has(el)) continue;
                 const rect = el.getBoundingClientRect();
-                if (rect.width < 5 || rect.height < 5) continue;
+                if (rect.width < 20 || rect.height < 15 || rect.width > 800) continue;
                 if (rect.top < -100 || rect.left < -100) continue;
 
                 const style = window.getComputedStyle(el);
                 if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
 
-                allElements.push(el);
+                const cursor = style.cursor;
+                const hasClickAttr = el.hasAttribute('onclick') || el.hasAttribute('data-action');
+                const hasPointer = cursor === 'pointer';
+                const hasHover = el.matches(':hover') || style.transition.includes('background') || style.transition.includes('color');
+                const hasBorder = style.borderStyle !== 'none' && style.borderWidth !== '0px';
+                const text = (el.textContent || '').trim();
+                const isShort = text.length > 0 && text.length < 50;
+                const noChildInteractive = !el.querySelector('button, a, input, select, textarea');
+
+                // Must look clickable: pointer cursor, border styling, short text, no child interactive
+                if (isShort && noChildInteractive && (hasPointer || hasClickAttr || hasBorder)) {
+                    seen.add(el);
+                    allElements.push(el);
+                }
             }
         } catch (e) {}
     }
+
+    // Scan main document
+    collectFromRoot(document);
+
+    // ── IFRAME SCANNING ──
+    // Scan same-origin iframes (cross-origin will throw and be skipped)
+    try {
+        const iframes = document.querySelectorAll('iframe');
+        for (const iframe of iframes) {
+            try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                if (iframeDoc) {
+                    collectFromRoot(iframeDoc);
+                }
+            } catch (e) {
+                // Cross-origin iframe — can't access, skip
+            }
+        }
+    } catch (e) {}
 
     // Process each element
     allElements.forEach((el, index) => {

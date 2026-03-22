@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { API_BASE_URL } from '@/lib/api-config';
+import { apiClient } from '@/lib/api-client';
 import {
   Play,
   Map,
@@ -54,27 +55,22 @@ export function FlowmapTab({ aiAvailable, theme }: FlowmapTabProps) {
     setCurrentStep(`Crawling ${url} -- discovering pages, entities, and actions`);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/exploration/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          base_url: url,
-          max_depth: 3,
-          max_pages: 30,
-          headless: true,
-          screenshot: true,
-        }),
+      const response = await apiClient.post('/api/exploration/start', {
+        base_url: url,
+        max_depth: 3,
+        max_pages: 30,
+        headless: true,
+        screenshot: true,
       });
 
-      if (!response.ok) throw new Error(`Failed to start mapping: ${response.status}`);
-
-      const data = await response.json();
+      const data = response.data;
       setResult(data);
       setProgress(100);
       setCurrentPhase('Complete');
       setCurrentStep(`Discovered ${data.total_pages || 0} pages`);
     } catch (err: any) {
-      setError(err.message || 'Mapping failed');
+      const msg = err.response?.data?.detail || err.message || 'Mapping failed';
+      setError(msg);
     } finally {
       setIsProcessing(false);
     }
