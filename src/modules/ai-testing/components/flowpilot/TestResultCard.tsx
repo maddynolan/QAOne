@@ -12,7 +12,14 @@ interface TestResultCardProps {
   onToggle: () => void;
   onSave: (test: TestResult) => void;
   onRerunWithFix?: (test: TestResult) => void;
+  /** User provides a CSS/XPath selector for a failed step */
+  onProvideSelector?: (stepIndex: number, selector: string) => void;
+  /** User rephrases a failed step */
+  onRephrase?: (stepIndex: number, newDescription: string) => void;
+  /** User skips a failed step */
+  onSkip?: (stepIndex: number) => void;
   theme: string;
+  isRetrying?: boolean;
 }
 
 const statusConfig = {
@@ -22,9 +29,16 @@ const statusConfig = {
   running: { icon: Loader2, color: 'text-blue-500', bg: 'bg-blue-500/10', label: 'Running' },
 };
 
-export function TestResultCard({ test, expanded, onToggle, onSave, onRerunWithFix, theme }: TestResultCardProps) {
+export function TestResultCard({
+  test, expanded, onToggle, onSave, onRerunWithFix,
+  onProvideSelector, onRephrase, onSkip,
+  theme, isRetrying,
+}: TestResultCardProps) {
   const config = statusConfig[test.status] || statusConfig.running;
   const StatusIcon = config.icon;
+
+  // Get last screenshot from steps for the assist card
+  const lastScreenshot = [...(test.steps || [])].reverse().find(s => s.screenshot)?.screenshot || test.screenshot;
 
   return (
     <div className={cn(
@@ -67,7 +81,15 @@ export function TestResultCard({ test, expanded, onToggle, onSave, onRerunWithFi
           "border-t px-4 py-3 space-y-3",
           theme === 'light' ? 'border-gray-100' : 'border-gray-800'
         )}>
-          <TestStepList steps={test.steps} theme={theme} />
+          <TestStepList
+            steps={test.steps}
+            theme={theme}
+            onProvideSelector={onProvideSelector}
+            onRephrase={onRephrase}
+            onSkip={onSkip}
+            lastScreenshot={lastScreenshot}
+            isRetrying={isRetrying}
+          />
 
           <div className="flex gap-2 pt-2">
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onSave(test)}>
