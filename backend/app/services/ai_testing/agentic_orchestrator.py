@@ -1103,6 +1103,7 @@ Return ONLY the JSON object, nothing else."""
 
         # ── LAYER 2: Direct Playwright human locators (100ms, free, most reliable) ──
         pw_strategies = self._build_playwright_strategies(target, action)
+        # First pass: try visible elements only
         for strat in pw_strategies:
             try:
                 locator = strat["locator_fn"]()
@@ -1117,6 +1118,36 @@ Return ONLY the JSON object, nothing else."""
                         return True
             except Exception as e:
                 logger.debug(f"Playwright strategy {strat['method']} failed: {e}")
+                continue
+
+        # Second pass: try elements that EXIST but aren't visible (hidden radio/checkbox inputs)
+        # These are common in Salesforce SLDS where input is hidden behind a styled label
+        for strat in pw_strategies:
+            if "input_value" not in strat["method"] and "radio_value" not in strat["method"]:
+                continue  # Only retry input[value] strategies for hidden elements
+            try:
+                locator = strat["locator_fn"]()
+                count = await locator.count()
+                if count > 0:
+                    # Element exists but isn't visible — try force click or dispatch
+                    logger.info(f"Found hidden element via {strat['method']}, trying force click")
+                    try:
+                        await locator.first.click(force=True, timeout=3000)
+                    except:
+                        try:
+                            await locator.first.dispatch_event('click')
+                        except:
+                            continue
+                    await asyncio.sleep(0.5)
+                    step.success = True
+                    step.method = f"{strat['method']}_force"
+                    step.selector_used = strat["desc"]
+                    step.confidence = strat["confidence"]
+                    self._selector_cache[cache_key] = strat.get("cache_sel", strat["desc"])
+                    logger.info(f"Step '{step.description}' → force click {strat['method']}")
+                    return True
+            except Exception as e:
+                logger.debug(f"Force click {strat['method']} failed: {e}")
                 continue
 
         # ── LAYER 3: PageScanner match_element + ranked selectors ──
@@ -1333,16 +1364,60 @@ Return ONLY the JSON object, nothing else."""
                 "cache_sel": f'a:has-text("{target_clean}"), button:has-text("{target_clean}")',
             })
 
-        # ── LABEL + RADIO/CHECKBOX (form controls) ──
-        # Common pattern: <label for="radio-id">18-35</label> <input type="radio" id="radio-id">
-        # Clicking the label activates the radio. Also handles Salesforce SLDS radio groups.
+        # ── SALESFORCE LWC / SLDS FORM CONTROLS ──
+        # LWC renders radio buttons as:
+        #   <span class="slds-button slds-radio_button">
+        #     <input type="radio" value="18-35">
+        #     <label class="slds-radio_button__label">
+        #       <span class="slds-radio_faux">18-35</span>
+        #     </label>
+        #   </span>
+        # These are inside shadow DOM, but input[value] works with Playwright.
         if action in ("click", "check"):
+            # Strategy: click input[value="18-35"] directly (radio/checkbox)
             strategies.append({
-                "locator_fn": lambda dp=dash_pattern: page.locator(f'label').filter(has_text=re.compile(dp, re.IGNORECASE)),
+                "locator_fn": lambda: page.locator(f'input[value="{target_clean}"]'),
+                "method": "css_input_value",
+                "desc": f'input[value="{target_clean}"]',
+                "confidence": 92,
+                "cache_sel": f'input[value="{target_clean}"]',
+            })
+
+            # Strategy: click the SLDS radio faux span (visible text element)
+            strategies.append({
+                "locator_fn": lambda: page.locator(f'.slds-radio_faux, .slds-radio_button__label, .slds-checkbox_faux').filter(has_text=re.compile(f"^{re.escape(target_clean)}$", re.IGNORECASE)),
+                "method": "css_slds_radio",
+                "desc": f'SLDS radio/checkbox with text "{target_clean}"',
+                "confidence": 91,
+                "cache_sel": f'.slds-radio_faux:has-text("{target_clean}")',
+            })
+
+            # Strategy: click the parent span.slds-button that contains our text
+            strategies.append({
+                "locator_fn": lambda: page.locator(f'span.slds-button, span.slds-radio_button, div.slds-button').filter(has_text=re.compile(f"^\\s*{re.escape(target_clean)}\\s*$", re.IGNORECASE)),
+                "method": "css_slds_button",
+                "desc": f'SLDS button/radio container with text "{target_clean}"',
+                "confidence": 88,
+                "cache_sel": f'span.slds-button:has-text("{target_clean}")',
+            })
+
+            # Strategy: click label associated with the radio input
+            strategies.append({
+                "locator_fn": lambda dp=dash_pattern: page.locator('label').filter(has_text=re.compile(dp, re.IGNORECASE)),
                 "method": "css_label_text",
                 "desc": f'label with text "{target_clean}"',
                 "confidence": 82,
                 "cache_sel": f'label:has-text("{target_clean}")',
+            })
+
+            # Strategy: force-click the radio input via JavaScript
+            # (for when the input is hidden behind a styled label)
+            strategies.append({
+                "locator_fn": lambda: page.locator(f'input[type="radio"][value="{target_clean}"], input[type="checkbox"][value="{target_clean}"]'),
+                "method": "css_radio_value_force",
+                "desc": f'input[type=radio][value="{target_clean}"] (force)',
+                "confidence": 87,
+                "cache_sel": f'input[type="radio"][value="{target_clean}"]',
             })
 
         # ── CUSTOM ELEMENT / NON-STANDARD BUTTON STRATEGIES ──
@@ -1588,7 +1663,19 @@ If no element matches, return {{"match_index": null}}."""
                 await element.fill(step.value)
 
             elif step.action in ("click", "tab"):
-                await element.click()
+                try:
+                    await element.click(timeout=3000)
+                except Exception as click_err:
+                    # Element might be hidden (e.g., radio input behind styled label)
+                    # Try force-clicking or dispatching click event
+                    logger.debug(f"Normal click failed: {click_err}, trying force click")
+                    try:
+                        await element.click(force=True, timeout=3000)
+                    except:
+                        try:
+                            await element.dispatch_event('click')
+                        except:
+                            raise click_err
                 await asyncio.sleep(0.3)
                 try:
                     await page.wait_for_load_state("domcontentloaded", timeout=5000)
