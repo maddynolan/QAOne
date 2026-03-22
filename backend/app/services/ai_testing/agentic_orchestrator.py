@@ -267,121 +267,81 @@ class AgenticOrchestrator:
                     break
 
                 if action_type == "goal_blocked":
-                    # ── AUTO-HEAL: Don't trust goal_blocked immediately ──
-                    # AI said it can't find the element, but it might be:
-                    #   - Below viewport (needs scroll)
-                    #   - Inside an iframe (needs frame traversal)
-                    #   - Loading asynchronously (needs wait)
-                    #   - A non-standard element the scanner missed
-                    blocked_healed = False
-                    blocked_target = action_value or action_desc  # What we're looking for
+                    # ── AUTO-HEAL: Try once with direct resolution, then give up ──
+                    # The AI said it can't find the element. We try the 7-layer
+                    # pipeline directly, but cap at 1 attempt to prevent loops.
+                    self._goal_blocked_retries += 1
 
-                    # Extract the element name from messages like "clicking the '18-35 button'"
-                    import re as _re
-                    name_match = _re.search(r"'([^']+)'", blocked_target)
-                    search_text = name_match.group(1) if name_match else blocked_target
+                    if self._goal_blocked_retries <= 2:
+                        blocked_target = action_value or action_desc
+                        # Extract element name from messages like "clicking the '18-35 button'"
+                        name_match = re.search(r"'([^']+)'", blocked_target)
+                        search_text = name_match.group(1) if name_match else blocked_target
 
-                    if not getattr(self, '_goal_blocked_retries', 0):
-                        self._goal_blocked_retries = 0
-
-                    if self._goal_blocked_retries < 3:
-                        self._goal_blocked_retries += 1
-                        retry_num = self._goal_blocked_retries
-                        yield {"type": "step", "message": f"  AI says blocked — auto-healing attempt {retry_num}/3: looking for '{search_text}'..."}
-
+                        yield {"type": "step", "message": f"  AI says blocked — heal attempt {self._goal_blocked_retries}/2: '{search_text}'..."}
                         page = self._page
 
-                        # Attempt 1: Scroll down to reveal hidden elements
-                        if retry_num >= 1 and not blocked_healed:
-                            try:
-                                yield {"type": "step", "message": f"  Scrolling page to find '{search_text}'..."}
-                                # Try scrolling down in increments
-                                for scroll_i in range(3):
-                                    await page.evaluate("window.scrollBy(0, 400)")
-                                    await asyncio.sleep(0.3)
-                                    # Check if element appeared
-                                    try:
-                                        loc = page.get_by_text(search_text, exact=True)
-                                        if await loc.count() > 0 and await loc.first.is_visible(timeout=1000):
-                                            yield {"type": "step", "message": f"  Found '{search_text}' after scrolling!"}
-                                            blocked_healed = True
-                                            break
-                                    except:
-                                        pass
-                                if not blocked_healed:
-                                    # Scroll back to top
-                                    await page.evaluate("window.scrollTo(0, 0)")
-                                    await asyncio.sleep(0.3)
-                            except Exception as e:
-                                logger.debug(f"Scroll heal failed: {e}")
+                        # Capture page state BEFORE heal attempt to verify change
+                        pre_url = page.url
+                        pre_content_hash = ""
+                        try:
+                            pre_content_hash = await page.evaluate("document.body.innerText.substring(0, 500)")
+                        except:
+                            pass
 
-                        # Attempt 2: Wait for dynamic content (LWC/React async render)
-                        if retry_num >= 1 and not blocked_healed:
-                            try:
-                                yield {"type": "step", "message": f"  Waiting for dynamic content..."}
-                                await asyncio.sleep(2)
-                                # Re-check after wait
-                                loc = page.get_by_text(search_text, exact=True)
-                                if await loc.count() > 0 and await loc.first.is_visible(timeout=2000):
-                                    yield {"type": "step", "message": f"  Found '{search_text}' after waiting!"}
-                                    blocked_healed = True
-                            except:
-                                pass
+                        # Strategy: scroll + wait + rescan + direct 7-layer pipeline
+                        healed = False
+                        try:
+                            # Scroll to potentially reveal element
+                            await page.evaluate("window.scrollBy(0, 300)")
+                            await asyncio.sleep(1.5)
+                            await page.evaluate("window.scrollTo(0, 0)")
+                            await asyncio.sleep(0.5)
 
-                        # Attempt 3: Check iframes
-                        if retry_num >= 2 and not blocked_healed:
-                            try:
-                                yield {"type": "step", "message": f"  Checking iframes for '{search_text}'..."}
-                                frames = page.frames
-                                for frame in frames:
-                                    if frame == page.main_frame:
-                                        continue
-                                    try:
-                                        loc = frame.get_by_text(search_text, exact=True)
-                                        if await loc.count() > 0 and await loc.first.is_visible(timeout=1500):
-                                            yield {"type": "step", "message": f"  Found '{search_text}' in iframe!"}
-                                            # Switch to this frame for subsequent actions
-                                            self._active_frame = frame
-                                            blocked_healed = True
-                                            break
-                                    except:
-                                        continue
-                            except Exception as e:
-                                logger.debug(f"Iframe heal failed: {e}")
-
-                        # Attempt 4: Try direct element resolution (bypass AI, use 5-layer pipeline)
-                        if not blocked_healed:
-                            yield {"type": "step", "message": f"  Trying direct element resolution for '{search_text}'..."}
+                            # Re-scan the page
                             await self._scan_page()
+
+                            # Try direct resolution with the 7-layer pipeline
                             direct_step = StepResult(
                                 success=False, action="click",
                                 target=search_text, description=f"Click on the {search_text}",
                             )
                             direct_ok = await self._execute_element_action(direct_step, page)
+
                             if direct_ok:
-                                yield {"type": "step", "message": f"  ✓ Direct resolution found '{search_text}' via {direct_step.method}!"}
-                                direct_step.healed = True
-                                direct_step.heal_method = f"goal_blocked_heal_{direct_step.method}"
-                                tc.steps.append(direct_step)
-                                blocked_healed = True
-                                # Reset blocked retries on success
-                                self._goal_blocked_retries = 0
-                                # Track in history
-                                self._action_history.append({
-                                    "action": "click", "target": search_text,
-                                    "value": "", "result": "success (healed from goal_blocked)",
-                                    "page_url": page_url, "page_state": current_page_state,
-                                })
-                                continue  # Continue the goal loop
+                                # VERIFY the page actually changed after the click
+                                await asyncio.sleep(0.5)
+                                post_url = page.url
+                                post_content_hash = ""
+                                try:
+                                    post_content_hash = await page.evaluate("document.body.innerText.substring(0, 500)")
+                                except:
+                                    pass
 
-                        if blocked_healed:
-                            # Re-scan and let the AI try again
-                            yield {"type": "step", "message": f"  Element found — re-scanning and continuing..."}
-                            await self._scan_page()
-                            continue  # Continue the goal loop
+                                page_changed = (post_url != pre_url) or (post_content_hash != pre_content_hash)
 
-                    # All retries exhausted — truly blocked
-                    yield {"type": "step", "message": f"  Goal blocked after {self._goal_blocked_retries} heal attempts: {action_desc}"}
+                                if page_changed:
+                                    yield {"type": "step", "message": f"  ✓ Healed via {direct_step.method} — page changed!"}
+                                    direct_step.healed = True
+                                    direct_step.heal_method = f"goal_blocked_heal_{direct_step.method}"
+                                    tc.steps.append(direct_step)
+                                    self._action_history.append({
+                                        "action": "click", "target": search_text,
+                                        "value": "", "result": "success (healed)",
+                                        "page_url": page_url, "page_state": current_page_state,
+                                    })
+                                    healed = True
+                                else:
+                                    yield {"type": "step", "message": f"  Click via {direct_step.method} didn't change page — not truly healed"}
+                        except Exception as e:
+                            logger.debug(f"Goal blocked heal failed: {e}")
+
+                        if healed:
+                            continue  # Continue the goal loop with new page state
+                        # If heal didn't work, fall through to the break below
+
+                    # Exhausted heal attempts — truly blocked
+                    yield {"type": "step", "message": f"  Goal blocked (heal attempts exhausted): {action_desc}"}
                     tc.steps.append(StepResult(
                         success=False, action="assert_visible",
                         target="goal_blocked", description=action_desc,
