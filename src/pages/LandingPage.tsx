@@ -12,7 +12,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { trackCTAClick } from '@/lib/web-analytics';
-import { DemoMedia } from '@/components/DemoMedia';
+import { AnimatedDemo } from '@/components/AnimatedDemo';
 import {
   Play, Zap, Shield, BarChart3, Code2,
   CheckCircle2, ArrowRight, Globe, Lock, Eye,
@@ -101,11 +101,9 @@ function HeroSection() {
 
         {/* Right side: recording demo */}
         <div className="hidden lg:block absolute right-6 top-1/2 -translate-y-1/2 w-[400px]">
-          <DemoMedia
-            gifSrc="/demos/recording-flow.gif"
-            alt="Flowstral recording a login test in real-time"
-            trackingLabel="hero_recording"
-            className="rounded-xl shadow-2xl border border-slate-200"
+          <AnimatedDemo
+            type="recording"
+            className="shadow-2xl"
           />
         </div>
       </div>

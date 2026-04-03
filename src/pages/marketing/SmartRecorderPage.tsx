@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { MarketingHeader } from '@/components/MarketingHeader';
 import { cn } from '@/lib/utils';
-import { DemoMedia } from '@/components/DemoMedia';
+import { AnimatedDemo } from '@/components/AnimatedDemo';
 
 // How It Works Step Component
 function HowItWorksStep({ step, title, description, isActive, icon: Icon }: { 
@@ -99,11 +99,9 @@ export default function SmartRecorderPage() {
 
             {/* Right - Recording Demo */}
             <div className="relative">
-              <DemoMedia
-                gifSrc="/demos/recording-flow.gif"
-                alt="Smart Trace recording a login flow with element detection and suggestions"
-                trackingLabel="smart_recorder_hero"
-                className="rounded-2xl shadow-2xl border border-slate-200"
+              <AnimatedDemo
+                type="recording"
+                className="shadow-2xl"
               />
             </div>
           </div>
