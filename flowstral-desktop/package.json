@@ -1,6 +1,6 @@
 {
   "name": "flowstral-desktop",
-  "version": "3.32.0",
+  "version": "3.33.0",
   "description": "Flowstral Desktop - Full On-Prem Test Automation Platform",
   "main": "src/main/index.js",
   "author": "Flowstral Inc.",
