@@ -148,7 +148,7 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
   // If step has an animated demo type, render the CSS-animated mockup
   if ((step as any).demoType) {
     return (
-      <div className="relative w-full h-[420px] bg-slate-900 rounded-2xl overflow-hidden border border-slate-700/50 shadow-xl flex items-center justify-center p-4">
+      <div className="relative w-full h-[420px] rounded-2xl overflow-hidden shadow-xl flex items-center justify-center p-4">
         <AnimatedDemo
           type={(step as any).demoType}
           className="w-full h-full"
